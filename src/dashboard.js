@@ -85,7 +85,12 @@ const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const fmtR = (n) => "R " + Math.round(+n || 0).toLocaleString("en-ZA");
 const fmtPct = (n) => (Math.round(n * 10) / 10) + "%";
-const emptyRow = (cols, msg) => `<tr><td colspan="${cols}" style="text-align:center;color:var(--ink-muted);padding:22px;">${esc(msg)}</td></tr>`;
+const EMPTY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M9 13h6"/></svg>';
+const emptyRow = (cols, msg) => `<tr><td colspan="${cols}"><div class="state">${EMPTY_SVG}<p>${esc(msg)}</p></div></td></tr>`;
+const stateHtml = (kind, msg, action) =>
+  `<div class="state">${kind === "loading" ? '<span class="spinner"></span>' : kind === "error"
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>' : EMPTY_SVG}
+    <p>${esc(msg)}</p>${action || ""}</div>`;
 const maturityBand = (score) => MATURITY.find((b) => score >= b.min && score <= b.max) || MATURITY[0];
 const scoreTotal = () => DATA.score.domains.reduce((s, d) => s + domainScore(d), 0);
 function pill(label, tone) { return `<span class="pill ${tone}">${ICONS[tone]}${label}</span>`; }
@@ -117,12 +122,16 @@ function barRows(items, { fmtVal, cls } = {}) {
 function scoreGauge(value, max, size = 168) {
   const r = size / 2 - 14, c = size / 2, circ = 2 * Math.PI * r;
   const dash = circ * Math.max(0, Math.min(1, value / max));
+  const gid = "sg" + Math.round(size) + "_" + value;
+  const num = size >= 150 ? 34 : Math.round(size * 0.22);
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="14"/>
-    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--brand)" stroke-width="14"
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="var(--brand)"/><stop offset="1" stop-color="var(--brand-2)"/></linearGradient></defs>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="13"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="url(#${gid})" stroke-width="13"
       stroke-linecap="round" stroke-dasharray="${dash} ${circ}" transform="rotate(-90 ${c} ${c})"/>
-    <text x="${c}" y="${c - 4}" text-anchor="middle" font-family="Libre Franklin, sans-serif" font-weight="800" font-size="34" fill="var(--ink)">${value}</text>
-    <text x="${c}" y="${c + 18}" text-anchor="middle" font-family="Public Sans, sans-serif" font-size="12" fill="var(--ink-muted)">of ${max} points</text></svg>`;
+    <text x="${c}" y="${c - 2}" text-anchor="middle" font-family="Libre Franklin, sans-serif" font-weight="800" font-size="${num}" fill="var(--ink)">${value}</text>
+    <text x="${c}" y="${c + 16}" text-anchor="middle" font-family="Public Sans, sans-serif" font-size="11" fill="var(--ink-muted)">of ${max} points</text></svg>`;
 }
 function donut(slices, size = 160) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
@@ -272,7 +281,7 @@ function attachmentsModal(section, refId, title) {
   scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
     <h3>${esc(title)}</h3>
     <div class="modal-body" style="display:block;">
-      <div id="att-list"><p class="muted">Loading…</p></div>
+      <div id="att-list">${stateHtml("loading", "Loading…")}</div>
       ${CAN_EDIT ? `<label class="btn primary" style="margin-top:12px;display:inline-flex;cursor:pointer;">
         Upload a file<input type="file" id="att-file" hidden></label>
         <span id="att-msg" style="font-size:11.5px;color:var(--ink-muted);margin-left:8px;"></span>` : ""}
@@ -296,7 +305,7 @@ function attachmentsModal(section, refId, title) {
             <button type="button" data-dl="${d.id}" title="Download" aria-label="Download">${CLIP}</button>
             ${CAN_EDIT ? `<button type="button" data-rm="${d.id}" title="Delete" aria-label="Delete">${TRASH}</button>` : ""}
           </span>
-        </div>`).join("") : `<p class="muted">No files yet.</p>`;
+        </div>`).join("") : stateHtml("empty", "No files yet.");
       listEl.querySelectorAll("[data-dl]").forEach((b) => (b.onclick = async () => {
         const d = docs.find((x) => x.id === b.dataset.dl);
         try { window.open(await repo.docUrl(d.path), "_blank", "noopener"); }
@@ -310,7 +319,7 @@ function attachmentsModal(section, refId, title) {
         });
       }));
     } catch (e) {
-      listEl.innerHTML = `<p class="muted">Couldn't load files — ${esc(e.message || e)}</p>`;
+      listEl.innerHTML = stateHtml("error", "Couldn't load files. " + (e.message || e));
     }
   }
   refresh();
@@ -342,7 +351,7 @@ function mountFileList(host, section, refId, title, hint) {
       <div class="card-head"><div><h3>${esc(title)}</h3>${hint ? `<span class="hint">${esc(hint)}</span>` : ""}</div>
         ${CAN_EDIT ? `<label class="btn primary" style="cursor:pointer;">Upload a file<input type="file" id="fl-file" hidden></label>` : ""}</div>
       <div id="fl-msg" style="font-size:11.5px;color:var(--ink-muted);margin-bottom:8px;"></div>
-      <div id="fl-list"><p class="muted">Loading…</p></div>
+      <div id="fl-list">${stateHtml("loading", "Loading documents…")}</div>
     </div>`;
   const listEl = host.querySelector("#fl-list");
   const msg = host.querySelector("#fl-msg");
@@ -356,7 +365,7 @@ function mountFileList(host, section, refId, title, hint) {
           <td><span class="row-actions">
             <button type="button" data-dl="${d.id}" title="Download" aria-label="Download">${CLIP}</button>
             ${CAN_EDIT ? `<button type="button" data-rm="${d.id}" title="Delete" aria-label="Delete">${TRASH}</button>` : ""}
-          </span></td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">No files yet.</p>`;
+          </span></td></tr>`).join("")}</tbody></table></div>` : stateHtml("empty", "No documents here yet.");
       listEl.querySelectorAll("[data-dl]").forEach((b) => (b.onclick = async () => {
         const d = docs.find((x) => x.id === b.dataset.dl);
         try { window.open(await repo.docUrl(d.path), "_blank", "noopener"); } catch (e) { toast("Couldn't open file", true); }
@@ -368,7 +377,7 @@ function mountFileList(host, section, refId, title, hint) {
           catch (e) { toast("Couldn't delete", true); }
         });
       }));
-    } catch (e) { listEl.innerHTML = `<p class="muted">Couldn't load files — ${esc(e.message || e)}</p>`; }
+    } catch (e) { listEl.innerHTML = stateHtml("error", "Couldn't load documents. " + (e.message || e)); }
   }
   refresh();
   const fi = host.querySelector("#fl-file");
@@ -564,7 +573,7 @@ function mountRegister(host, cfg) {
       <div><h3 style="font-size:13px;">${esc(cfg.title)}</h3>${cfg.hint ? `<span class="hint">${esc(cfg.hint)}</span>` : ""}</div>
       <span style="display:flex;gap:6px;">${tools.join("")}</span>
     </div>
-    <div class="table-wrap"><table>
+    <div class="table-wrap${rows.length > 12 ? " scroll" : ""}"><table>
       <thead><tr>${cfg.columns.map((c) => `<th class="${c.cls || ""}">${esc(c.label)}</th>`).join("")}</tr></thead>
       <tbody>${rows.length
         ? rows.map((r) => `<tr>${cfg.cell(r).map((cell, i) => `<td class="${cfg.columns[i].cls || ""}">${cell}</td>`).join("")}</tr>`).join("")

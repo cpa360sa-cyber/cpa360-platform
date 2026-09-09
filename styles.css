@@ -97,7 +97,10 @@ a{color:var(--brand);}
 button{font-family:inherit;}
 .mono{font-family:var(--font-mono);}
 #root.booting{display:flex;align-items:center;justify-content:center;min-height:100vh;color:var(--ink-muted);}
-.booting{display:grid;place-items:center;min-height:40vh;color:var(--ink-muted);font-size:13px;}
+.booting{display:grid;place-items:center;gap:12px;min-height:40vh;color:var(--ink-muted);font-size:13px;}
+.booting::before{content:"";width:24px;height:24px;border-radius:50%;border:2.5px solid var(--surface-3);border-top-color:var(--brand);}
+@media (prefers-reduced-motion:no-preference){ .booting::before{animation:cpaspin .7s linear infinite;} }
+@keyframes cpaspin{ to{ transform:rotate(360deg); } }
 
 /* ---------- form controls ---------- */
 .field{display:grid;gap:5px;margin-bottom:13px;}
