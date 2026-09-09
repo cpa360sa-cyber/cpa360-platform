@@ -3,7 +3,8 @@
    Shares the Command Center's token system (navy / Libre Franklin / Public Sans).
    ========================================================================== */
 :root{
-  --paper:#f6f6f3;
+  /* CPA360 design system — deep institutional navy + agricultural green + restrained gold */
+  --paper:#f5f6f3;
   --surface:#ffffff;
   --surface-2:#eef0f4;
   --surface-3:#e5e8ee;
@@ -12,12 +13,17 @@
   --ink-muted:#8890a3;
   --border:rgba(18,32,61,.12);
   --border-strong:rgba(18,32,61,.22);
-  --brand:#1f3864;
+  --brand:#1c3a68;
+  --brand-strong:#132a4f;
   --brand-ink:#14284d;
   --brand-tint:#e7ecf5;
-  --brand-2:#3f7a52;
-  --brand-2-tint:#e7f1ea;
-  --sidebar-bg:#14284d;
+  --brand-2:#2f7d4f;
+  --brand-2-strong:#245f3c;
+  --brand-2-tint:#e5f1ea;
+  --accent:#b98a2e;            /* restrained gold — use sparingly (current stage, premium CTA) */
+  --accent-strong:#9a7122;
+  --accent-tint:#f7edd6;
+  --sidebar-bg:#132a4f;
   --sidebar-fg:#eef1f9;
   --series-1:#2a78d6;
   --series-1-tint:#dcebfb;
@@ -27,13 +33,16 @@
   --warning:#b3790a;
   --critical:#c03434;
   --critical-tint:#fbe1e1;
-  --status-good:#0ca30c;   --status-good-tint:#e2f5df;
+  --status-good:#0f8a3c;   --status-good-tint:#e2f4e6;
   --status-warning:#b3790a; --status-warning-tint:#fdf0d6;
   --status-critical:#c03434; --status-critical-tint:#fbe1e1;
+  --status-info:#2360b8;   --status-info-tint:#e3ecfa;
   --status-neutral:#6b7386; --status-neutral-tint:#e9eaee;
   --grid-line:#e4e5e0;
+  --radius-sm:8px; --radius:12px; --radius-lg:16px; --radius-xl:22px;
   --shadow:0 1px 2px rgba(18,32,61,.06), 0 12px 32px -14px rgba(18,32,61,.20);
   --shadow-card:0 1px 2px rgba(18,32,61,.06), 0 1px 0 rgba(18,32,61,.04);
+  --shadow-lift:0 2px 6px rgba(18,32,61,.08), 0 24px 48px -20px rgba(18,32,61,.28);
   --font-display:"Libre Franklin","Segoe UI",system-ui,sans-serif;
   --font-body:"Public Sans","Segoe UI",system-ui,sans-serif;
   --font-mono:"IBM Plex Mono",ui-monospace,monospace;
@@ -43,34 +52,42 @@
     --paper:#0d1220; --surface:#141b2c; --surface-2:#1b2338; --surface-3:#232c44;
     --ink:#f1f3f9; --ink-2:#b7bfd4; --ink-muted:#8089a1;
     --border:rgba(255,255,255,.11); --border-strong:rgba(255,255,255,.20);
-    --brand:#3f5f9c; --brand-ink:#cfdaf2; --brand-tint:#1d2c4a; --brand-2:#59a66d; --brand-2-tint:#16301f;
-    --sidebar-bg:#111a2e;
+    --brand:#4472b0; --brand-strong:#5a86c2; --brand-ink:#cfdaf2; --brand-tint:#1d2c4a;
+    --brand-2:#59a66d; --brand-2-strong:#6fbb82; --brand-2-tint:#16301f;
+    --accent:#d0a850; --accent-strong:#e0bd6e; --accent-tint:#3a2f14;
+    --sidebar-bg:#101a2f;
     --series-1:#3987e5; --series-1-tint:#173154; --series-2:#e07a44; --series-2-tint:#432416;
     --good:#35c440; --warning:#f2b23a; --critical:#ef6a6a; --critical-tint:#3d1414;
-    --status-good:#35c440; --status-good-tint:#113a17;
+    --status-good:#3ec457; --status-good-tint:#113a1c;
     --status-warning:#f2b23a; --status-warning-tint:#3d2e0c;
     --status-critical:#ef6a6a; --status-critical-tint:#3d1414;
+    --status-info:#5b9bef; --status-info-tint:#152a49;
     --status-neutral:#9aa2b8; --status-neutral-tint:#232c44;
     --grid-line:#26304a;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px -14px rgba(0,0,0,.5);
     --shadow-card:0 1px 2px rgba(0,0,0,.35);
+    --shadow-lift:0 2px 8px rgba(0,0,0,.5), 0 28px 56px -22px rgba(0,0,0,.65);
   }
 }
 :root[data-theme="dark"]{
   --paper:#0d1220; --surface:#141b2c; --surface-2:#1b2338; --surface-3:#232c44;
   --ink:#f1f3f9; --ink-2:#b7bfd4; --ink-muted:#8089a1;
   --border:rgba(255,255,255,.11); --border-strong:rgba(255,255,255,.20);
-  --brand:#3f5f9c; --brand-ink:#cfdaf2; --brand-tint:#1d2c4a; --brand-2:#59a66d; --brand-2-tint:#16301f;
-  --sidebar-bg:#111a2e;
+  --brand:#4472b0; --brand-strong:#5a86c2; --brand-ink:#cfdaf2; --brand-tint:#1d2c4a;
+  --brand-2:#59a66d; --brand-2-strong:#6fbb82; --brand-2-tint:#16301f;
+  --accent:#d0a850; --accent-strong:#e0bd6e; --accent-tint:#3a2f14;
+  --sidebar-bg:#101a2f;
   --series-1:#3987e5; --series-1-tint:#173154; --series-2:#e07a44; --series-2-tint:#432416;
   --good:#35c440; --warning:#f2b23a; --critical:#ef6a6a; --critical-tint:#3d1414;
-  --status-good:#35c440; --status-good-tint:#113a17;
+  --status-good:#3ec457; --status-good-tint:#113a1c;
   --status-warning:#f2b23a; --status-warning-tint:#3d2e0c;
   --status-critical:#ef6a6a; --status-critical-tint:#3d1414;
+  --status-info:#5b9bef; --status-info-tint:#152a49;
   --status-neutral:#9aa2b8; --status-neutral-tint:#232c44;
   --grid-line:#26304a;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px -14px rgba(0,0,0,.5);
   --shadow-card:0 1px 2px rgba(0,0,0,.35);
+  --shadow-lift:0 2px 8px rgba(0,0,0,.5), 0 28px 56px -22px rgba(0,0,0,.65);
 }
 
 *{box-sizing:border-box;}
@@ -94,12 +111,31 @@ button{font-family:inherit;}
   gap:7px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;
   border:1px solid var(--border-strong);color:var(--ink-2);background:var(--surface);text-align:center;
 }
-.btn:hover{color:var(--ink);}
+.btn:hover{color:var(--ink);border-color:var(--brand);}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;width:100%;}
-.btn.primary:hover{color:#fff;filter:brightness(1.08);}
+.btn.primary:hover{color:#fff;background:var(--brand-strong);border-color:var(--brand-strong);filter:none;}
 .btn.danger{background:var(--critical);border-color:var(--critical);color:#fff;}
+.btn.gold{background:var(--accent);border-color:var(--accent);color:#1c1405;}
+.btn.gold:hover{background:var(--accent-strong);border-color:var(--accent-strong);color:#1c1405;}
+.btn.solid-2{background:var(--brand-2);border-color:var(--brand-2);color:#fff;}
+.btn.solid-2:hover{background:var(--brand-2-strong);border-color:var(--brand-2-strong);color:#fff;}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--brand);}
+.btn.ghost:hover{background:var(--brand-tint);}
+.btn.lg{padding:12px 22px;font-size:14px;border-radius:var(--radius-sm);}
 .btn[disabled]{opacity:.55;cursor:not-allowed;}
+.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
 .linkbtn{all:unset;cursor:pointer;color:var(--brand);font-size:12.5px;text-decoration:underline;text-underline-offset:2px;}
+.linkbtn:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px;}
+
+/* shared badges + eyebrow (used by shell, dashboard has its own .cpa-dash .pill) */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.4;background:var(--surface-3);color:var(--ink-2);}
+.badge.good{background:var(--status-good-tint);color:var(--status-good);}
+.badge.warning{background:var(--status-warning-tint);color:var(--status-warning);}
+.badge.critical{background:var(--status-critical-tint);color:var(--status-critical);}
+.badge.info{background:var(--status-info-tint);color:var(--status-info);}
+.badge.brand{background:var(--brand-tint);color:var(--brand);}
+.badge.gold{background:var(--accent-tint);color:var(--accent-strong);}
+.eyebrow{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-muted);font-weight:700;}
 .msg{margin:4px 0 12px;font-size:12.5px;padding:9px 11px;border-radius:8px;}
 .msg.err{background:var(--critical-tint);color:var(--critical);}
 .msg.ok{background:color-mix(in oklab,var(--good) 15%,var(--surface));color:var(--good);}
@@ -146,7 +182,7 @@ button{font-family:inherit;}
   font-size:12.6px;color:#c9d2e8;
 }
 .nav button:hover{background:rgba(255,255,255,.06);color:#fff;}
-.nav button.active{background:rgba(255,255,255,.13);color:#fff;font-weight:600;}
+.nav button.active{background:rgba(255,255,255,.12);color:#fff;font-weight:600;box-shadow:inset 3px 0 0 var(--brand-2);}
 .sidebar .foot{margin-top:auto;padding-top:14px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#9fb0d6;}
 .sidebar .foot .email{color:#dbe2f2;word-break:break-all;display:block;margin-bottom:8px;}
 
