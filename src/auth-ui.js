@@ -6,11 +6,11 @@ const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
 const BRAND = `
   <div class="auth-brand">
     <div class="auth-mark">C</div>
-    <div><b>CPA360&trade;</b><span>Institutional platform</span></div>
+    <div><b>CPA360&trade;</b><span>Your CPA Institutional Operating System</span></div>
   </div>`;
 
 const COPY = {
-  signin:  { h: "Sign in",            sub: "Access your CPA workspaces." },
+  signin:  { h: "Secure login",       sub: "Access your CPA Institutional Operating System." },
   signup:  { h: "Create an account",  sub: "You'll be able to start or join a CPA." },
   magic:   { h: "Email me a link",    sub: "No password — we send a one-time sign-in link." },
   reset:   { h: "Reset your password", sub: "We'll email you a link to set a new one." },

@@ -14,7 +14,7 @@ const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
 const state = { session: null, orgs: [], active: null, dashOrgId: null };
-const GROUPS = ["Institutional", "Records", "Performance"];
+const GROUPS = ["Overview", "Performance", "Operations", "Records", "Tools"];
 
 /* ============================ boot ============================ */
 (async function boot() {
@@ -104,7 +104,7 @@ function renderShell() {
     dash.destroyDashboard();
     state.dashOrgId = null;
     renderShell();
-    location.hash = "#/v/profile";
+    location.hash = "#/v/exec";
     renderView();
   });
   root.querySelector("#sign-out").addEventListener("click", () => signOut());
@@ -156,11 +156,11 @@ async function renderView() {
 
   if (r.name === "members") {
     showPrintBtn(false);
-    if (!atLeast(state.active.role, "admin")) { location.hash = "#/v/profile"; return; }
+    if (!atLeast(state.active.role, "admin")) { location.hash = "#/v/exec"; return; }
     return renderMembers(view);
   }
 
-  if (r.name === "home") { location.hash = "#/v/profile"; return; }
+  if (r.name === "home") { location.hash = "#/v/exec"; return; }
 
   return renderDashboardView(view, r.view);
 }
@@ -208,7 +208,7 @@ function renderWelcome(view) {
       const id = await seedSandbox();
       setActiveOrgId(id);
       state.dashOrgId = null;
-      location.hash = "#/v/profile";
+      location.hash = "#/v/exec";
       await enterApp();
     } catch (e) {
       view.querySelector("#w-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
@@ -242,7 +242,7 @@ function renderNewOrg(view) {
       });
       setActiveOrgId(id);
       state.dashOrgId = null;
-      location.hash = "#/v/profile";
+      location.hash = "#/v/exec";
       await enterApp();
     } catch (err) {
       view.querySelector("#n-msg").innerHTML = `<div class="msg err">${esc(err.message)}</div>`;

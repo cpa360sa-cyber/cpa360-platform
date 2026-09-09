@@ -41,6 +41,7 @@ export async function loadOrg(orgId) {
     supabase.from("orgs").select("*").eq("id", orgId).single(),
     sel("gates", "n"),
     sel("score_domains", "sort"),
+    sel("score_criteria", "sort"),
     sel("committee", "sort"),
     sel("actions", "created_at"),
     sel("masterfile_sections", "sort"),
@@ -58,7 +59,7 @@ export async function loadOrg(orgId) {
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
-  const [org, gates, domains, committee, actions, mf, bene, land, leases,
+  const [org, gates, domains, criteria, committee, actions, mf, bene, land, leases,
          allocations, movable, permits, fin, cats, projects, impact, docs] =
     results.map((r) => r.data);
 
@@ -81,7 +82,10 @@ export async function loadOrg(orgId) {
     },
     gates: (gates || []).map((g) => tagObj({ n: g.n, name: g.name, state: g.state }, g)),
     score: {
-      domains: (domains || []).map((d) => tagObj({ name: d.name, weight: num(d.weight), achieved: num(d.achieved) }, d)),
+      domains: (domains || []).map((d) => tagObj(
+        { name: d.name, weight: num(d.weight), achieved: num(d.achieved), detailed: !!d.detailed }, d)),
+      criteria: (criteria || []).map((c) => tagObj(
+        { domain: c.domain, name: c.name, weight: num(c.weight), achieved: num(c.achieved) }, c)),
       bands: BANDS,
     },
     committee: (committee || []).map((r) => tagArr([r.role, r.name, r.term || ""], r)),
@@ -150,6 +154,11 @@ export async function uploadDoc(orgId, section, refId, file) {
     throw error;
   }
   return data;
+}
+
+export async function recentDocs(orgId, n = 6) {
+  return supabase.from("documents").select("section, name, uploaded_at")
+    .eq("org_id", orgId).order("uploaded_at", { ascending: false }).limit(n);
 }
 
 export async function docUrl(path) {
@@ -221,13 +230,31 @@ export async function saveSection(orgId, section, D) {
       return;
     }
 
-    case "score":
+    case "score": {
+      // criteria first (a domain's achieved may be derived from them)
+      if (Array.isArray(D.score.criteria)) {
+        for (const c of D.score.criteria) {
+          if (!c._id) continue;
+          const { error } = await supabase.from("score_criteria")
+            .update({ achieved: num(c.achieved), weight: num(c.weight), name: c.name })
+            .eq("id", c._id);
+          if (error) throw error;
+        }
+      }
       for (const d of D.score.domains) {
+        let achieved = num(d.achieved);
+        if (d.detailed && Array.isArray(D.score.criteria)) {
+          achieved = Math.round(D.score.criteria
+            .filter((c) => c.domain === d.name)
+            .reduce((s, c) => s + num(c.achieved), 0));
+          d.achieved = achieved;
+        }
         const { error } = await supabase.from("score_domains")
-          .update({ achieved: num(d.achieved) }).eq("org_id", orgId).eq("name", d.name);
+          .update({ achieved, detailed: !!d.detailed }).eq("org_id", orgId).eq("name", d.name);
         if (error) throw error;
       }
       return;
+    }
 
     case "committee":
       return reconcile("committee", orgId, D.committee, (r, i) => ({ role: r[0], name: r[1], term: nn(r[2]), sort: i }));

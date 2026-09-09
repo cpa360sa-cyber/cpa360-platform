@@ -40,15 +40,29 @@ const PROJECT_STAGES = ["Concept", "Business Case", "Approved", "Implementation"
 const PROJECT_STATUSES = ["Not Started", "On Track", "At Risk", "Delayed", "Complete"];
 
 export const NAV = [
-  { id: "profile", label: "CPA Profile", group: "Institutional", eyebrow: "Institutional", title: "CPA Profile", sub: "Institutional identity, standing and current gate status at a glance." },
-  { id: "score", label: "Institutional Score", group: "Institutional", eyebrow: "Institutional", title: "Institutional Score Dashboard", sub: "CPA360™ Institutional Performance Index — a standardised 100-point maturity score (IP-03)." },
-  { id: "actions", label: "Action Tracker", group: "Institutional", eyebrow: "Institutional", title: "Action Tracker", sub: "Open items from resolutions, assessments and Committee decisions, in one place." },
-  { id: "masterfile", label: "Digital Master File", group: "Records", eyebrow: "Records", title: "Digital Master File", sub: "Document management mirrored from the CPA360™ Master File Index (CPA360-ADM-04)." },
-  { id: "beneficiary", label: "Beneficiary Database", group: "Records", eyebrow: "Records", title: "Beneficiary Database", sub: "Verification status of the Master Beneficiary Register (IP-05 Beneficiary Toolkit)." },
-  { id: "assets", label: "Land & Asset Database", group: "Records", eyebrow: "Records", title: "Land & Asset Database", sub: "Land portions, leases, movable assets and permits (IP-05 Land & Assets Toolkit)." },
-  { id: "finance", label: "Financial Dashboard", group: "Performance", eyebrow: "Performance", title: "Financial Dashboard", sub: "Budget, cash position and spend by category." },
-  { id: "projects", label: "Project Dashboard", group: "Performance", eyebrow: "Performance", title: "Project Dashboard", sub: "Pipeline and delivery status across the CPA360™ Projects Toolkit." },
-  { id: "impact", label: "Impact Dashboard", group: "Performance", eyebrow: "Performance", title: "Impact Dashboard", sub: "Institutional M&E — the outcomes CPA360™ implementation is producing on the ground." },
+  { id: "exec", label: "Executive Dashboard", group: "Overview", eyebrow: "Overview", title: "CPA Executive Dashboard", sub: "Institutional score, journey stage and the alerts that need the Committee's attention." },
+  { id: "score", label: "Institutional Performance", group: "Performance", eyebrow: "Performance", title: "Institutional Performance", sub: "The CPA360™ 100-point institutional score across nine weighted domains." },
+  { id: "journey", label: "CPA360 Journey", group: "Performance", eyebrow: "Performance", title: "The CPA360™ Journey", sub: "Seven stages from Assess to Scale — where this CPA is, and what comes next." },
+  { id: "profile", label: "Governance Centre", group: "Operations", eyebrow: "Operations", title: "Governance Centre", sub: "Institutional identity, EXCO and office bearers, committees, resolutions, meetings and the governance calendar." },
+  { id: "beneficiary", label: "Beneficiary Centre", group: "Operations", eyebrow: "Operations", title: "Beneficiary Centre", sub: "The Master Beneficiary Register — verification, households, succession, deceased members and disputes." },
+  { id: "finance", label: "Finance & Procurement", group: "Operations", eyebrow: "Operations", title: "Finance & Procurement", sub: "Budget, transactions, requisitions, purchase orders, suppliers, payments and procurement compliance." },
+  { id: "assets", label: "Land & Assets", group: "Operations", eyebrow: "Operations", title: "Land & Assets", sub: "Land parcels, allocations, leases, permits, infrastructure, the asset register and maintenance." },
+  { id: "productivity", label: "Productivity Centre", group: "Operations", eyebrow: "Operations", title: "Productivity Centre", sub: "Crops, orchards, timber, livestock, water, labour, inputs, harvest, sales and cost of production." },
+  { id: "projects", label: "Projects & Commercialisation", group: "Operations", eyebrow: "Operations", title: "Projects & Commercialisation", sub: "Project pipeline and scorecards, business cases, funding readiness, markets, partnerships and revenue." },
+  { id: "masterfile", label: "CPA Master File", group: "Records", eyebrow: "Records", title: "CPA Master File", sub: "The complete institutional record, indexed to the CPA360™ Master File structure." },
+  { id: "actions", label: "Action Tracker", group: "Tools", eyebrow: "Tools", title: "Action Tracker", sub: "Open items from resolutions, assessments and Committee decisions, in one place." },
+  { id: "impact", label: "Impact & M&E", group: "Tools", eyebrow: "Tools", title: "Impact & M&E", sub: "The outcomes CPA360™ implementation is producing on the ground." },
+];
+
+/* The CPA360 journey — 7 stages. `n` matches gates.n from the DB. */
+const JOURNEY = [
+  { n: 1, key: "Assess",          blurb: "Baseline the institution: assessment, master-file audit, beneficiary and land position established." },
+  { n: 2, key: "Recover",         blurb: "Restore legal standing and control — constitution, EXCO, banking, and the most urgent compliance gaps closed." },
+  { n: 3, key: "Stabilise",       blurb: "Core systems run consistently: minuted meetings, bookkeeping, records management, a working action tracker." },
+  { n: 4, key: "Professionalise", blurb: "Institutionalise the systems — delegation of authority, budgeting, audited finances, full registers." },
+  { n: 5, key: "Productivise",    blurb: "Put the land to work: enterprises identified, production planned and recorded, cost of production tracked." },
+  { n: 6, key: "Commercialise",   blurb: "Turn production into income — market linkages, off-take agreements, partnerships, diversified revenue." },
+  { n: 7, key: "Scale",           blurb: "Investment-ready: a bankable business plan, investment-grade governance and finance, a funding pipeline." },
 ];
 
 /* ============ module state ============ */
@@ -71,7 +85,7 @@ const fmtR = (n) => "R " + Math.round(+n || 0).toLocaleString("en-ZA");
 const fmtPct = (n) => (Math.round(n * 10) / 10) + "%";
 const emptyRow = (cols, msg) => `<tr><td colspan="${cols}" style="text-align:center;color:var(--ink-muted);padding:22px;">${esc(msg)}</td></tr>`;
 const maturityBand = (score) => MATURITY.find((b) => score >= b.min && score <= b.max) || MATURITY[0];
-const scoreTotal = () => DATA.score.domains.reduce((s, d) => s + (+d.achieved || 0), 0);
+const scoreTotal = () => DATA.score.domains.reduce((s, d) => s + domainScore(d), 0);
 function pill(label, tone) { return `<span class="pill ${tone}">${ICONS[tone]}${label}</span>`; }
 function statusPill(label) { return pill(esc(label), STATUS_TONE[label] || "neutral"); }
 
@@ -522,26 +536,6 @@ function editIdentity() {
     commit("cpa");
   });
 }
-function editScore() {
-  openModal("Update domain scores", DATA.score.domains.map((d, i) => ({ key: "d" + i, label: `${d.name} (of ${d.weight})`, type: "number", value: d.achieved })), (out) => {
-    DATA.score.domains.forEach((d, i) => {
-      let v = +out["d" + i];
-      if (isNaN(v)) v = d.achieved;
-      d.achieved = Math.max(0, Math.min(d.weight, v));
-    });
-    commit("score");
-  });
-}
-function editGates() {
-  const cur = DATA.gates.find((g) => g.state === "current") || DATA.gates[0];
-  openModal("Set current gate", [
-    { key: "gate", label: "Current gate", type: "select", options: DATA.gates.map((g) => `${g.n} — ${g.name}`), value: `${cur.n} — ${cur.name}` },
-  ], (out) => {
-    const n = parseInt(out.gate);
-    DATA.gates.forEach((g) => { g.state = g.n < n ? "done" : g.n === n ? "current" : "upcoming"; });
-    commit("gates");
-  });
-}
 function editCommittee() {
   listEditor({
     title: "Management committee", arr: DATA.committee, section: "committee",
@@ -755,7 +749,7 @@ function renderProfile() {
   const gCur = DATA.gates.find((g) => g.state === "current") || DATA.gates[DATA.gates.length - 1] || { n: "–", name: "—" };
   $("profile-stats").innerHTML = [
     statTile("Institutional Score", total + " / 100", maturityBand(total).name + " band", ""),
-    statTile("Current Gate", `${gCur.n} of ${DATA.gates.length}`, `${gCur.name} — in progress`, "warning"),
+    statTile("Journey Stage", `${gCur.n} of 7`, `${gCur.name}`, "warning"),
     statTile("Verified Members", (+c.members || 0).toLocaleString(), "Master Beneficiary Register", ""),
     statTile("Land Extent", (+c.landExtent || 0).toLocaleString() + " ha", c.portions + " registered portions", ""),
   ].join("");
@@ -778,13 +772,6 @@ function renderProfile() {
       <div>Attention needed — ${parts.join(" · ")}. Open the <a href="#/v/actions" style="font-weight:600;text-decoration:underline;">Action Tracker</a>.</div>
     </div>` : "";
 
-  $("profile-gates").innerHTML = DATA.gates.map((g) => `
-    <div class="gate-step ${g.state === "done" ? "done" : g.state === "current" ? "current" : ""}">
-      <div class="connector"></div>
-      <div class="chip">${g.state === "done" ? ICONS.good.replace('viewBox="0 0 24 24"', 'viewBox="0 0 24 24" style="width:15px;height:15px"') : g.n}</div>
-      <div class="lbl">${esc(g.name)}</div>
-    </div>`).join("");
-
   const yrs = new Date().getFullYear() - (+c.established || new Date().getFullYear());
   $("profile-identity").innerHTML = `
     <dt>Legal name</dt><dd>${esc(c.name)}</dd>
@@ -799,24 +786,15 @@ function renderProfile() {
     ? `<table><tbody>${DATA.committee.map(([role, name, term]) =>
         `<tr><td style="color:var(--ink-2);font-size:12px;">${esc(role)}</td><td style="font-weight:600;">${esc(name)}</td><td style="color:var(--ink-muted);font-size:11.5px;">${esc(term)}</td></tr>`).join("")}</tbody></table>`
     : `<p class="muted">No committee members recorded.</p>`;
-}
 
-function renderScore() {
-  const total = scoreTotal();
-  const band = maturityBand(total);
-  $("score-gauge").innerHTML = scoreGauge(total, 100);
-  $("score-band-pill").textContent = band.name + " maturity band";
-  const sd = $("score-doc-btn");
-  if (sd) sd.textContent = "Assessment doc" + (docCount("score", null) ? ` · ${docCount("score", null)}` : "");
-  $("score-bars").innerHTML = barRows(
-    DATA.score.domains.map((d) => ({ label: d.name, value: +d.achieved || 0, max: d.weight })),
-    { fmtVal: (it) => it.value + " / " + it.max });
-  $("score-bands").innerHTML = DATA.score.bands.map(([b, r, d]) => {
-    const here = b === band.name;
-    return `<tr${here ? ' style="background:var(--brand-tint);"' : ""}>
-      <td style="font-weight:700;">${esc(b)}${here ? ' &nbsp;<span class="pill brand">Current</span>' : ""}</td>
-      <td class="mono">${esc(r)}</td><td style="color:var(--ink-2);">${esc(d)}</td></tr>`;
-  }).join("");
+  const gm = $("governance-more");
+  if (gm) gm.innerHTML = comingSoon("Governance Centre registers", [
+    "Sub-committees and their mandates",
+    "Resolutions register (with the Action Tracker link)",
+    "Meetings and AGM / SGM records",
+    "Conflict-of-interest declarations",
+    "The governance calendar of statutory deadlines",
+  ], "Committee, meetings and resolutions all feed the Governance domain of your score.");
 }
 
 function renderActions() {
@@ -1037,9 +1015,239 @@ function renderImpact() {
     `${(+i.hectaresActive || 0).toLocaleString()} ha of the CPA's ${(+i.hectaresTotal || 0).toLocaleString()} ha land extent is under active agricultural, forestry or livestock production this year.`;
 }
 
+/* ============ Executive Dashboard ============ */
+function domainByName(n) { return DATA.score.domains.find((d) => d.name === n) || { achieved: 0, weight: 1 }; }
+function healthTone(pct) { return pct >= 75 ? "good" : pct >= 45 ? "warning" : "critical"; }
+
+function renderExec() {
+  const total = scoreTotal();
+  const band = maturityBand(total);
+  const stage = DATA.gates.find((g) => g.state === "current") || DATA.gates[0] || { n: 1, name: "Assess" };
+  const jb = JOURNEY.find((s) => s.n === stage.n) || JOURNEY[0];
+
+  $("exec-hero").innerHTML = `
+    <div class="exec-hero-card">
+      <div class="ehc-num">${total}<span>/100</span></div>
+      <div class="ehc-lbl">Institutional Score</div>
+      <div class="pill brand" style="margin-top:8px;">${esc(band.name)} band</div>
+    </div>
+    <div class="exec-hero-card">
+      <div class="ehc-num">${stage.n}<span>/7</span></div>
+      <div class="ehc-lbl">Current Stage — ${esc(jb.key)}</div>
+      <div class="hint" style="margin-top:8px;max-width:34ch;">${esc(jb.blurb)}</div>
+    </div>`;
+
+  // health indicators — one per domain group
+  const H = [
+    ["Governance", ["Governance"]],
+    ["Beneficiaries", ["Beneficiaries"]],
+    ["Administration", ["Administration"]],
+    ["Finance", ["Finance"]],
+    ["Land & Assets", ["Land & Assets"]],
+    ["Productivity", ["Productivity"]],
+    ["Commercial", ["Commercialisation"]],
+    ["Compliance", ["Compliance"]],
+  ];
+  $("exec-health").innerHTML = H.map(([label, names]) => {
+    const w = names.reduce((s, n) => s + (+domainByName(n).weight || 0), 0) || 1;
+    const a = names.reduce((s, n) => s + (+domainByName(n).achieved || 0), 0);
+    const pct = Math.round((a / w) * 100);
+    return `<div class="health-cell">
+      <div class="hc-top"><span>${esc(label)}</span><span class="mono">${pct}%</span></div>
+      <div class="bar-track"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div>
+    </div>`;
+  }).join("");
+
+  // critical actions
+  const now = new Date();
+  const crit = DATA.actions
+    .map((a) => ({ a, days: a[4] ? (new Date(a[4]) - now) / 86400000 : 999 }))
+    .filter((x) => x.a[5] === "Overdue" || (x.a[5] !== "Completed" && x.days <= 30))
+    .sort((x, y) => x.days - y.days).slice(0, 6);
+  $("exec-actions").innerHTML = crit.length ? crit.map(({ a }) => `
+    <li><span class="ea-cat">${esc(a[1] || "—")}</span>
+      <span class="ea-desc">${esc(a[2])}</span>
+      <span>${statusPill(a[5])}</span>
+      <span class="mono ea-due">${esc(a[4] || "")}</span></li>`).join("")
+    : `<li class="muted">No overdue or imminent actions. </li>`;
+
+  // governance deadlines — from actions in the Governance category with a future date
+  const deadlines = DATA.actions
+    .filter((a) => a[5] !== "Completed" && a[4] && new Date(a[4]) >= now)
+    .sort((x, y) => new Date(x[4]) - new Date(y[4])).slice(0, 5);
+  $("exec-deadlines").innerHTML = deadlines.length ? deadlines.map((a) => `
+    <li><span class="mono ea-due">${esc(a[4])}</span><span class="ea-desc">${esc(a[2])}</span>
+      <span class="ea-cat">${esc(a[3] || a[1] || "")}</span></li>`).join("")
+    : `<li class="muted">No upcoming deadlines recorded.</li>`;
+
+  // financial alerts
+  const f = DATA.finance;
+  const fa = [];
+  if (f.ytdExpActual > f.ytdExpBudget) fa.push(["critical", `Expenditure is over YTD budget by ${fmtR(f.ytdExpActual - f.ytdExpBudget)}.`]);
+  if (f.ytdIncomeActual < f.ytdIncomeBudget * 0.9) fa.push(["warning", `Income is ${fmtPct((1 - f.ytdIncomeActual / (f.ytdIncomeBudget || 1)) * 100)} below the YTD income budget.`]);
+  const runway = f.ytdExpActual ? f.cashBalance / (f.ytdExpActual / 9) : null;  // rough months
+  if (runway != null && runway < 3) fa.push(["critical", `Cash runway is about ${runway.toFixed(1)} months at the current burn rate.`]);
+  (f.categories || []).forEach(([n, b, ac]) => { if (b && ac / b > 1.1) fa.push(["warning", `"${n}" is ${fmtPct((ac / b - 1) * 100)} over its annual budget.`]); });
+  $("exec-finance").innerHTML = fa.length ? fa.slice(0, 5).map(([tone, m]) =>
+    `<li>${pill(tone === "critical" ? "Alert" : "Watch", tone)}<span class="ea-desc">${esc(m)}</span></li>`).join("")
+    : `<li class="muted">No financial alerts — budget and cash within tolerance.</li>`;
+
+  // project status
+  const p = DATA.projects;
+  $("exec-projects").innerHTML = p.length ? p.slice(0, 6).map(([name, stg, budget, spent, pct, status]) => `
+    <li><span class="ea-desc">${esc(name)}</span>
+      <span class="pill brand">${esc(stg)}</span>
+      <span style="min-width:90px;"><div class="progress"><span style="width:${Math.max(0, Math.min(100, +pct || 0))}%"></span></div></span>
+      <span>${statusPill(status)}</span></li>`).join("")
+    : `<li class="muted">No projects in the pipeline.</li>`;
+
+  // recent documents
+  renderExecDocs();
+}
+
+async function renderExecDocs() {
+  const el = $("exec-docs");
+  if (!el) return;
+  try {
+    const { data } = await repo.recentDocs(orgId, 6);
+    el.innerHTML = (data && data.length) ? data.map((d) => `
+      <li><span class="ea-cat">${esc(d.section)}</span>
+        <span class="ea-desc">${esc(d.name)}</span>
+        <span class="mono ea-due">${esc((d.uploaded_at || "").slice(0, 10))}</span></li>`).join("")
+      : `<li class="muted">No documents uploaded yet.</li>`;
+  } catch (e) { el.innerHTML = `<li class="muted">Couldn't load documents.</li>`; }
+}
+
+/* ============ CPA360 Journey ============ */
+function renderJourney() {
+  const curN = (DATA.gates.find((g) => g.state === "current") || { n: 1 }).n;
+  $("journey-list").innerHTML = JOURNEY.map((s) => {
+    const g = DATA.gates.find((x) => x.n === s.n) || { state: "upcoming", name: s.key };
+    const cls = g.state === "done" ? "done" : g.state === "current" ? "current" : "";
+    return `<div class="journey-step ${cls}">
+      <div class="js-rail"><div class="js-dot">${g.state === "done" ? "✓" : s.n}</div></div>
+      <div class="js-body">
+        <div class="js-head"><h3>${esc((g.name || s.key).toUpperCase())}</h3>
+          ${g.state === "current" ? '<span class="pill brand">Current stage</span>' : g.state === "done" ? '<span class="pill good">Complete</span>' : ""}</div>
+        <p>${esc(s.blurb)}</p>
+      </div>
+    </div>`;
+  }).join("");
+  const cur = JOURNEY.find((s) => s.n === curN) || JOURNEY[0];
+  $("journey-note").innerHTML =
+    `This CPA is at <strong>Stage ${curN} — ${esc(cur.key)}</strong>. ` +
+    (curN < 7 ? `Next: <strong>${esc(JOURNEY[curN].key)}</strong>.` : `The final stage — focus on sustaining investment readiness.`);
+}
+function editJourney() {
+  const cur = DATA.gates.find((g) => g.state === "current") || DATA.gates[0];
+  openModal("Set current stage", [
+    { key: "stage", label: "Current stage", type: "select",
+      options: JOURNEY.map((s) => `${s.n} — ${s.key}`),
+      value: `${cur.n} — ${(JOURNEY.find((s) => s.n === cur.n) || {}).key || cur.name}` },
+  ], (out) => {
+    const n = parseInt(out.stage);
+    DATA.gates.forEach((g) => {
+      const j = JOURNEY.find((s) => s.n === g.n);
+      if (j) g.name = j.key;
+      g.state = g.n < n ? "done" : g.n === n ? "current" : "upcoming";
+    });
+    commit("gates");
+  });
+}
+
+/* ============ Institutional Performance ============ */
+function critFor(name) { return (DATA.score.criteria || []).filter((c) => c.domain === name); }
+function domainScore(d) {
+  if (d.detailed) return Math.round(critFor(d.name).reduce((s, c) => s + (+c.achieved || 0), 0));
+  return +d.achieved || 0;
+}
+function renderScore() {
+  const total = DATA.score.domains.reduce((s, d) => s + domainScore(d), 0);
+  const band = maturityBand(total);
+  $("score-gauge").innerHTML = scoreGauge(total, 100);
+  $("score-band-pill").textContent = band.name + " maturity band";
+  const sd = $("score-doc-btn");
+  if (sd) sd.textContent = "Assessment doc" + (docCount("score", null) ? ` · ${docCount("score", null)}` : "");
+
+  $("score-domains").innerHTML = DATA.score.domains.map((d) => {
+    const sc = domainScore(d);
+    const pct = Math.round((sc / (d.weight || 1)) * 100);
+    const crits = critFor(d.name);
+    const rows = d.detailed && crits.length ? `<ul class="crit-list">${crits.map((c) => {
+      const cp = Math.round((+c.achieved || 0) / (c.weight || 1) * 100);
+      return `<li><span class="crit-name">${esc(c.name)}</span>
+        <span class="bar-track sm"><span class="bar-fill ${healthTone(cp)}" style="width:${Math.max(3, cp)}%"></span></span>
+        <span class="mono crit-val">${(+c.achieved || 0)}/${c.weight}</span></li>`;
+    }).join("")}</ul>` : "";
+    return `<div class="domain-card">
+      <div class="dc-head">
+        <div><h3>${esc(d.name)}</h3><span class="hint">${d.detailed ? crits.length + " criteria" : "single score"}</span></div>
+        <div class="dc-score"><span class="num">${sc}</span><span class="mono">/${d.weight}</span>
+          <button class="btn dc-edit" data-domain="${esc(d.name)}" type="button">Score</button></div>
+      </div>
+      <div class="bar-track"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div>
+      ${rows}
+    </div>`;
+  }).join("");
+  $("score-domains").querySelectorAll(".dc-edit").forEach((b) => (b.onclick = () => editDomain(b.dataset.domain)));
+
+  $("score-bands").innerHTML = DATA.score.bands.map(([b, r, dsc]) => {
+    const here = b === band.name;
+    return `<tr${here ? ' style="background:var(--brand-tint);"' : ""}>
+      <td style="font-weight:700;">${esc(b)}${here ? ' &nbsp;<span class="pill brand">Current</span>' : ""}</td>
+      <td class="mono">${esc(r)}</td><td style="color:var(--ink-2);">${esc(dsc)}</td></tr>`;
+  }).join("");
+}
+function editDomain(name) {
+  const d = DATA.score.domains.find((x) => x.name === name);
+  if (!d) return;
+  const crits = critFor(name);
+  const fields = [
+    { key: "detailed", label: "Scoring method", type: "select", options: ["Single score", "Detailed rubric"],
+      value: d.detailed ? "Detailed rubric" : "Single score" },
+  ];
+  if (crits.length) {
+    crits.forEach((c, i) => fields.push({
+      key: "c" + i, label: `${c.name} (of ${c.weight})`, type: "number", value: +c.achieved || 0,
+    }));
+  }
+  fields.push({ key: "single", label: `Overall domain score (of ${d.weight}) — used for "Single score"`, type: "number", value: +d.achieved || 0 });
+  openModal(`Score — ${name}`, fields, (out) => {
+    d.detailed = out.detailed === "Detailed rubric";
+    crits.forEach((c, i) => {
+      let v = parseFloat(out["c" + i]);
+      if (!isNaN(v)) c.achieved = Math.max(0, Math.min(c.weight, v));
+    });
+    let sv = parseFloat(out.single);
+    if (!isNaN(sv)) d.achieved = Math.max(0, Math.min(d.weight, sv));
+    if (d.detailed && crits.length) d.achieved = Math.round(crits.reduce((s, c) => s + (+c.achieved || 0), 0));
+    commit("score");
+  });
+}
+
+/* ============ Productivity Centre (scaffold) ============ */
+function renderProductivity() {
+  $("productivity-body").innerHTML = comingSoon("Productivity Centre", [
+    "Enterprises — crops, orchards, timber, livestock",
+    "Water — sources, allocation and usage",
+    "Labour, inputs and harvest records",
+    "Sales and cost of production per enterprise",
+  ], "Productivity ties directly into the Productivity domain of your institutional score.");
+}
+function comingSoon(title, items, foot) {
+  return `<div class="card coming-soon">
+    <h3>${esc(title)} — being built</h3>
+    <p class="hint">This register is part of the CPA360™ build sequence. It will capture:</p>
+    <ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
+    ${foot ? `<p class="hint" style="margin-top:10px;">${esc(foot)}</p>` : ""}
+  </div>`;
+}
+
 const RENDERERS = {
-  profile: renderProfile, score: renderScore, actions: renderActions, masterfile: renderMasterFile,
-  beneficiary: renderBeneficiary, assets: renderAssets, finance: renderFinance, projects: renderProjects, impact: renderImpact,
+  exec: renderExec, score: renderScore, journey: renderJourney,
+  profile: renderProfile, beneficiary: renderBeneficiary, finance: renderFinance,
+  assets: renderAssets, productivity: renderProductivity, projects: renderProjects,
+  masterfile: renderMasterFile, actions: renderActions, impact: renderImpact,
 };
 
 /* CSV import specs — map spreadsheet columns onto each collection's row shape */
@@ -1115,7 +1323,7 @@ const IMPORT = {
 };
 
 const BUTTONS = {
-  "edit-identity-btn": editIdentity, "edit-score-btn": editScore, "edit-gates-btn": editGates,
+  "edit-identity-btn": editIdentity, "edit-journey-btn": editJourney,
   "edit-committee-btn": editCommittee, "add-action-btn": () => editAction(null), "edit-masterfile-btn": editMasterFile,
   "edit-beneficiary-btn": editBeneficiary, "edit-land-btn": editLand, "edit-movable-btn": editMovable,
   "edit-leases-btn": editLeases, "edit-allocations-btn": editAllocations,
@@ -1143,7 +1351,7 @@ function renderCurrent() {
 function applyRoleGate() {
   if (CAN_EDIT || !container) return;
   container.querySelectorAll(".inline-select").forEach((s) => { s.disabled = true; });
-  container.querySelectorAll(".row-actions").forEach((e) => e.remove());
+  container.querySelectorAll(".row-actions, .dc-edit").forEach((e) => e.remove());
 }
 
 async function commit(section) {
@@ -1189,7 +1397,7 @@ export function mountView(el, viewId) {
   container = el;
   el.classList.add("cpa-dash");
   el.innerHTML = VIEW_HTML;
-  currentView = NAV.some((n) => n.id === viewId) ? viewId : "profile";
+  currentView = NAV.some((n) => n.id === viewId) ? viewId : "exec";
   if (!CAN_EDIT) {
     // viewers keep read-only affordances (.view-ok = open the document viewer);
     // everything else that edits or imports goes away
@@ -1200,13 +1408,15 @@ export function mountView(el, viewId) {
     const b = el.querySelector("#" + id);
     if (b) b.addEventListener("click", fn);
   });
+  el.querySelectorAll("[data-goto]").forEach((b) =>
+    b.addEventListener("click", () => { location.hash = b.dataset.goto; }));
   el.querySelectorAll("svg:not([aria-label])").forEach((s) => { s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false"); });
   rendered.clear();
   showView(currentView);
 }
 
 export function showView(name) {
-  if (!RENDERERS[name]) name = "profile";
+  if (!RENDERERS[name]) name = "exec";
   currentView = name;
   container.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + name));
   if (!rendered.has(name)) { renderCurrent(); rendered.add(name); }
@@ -1237,21 +1447,53 @@ setInterval(async () => {
 const VIEW_HTML = `
   <div class="print-only" id="print-header"></div>
 
-  <section class="view" id="view-profile">
+  <section class="view" id="view-exec">
+    <div class="exec-hero" id="exec-hero"></div>
+    <div class="section-title">Overall health indicators</div>
+    <div class="health-grid" id="exec-health"></div>
+    <div class="grid grid-2" style="margin-top:18px;">
+      <div class="card"><div class="card-head"><h3>Critical actions</h3>
+        <button class="btn view-ok" data-goto="#/v/actions" type="button">Open tracker</button></div>
+        <ul class="exec-list" id="exec-actions"></ul></div>
+      <div class="card"><div class="card-head"><h3>Upcoming governance deadlines</h3></div>
+        <ul class="exec-list" id="exec-deadlines"></ul></div>
+    </div>
+    <div class="grid grid-2" style="margin-top:14px;">
+      <div class="card"><div class="card-head"><h3>Financial alerts</h3>
+        <button class="btn view-ok" data-goto="#/v/finance" type="button">Open finance</button></div>
+        <ul class="exec-list" id="exec-finance"></ul></div>
+      <div class="card"><div class="card-head"><h3>Project status</h3>
+        <button class="btn view-ok" data-goto="#/v/projects" type="button">Open projects</button></div>
+        <ul class="exec-list" id="exec-projects"></ul></div>
+    </div>
+    <div class="card" style="margin-top:14px;"><div class="card-head"><h3>Recent documents</h3>
+      <button class="btn view-ok" data-goto="#/v/masterfile" type="button">Master File</button></div>
+      <ul class="exec-list" id="exec-docs"></ul></div>
+  </section>
+
+  <section class="view hidden" id="view-journey">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-head"><h3>Where this CPA is on the journey</h3>
+        <button class="btn" id="edit-journey-btn" type="button">Set current stage</button></div>
+      <p class="hint" id="journey-note" style="margin:2px 0 0;"></p>
+    </div>
+    <div class="journey" id="journey-list"></div>
+  </section>
+
+  <section class="view hidden" id="view-productivity">
+    <div id="productivity-body"></div>
+  </section>
+
+  <section class="view hidden" id="view-profile">
     <div class="grid grid-4" id="profile-stats"></div>
     <div id="profile-alerts"></div>
-    <div class="section-title">Gate Progress — CPA360™ Gate System</div>
-    <div class="card" style="overflow-x:auto;">
-      <div class="card-head" style="margin-bottom:14px;"><h3 style="font-size:13px;">CPA360™ Gate System</h3><button class="btn" id="edit-gates-btn" type="button">Set current gate</button></div>
-      <div class="gate-stepper" id="profile-gates"></div>
-    </div>
     <div class="grid grid-2" style="margin-top:16px;">
       <div class="card">
         <div class="card-head"><h3>Institutional Identity</h3><button class="btn" id="edit-identity-btn" type="button">Edit</button></div>
         <dl class="kv" id="profile-identity"></dl>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Management Committee</h3>
+        <div class="card-head"><h3>EXCO &amp; Office Bearers</h3>
           <span style="display:flex;gap:6px;">
             <button class="btn" id="import-committee-btn" type="button">Import</button>
             <button class="btn" id="edit-committee-btn" type="button">Manage</button>
@@ -1260,6 +1502,8 @@ const VIEW_HTML = `
         <div id="profile-committee"></div>
       </div>
     </div>
+    <div id="governance-more" style="margin-top:16px;"></div>
+  </section>
   </section>
 
   <section class="view hidden" id="view-score">
@@ -1267,15 +1511,12 @@ const VIEW_HTML = `
       <div class="card" style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
         <div id="score-gauge"></div>
         <div class="pill brand" id="score-band-pill" style="margin-top:10px;">Developing maturity band</div>
+        <button class="btn view-ok" id="score-doc-btn" type="button" style="margin-top:12px;">Assessment doc</button>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Score by Toolkit Domain</h3>
-          <span style="display:flex;gap:6px;">
-            <button class="btn view-ok" id="score-doc-btn" type="button">Assessment doc</button>
-            <button class="btn" id="edit-score-btn" type="button">Update scores</button>
-          </span>
-        </div>
-        <div id="score-bars"></div>
+        <div class="card-head"><h3>The 100-point CPA360™ score</h3>
+          <span class="hint">Score each domain — single number, or the weighted rubric.</span></div>
+        <div class="domain-grid" id="score-domains"></div>
       </div>
     </div>
     <div class="section-title">Maturity Bands</div>

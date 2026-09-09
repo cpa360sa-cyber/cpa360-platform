@@ -173,6 +173,61 @@
 }
 .cpa-dash-toast.err{ background:var(--status-critical); color:#fff; }
 
+/* ---- v2: exec dashboard, journey, performance ---- */
+.cpa-dash .hint{ font-size:11.5px; color:var(--ink-muted); }
+
+.cpa-dash .exec-hero{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+@media (max-width:760px){ .cpa-dash .exec-hero{ grid-template-columns:1fr; } }
+.cpa-dash .exec-hero-card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; box-shadow:var(--shadow-card); }
+.cpa-dash .ehc-num{ font-family:var(--font-display); font-size:40px; font-weight:800; line-height:1; }
+.cpa-dash .ehc-num span{ font-size:18px; color:var(--ink-muted); font-weight:700; }
+.cpa-dash .ehc-lbl{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-2); margin-top:6px; }
+
+.cpa-dash .health-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px 18px; }
+@media (max-width:900px){ .cpa-dash .health-grid{ grid-template-columns:repeat(2,1fr); } }
+.cpa-dash .health-cell .hc-top{ display:flex; justify-content:space-between; font-size:11.5px; font-weight:600; margin-bottom:5px; }
+
+.cpa-dash .exec-list{ list-style:none; margin:0; padding:0; }
+.cpa-dash .exec-list li{ display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border); font-size:12.5px; }
+.cpa-dash .exec-list li:first-child{ border-top:0; }
+.cpa-dash .exec-list .ea-desc{ flex:1; min-width:0; }
+.cpa-dash .exec-list .ea-cat{ font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-muted); font-weight:700; min-width:88px; }
+.cpa-dash .exec-list .ea-due{ color:var(--ink-muted); white-space:nowrap; font-size:11.5px; }
+.cpa-dash .exec-list .progress{ height:7px; }
+
+.cpa-dash .journey{ position:relative; }
+.cpa-dash .journey-step{ display:grid; grid-template-columns:44px 1fr; gap:14px; }
+.cpa-dash .js-rail{ display:flex; flex-direction:column; align-items:center; }
+.cpa-dash .js-dot{ width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-family:var(--font-display);
+  background:var(--surface-3); color:var(--ink-muted); border:2px solid var(--border); flex:none; }
+.cpa-dash .js-rail::after{ content:""; width:2px; flex:1; background:var(--border); margin:4px 0; }
+.cpa-dash .journey-step:last-child .js-rail::after{ display:none; }
+.cpa-dash .js-body{ padding-bottom:20px; }
+.cpa-dash .js-head{ display:flex; align-items:center; gap:10px; }
+.cpa-dash .js-head h3{ font-size:13px; letter-spacing:.5px; margin:0; }
+.cpa-dash .js-body p{ font-size:12.5px; color:var(--ink-2); margin:4px 0 0; max-width:70ch; }
+.cpa-dash .journey-step.done .js-dot{ background:var(--status-good); color:#fff; border-color:var(--status-good); }
+.cpa-dash .journey-step.current .js-dot{ background:var(--brand); color:#fff; border-color:var(--brand); }
+.cpa-dash .journey-step.current .js-head h3{ color:var(--brand); }
+
+.cpa-dash .domain-grid{ display:flex; flex-direction:column; gap:14px; }
+.cpa-dash .domain-card{ border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
+.cpa-dash .dc-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px; }
+.cpa-dash .dc-head h3{ font-size:13px; margin:0; }
+.cpa-dash .dc-score{ display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.cpa-dash .dc-score .num{ font-family:var(--font-display); font-weight:800; font-size:18px; }
+.cpa-dash .dc-score .mono{ color:var(--ink-muted); }
+.cpa-dash .dc-edit{ padding:3px 10px; font-size:11px; margin-left:6px; }
+.cpa-dash .crit-list{ list-style:none; margin:10px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.cpa-dash .crit-list li{ display:grid; grid-template-columns:1fr 90px 46px; align-items:center; gap:10px; font-size:11.5px; }
+.cpa-dash .crit-name{ color:var(--ink-2); }
+.cpa-dash .bar-track.sm{ height:7px; display:block; }
+.cpa-dash .crit-val{ text-align:right; color:var(--ink-muted); }
+
+.cpa-dash .coming-soon h3{ font-size:13px; margin:0 0 6px; }
+.cpa-dash .coming-soon ul{ margin:8px 0 0; padding-left:18px; font-size:12.5px; color:var(--ink-2); }
+.cpa-dash .coming-soon li{ margin:3px 0; }
+
 /* ---- print (board pack) ---- */
 .print-only{ display:none; }
 @media print{
