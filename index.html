@@ -3,24 +3,401 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CPA360</title>
+<title>CPA360™ — Your CPA Institutional Operating System</title>
+<meta name="description" content="CPA360™ helps Communal Property Associations assess institutional health, strengthen governance, professionalise administration, improve productivity and prepare for sustainable commercialisation. A GAD Foundation Programme." />
+<meta property="og:title" content="CPA360™ — Your CPA Institutional Operating System" />
+<meta property="og:description" content="Transform your CPA into a stronger institution. Assess → Recover → Stabilise → Professionalise → Productivise → Commercialise → Scale." />
+<meta property="og:type" content="website" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" />
 <link rel="stylesheet" href="./styles.css" />
-<link rel="stylesheet" href="./src/dashboard.css" />
-<script>
-  try {
-    var t = localStorage.getItem("cpa360.theme");
-    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
-  } catch (e) {}
-</script>
+<link rel="stylesheet" href="./landing.css" />
 </head>
-<body>
-  <div id="root" class="booting">Loading&hellip;</div>
+<body class="lp">
 
-  <!-- copy config.example.js → config.js and fill in your Supabase keys -->
-  <script src="./config.js"></script>
-  <script type="module" src="./src/app.js"></script>
+<a class="lp-skip" href="#lp-main">Skip to content</a>
+
+<header class="lp-header" id="lp-header">
+  <div class="lp-container lp-header-row">
+    <a class="lp-brand" href="/">
+      <span class="lp-brand-mark" aria-hidden="true">C</span>
+      <span class="lp-brand-txt"><b>CPA360<sup>™</sup></b><span>A GAD Foundation Programme</span></span>
+    </a>
+    <nav class="lp-nav" aria-label="Primary">
+      <a href="#lp-solution">Platform</a>
+      <a href="#lp-journey">Journey</a>
+      <a href="#lp-score">Institutional Score</a>
+      <a href="#lp-modules">Modules</a>
+      <a href="#lp-faq">FAQ</a>
+    </nav>
+    <div class="lp-header-cta">
+      <a class="btn" href="./app.html" id="lp-signin">Sign in</a>
+      <button class="btn primary" data-open-form="assessment" type="button">Assess Your CPA</button>
+    </div>
+    <button class="lp-burger" id="lp-burger" aria-label="Open menu" aria-expanded="false" type="button">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="lp-mobile-nav" id="lp-mobile-nav" hidden>
+    <a href="#lp-solution">Platform</a>
+    <a href="#lp-journey">Journey</a>
+    <a href="#lp-score">Institutional Score</a>
+    <a href="#lp-modules">Modules</a>
+    <a href="#lp-faq">FAQ</a>
+    <a href="./app.html">Sign in</a>
+    <button class="btn primary" data-open-form="assessment" type="button">Assess Your CPA</button>
+  </div>
+</header>
+
+<main id="lp-main">
+
+  <!-- 1 · HERO -->
+  <section class="lp-hero">
+    <div class="lp-hero-bg" aria-hidden="true">
+      <svg viewBox="0 0 1440 520" preserveAspectRatio="xMidYMax slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#16305a"/><stop offset="1" stop-color="#1c3a68"/>
+          </linearGradient>
+        </defs>
+        <rect width="1440" height="520" fill="url(#sky)"/>
+        <path d="M0 430 C 240 380 360 470 640 420 C 900 375 1080 460 1440 405 L1440 520 L0 520 Z" fill="#22406f" opacity=".7"/>
+        <path d="M0 470 C 280 430 520 500 820 455 C 1120 410 1280 480 1440 450 L1440 520 L0 520 Z" fill="#2f7d4f" opacity=".28"/>
+      </svg>
+    </div>
+    <div class="lp-container lp-hero-grid">
+      <div class="lp-hero-copy">
+        <p class="eyebrow lp-hero-eyebrow">Your CPA Institutional Operating System</p>
+        <h1>Transform Your CPA Into a Stronger Institution.</h1>
+        <p class="lp-lead">CPA360™ helps Communal Property Associations assess their institutional health, strengthen governance, professionalise administration, improve productivity and prepare for sustainable commercialisation.</p>
+        <div class="lp-hero-cta">
+          <button class="btn primary lg" data-open-form="assessment" type="button">Start Your CPA Assessment</button>
+          <button class="btn gold lg" data-consult type="button">Book a Consultation</button>
+        </div>
+        <ul class="lp-hero-pillars">
+          <li>People</li><li>Land</li><li>Governance</li><li>Productivity</li><li>Prosperity</li>
+        </ul>
+      </div>
+      <div class="lp-hero-visual" aria-label="Illustrative CPA360 dashboard">
+        <div class="lp-mock">
+          <div class="lp-mock-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="lp-mock-title">CPA360 · Executive Dashboard</span></div>
+          <div class="lp-mock-body">
+            <div class="lp-mock-score">
+              <svg viewBox="0 0 120 120" class="lp-ring">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-3)" stroke-width="12"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--brand)" stroke-width="12" stroke-linecap="round"
+                  stroke-dasharray="214 314" transform="rotate(-90 60 60)"/>
+              </svg>
+              <div class="lp-mock-score-txt"><b>68</b><span>/ 100</span><em>Stabilising</em></div>
+            </div>
+            <div class="lp-mock-bars">
+              <div class="lp-mb"><span>Governance</span><i style="--v:74%"></i></div>
+              <div class="lp-mb"><span>Beneficiaries</span><i style="--v:61%"></i></div>
+              <div class="lp-mb"><span>Finance</span><i style="--v:52%;--c:var(--status-warning)"></i></div>
+              <div class="lp-mb"><span>Land &amp; Assets</span><i style="--v:65%"></i></div>
+              <div class="lp-mb"><span>Productivity</span><i style="--v:48%;--c:var(--status-warning)"></i></div>
+              <div class="lp-mb"><span>Commercialisation</span><i style="--v:42%;--c:var(--status-critical)"></i></div>
+            </div>
+          </div>
+          <div class="lp-mock-journey">
+            <span class="done">Assess</span><span class="done">Recover</span><span class="cur">Stabilise</span><span>Professionalise</span><span>Productivise</span><span>Commercialise</span><span>Scale</span>
+          </div>
+        </div>
+        <p class="lp-illus">Illustrative CPA360 assessment</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · CREDIBILITY STRIP -->
+  <section class="lp-strip">
+    <div class="lp-container">
+      <p class="eyebrow">Built for Communal Property Associations</p>
+      <ul class="lp-strip-list">
+        <li>Governance</li><li>Beneficiaries</li><li>Administration</li><li>Finance</li>
+        <li>Land &amp; Assets</li><li>Productivity</li><li>Commercialisation</li><li>Performance</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 · THE PROBLEM -->
+  <section class="lp-section" id="lp-problem">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">The real problem</p>
+      <h2>Many CPAs don't have a land problem.<br>They have an institutional problem.</h2>
+      <p class="lp-sub">The land is often productive. What holds a CPA back is the institution around it — the systems, records and accountability that turn communal ownership into shared prosperity.</p>
+    </div>
+    <div class="lp-container">
+      <ul class="lp-problem-grid">
+        <li><h3>Weak governance systems</h3><p>Committees operate without minutes, resolutions or a delegation framework.</p></li>
+        <li><h3>Incomplete beneficiary records</h3><p>No verified register; disputes and succession cases unresolved.</p></li>
+        <li><h3>Poor document control</h3><p>Critical records scattered, uncatalogued or lost.</p></li>
+        <li><h3>Financial control gaps</h3><p>Budgets, bookkeeping and audits not consistently maintained.</p></li>
+        <li><h3>Unclear land allocation</h3><p>Allocations and leases undocumented or contested.</p></li>
+        <li><h3>Underutilised assets</h3><p>Infrastructure and equipment recorded nowhere and maintained rarely.</p></li>
+        <li><h3>Weak project management</h3><p>Projects without business cases, owners or progress tracking.</p></li>
+        <li><h3>Limited commercial readiness</h3><p>No market linkages, partnerships or revenue diversification.</p></li>
+        <li><h3>Funding readiness gaps</h3><p>Proposals stall for want of institutional evidence.</p></li>
+        <li><h3>Poor performance visibility</h3><p>No shared view of where the institution actually stands.</p></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 4 · THE SOLUTION -->
+  <section class="lp-section lp-tint" id="lp-solution">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">The CPA360 platform</p>
+      <h2>One platform. One institutional view.</h2>
+      <p class="lp-sub">CPA360 connects every institutional function of a CPA into a single operating environment — so the Committee, the administration office and stakeholders all work from the same record.</p>
+    </div>
+    <div class="lp-container">
+      <ol class="lp-stack">
+        <li><span>Governance</span><p>EXCO, committees, resolutions, meetings, AGM/SGM, conflict of interest.</p></li>
+        <li><span>Beneficiaries</span><p>The Master Beneficiary Register, verification, households, succession.</p></li>
+        <li><span>Administration</span><p>Records management, correspondence, the delegation-of-authority matrix.</p></li>
+        <li><span>Finance</span><p>Budget, transactions, bank reconciliation, annual financial statements.</p></li>
+        <li><span>Procurement</span><p>Requisitions, purchase orders, suppliers, payments, procurement compliance.</p></li>
+        <li><span>HR</span><p>Staff records, payroll references, policies, the organogram.</p></li>
+        <li><span>Land &amp; Assets</span><p>Parcels, allocations, leases, permits, infrastructure, maintenance.</p></li>
+        <li><span>Productivity</span><p>Crops, orchards, timber, livestock, water, inputs, harvest, cost of production.</p></li>
+        <li><span>Projects</span><p>Pipeline, scorecards, business cases, delivery tracking.</p></li>
+        <li><span>Commercialisation</span><p>Markets, partnerships, revenue streams, investment readiness.</p></li>
+        <li><span>Performance</span><p>The CPA360 Institutional Score and monitoring &amp; evaluation.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 5 · JOURNEY -->
+  <section class="lp-section" id="lp-journey">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">The CPA360 Journey</p>
+      <h2>We don't simply assess CPAs. We help transform them.</h2>
+      <p class="lp-sub">A seven-stage institutional pathway — from a first honest assessment to responsible investment and scale.</p>
+    </div>
+    <div class="lp-container">
+      <ol class="lp-journey" id="lp-journey-track">
+        <li><span class="n">1</span><h3>Assess</h3><p>Understand where your CPA stands.</p><em>Outcome: an institutional baseline and score.</em></li>
+        <li><span class="n">2</span><h3>Recover</h3><p>Restore governance, records and institutional control.</p><em>Outcome: legal standing and control restored.</em></li>
+        <li><span class="n">3</span><h3>Stabilise</h3><p>Build consistent administrative and financial systems.</p><em>Outcome: systems that run every month.</em></li>
+        <li><span class="n">4</span><h3>Professionalise</h3><p>Introduce institutional policies, SOPs and accountability.</p><em>Outcome: an institution that runs itself.</em></li>
+        <li><span class="n">5</span><h3>Productivise</h3><p>Turn land, assets and projects into productive value.</p><em>Outcome: land working, production recorded.</em></li>
+        <li><span class="n">6</span><h3>Commercialise</h3><p>Develop sustainable enterprises, markets and revenue.</p><em>Outcome: diversified, own-source income.</em></li>
+        <li><span class="n">7</span><h3>Scale</h3><p>Prepare for responsible investment and expansion.</p><em>Outcome: an investment-ready institution.</em></li>
+      </ol>
+      <div class="lp-center"><button class="btn primary" data-open-form="assessment" type="button">Find your starting stage</button></div>
+    </div>
+  </section>
+
+  <!-- 6 · MODULES -->
+  <section class="lp-section lp-tint" id="lp-modules">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">Platform modules</p>
+      <h2>Everything a CPA has to manage — in one place.</h2>
+    </div>
+    <div class="lp-container">
+      <div class="lp-modules" id="lp-modules-grid"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- 7 · INSTITUTIONAL SCORE -->
+  <section class="lp-section" id="lp-score">
+    <div class="lp-container lp-score-grid">
+      <div>
+        <p class="eyebrow">The differentiator</p>
+        <h2>The CPA360 Institutional Score.</h2>
+        <p class="lp-sub">A standardised snapshot of institutional health across nine performance domains, on a 100-point scale — the same way a credit score summarises financial standing.</p>
+        <ul class="lp-score-domains">
+          <li><span>Governance</span><i style="--v:74%"></i><b>74</b></li>
+          <li><span>Beneficiary Integrity</span><i style="--v:61%"></i><b>61</b></li>
+          <li><span>Administration</span><i style="--v:78%"></i><b>78</b></li>
+          <li><span>Financial Controls</span><i style="--v:52%;--c:var(--status-warning)"></i><b>52</b></li>
+          <li><span>Land &amp; Assets</span><i style="--v:65%"></i><b>65</b></li>
+          <li><span>Productivity</span><i style="--v:48%;--c:var(--status-warning)"></i><b>48</b></li>
+          <li><span>Commercialisation</span><i style="--v:42%;--c:var(--status-critical)"></i><b>42</b></li>
+          <li><span>Compliance</span><i style="--v:70%"></i><b>70</b></li>
+          <li><span>Investment Readiness</span><i style="--v:55%;--c:var(--status-warning)"></i><b>55</b></li>
+        </ul>
+      </div>
+      <div class="lp-score-ring-wrap">
+        <svg viewBox="0 0 200 200" class="lp-score-ring">
+          <circle cx="100" cy="100" r="82" fill="none" stroke="var(--surface-3)" stroke-width="18"/>
+          <circle cx="100" cy="100" r="82" fill="none" stroke="var(--brand)" stroke-width="18" stroke-linecap="round"
+            stroke-dasharray="350 515" transform="rotate(-90 100 100)"/>
+        </svg>
+        <div class="lp-score-ring-txt"><b>68</b><span>/ 100</span></div>
+        <div class="badge gold lp-score-band">Stabilising</div>
+        <p class="lp-illus">Illustrative CPA360 assessment</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · MASTER FILE -->
+  <section class="lp-section lp-tint" id="lp-masterfile">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">The CPA Master File</p>
+      <h2>A complete, structured institutional record.</h2>
+      <p class="lp-sub">CPA360 builds and maintains a digital institutional filing system — eleven categories that together form the CPA's official memory.</p>
+    </div>
+    <div class="lp-container">
+      <ul class="lp-masterfile">
+        <li><b>A</b> Governance</li><li><b>B</b> Beneficiaries</li><li><b>C</b> Land</li>
+        <li><b>D</b> Assets</li><li><b>E</b> Finance</li><li><b>F</b> HR</li>
+        <li><b>G</b> Projects</li><li><b>H</b> Productivity</li><li><b>I</b> Commercial</li>
+        <li><b>J</b> Compliance</li><li><b>K</b> Performance</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 9 · ASSESSMENT TO ACTION -->
+  <section class="lp-section" id="lp-action">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">From assessment to action</p>
+      <h2>Assessment is only the beginning.</h2>
+      <p class="lp-sub">CPA360 is not a report that sits on a shelf. Every gap becomes a tracked action with an owner, a deadline and evidence — and the score moves as the work gets done.</p>
+    </div>
+    <div class="lp-container">
+      <ol class="lp-loop">
+        <li>Assess</li><li>Identify gaps</li><li>Create action plan</li><li>Assign responsibility</li>
+        <li>Track deadlines</li><li>Upload evidence</li><li>Measure improvement</li><li>Reassess</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 10 · OUTCOMES -->
+  <section class="lp-section lp-tint" id="lp-outcomes">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">Outcomes</p>
+      <h2>What a stronger institution looks like.</h2>
+    </div>
+    <div class="lp-container">
+      <ul class="lp-outcomes">
+        <li><h3>Stronger governance</h3><p>A functioning EXCO with minutes, resolutions and clear delegation.</p></li>
+        <li><h3>Better records</h3><p>A verified beneficiary register and a complete Master File.</p></li>
+        <li><h3>Financial accountability</h3><p>Budgets, reconciliations and audited statements, consistently maintained.</p></li>
+        <li><h3>Productive land</h3><p>Allocations documented, enterprises identified, production recorded.</p></li>
+        <li><h3>Managed projects</h3><p>Business cases, owners, deadlines and evidence on every project.</p></li>
+        <li><h3>Commercial readiness</h3><p>Market linkages, partnerships and diversified revenue in view.</p></li>
+        <li><h3>Investment readiness</h3><p>The institutional evidence a funder or bank needs to say yes.</p></li>
+      </ul>
+      <p class="lp-fineprint">CPA360 strengthens institutional capacity and creates visibility to support responsible commercialisation. It does not guarantee financial returns or provide funding.</p>
+    </div>
+  </section>
+
+  <!-- 11 · LEAD CAPTURE -->
+  <section class="lp-section lp-cta-band" id="lp-assess">
+    <div class="lp-container lp-narrow lp-center">
+      <h2>Find out where your CPA stands.</h2>
+      <p class="lp-sub">A short, structured enquiry. Our team reviews your information and comes back to you on the next step.</p>
+      <button class="btn primary lg" data-open-form="assessment" type="button">Start Your CPA Assessment</button>
+    </div>
+  </section>
+
+  <!-- 12 · CONSULTATION -->
+  <section class="lp-section" id="lp-consult">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">Talk to us first</p>
+      <h2>Book a CPA360 Consultation.</h2>
+      <p class="lp-sub">Prefer a conversation before an assessment? Book a session with the CPA360 team to talk through your CPA's situation.</p>
+      <div id="lp-consult-slot"><button class="btn gold lg" data-consult type="button">Book a Consultation</button></div>
+    </div>
+  </section>
+
+  <!-- 13 · SERVICES / PROPOSAL -->
+  <section class="lp-section lp-tint" id="lp-services">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">Engagement models</p>
+      <h2>How CPA360 supports your institution.</h2>
+      <p class="lp-sub">Every CPA is different. We scope an engagement to your starting stage and capacity.</p>
+    </div>
+    <div class="lp-container">
+      <ul class="lp-services">
+        <li><h3>CPA360 Assessment</h3><p>A structured institutional assessment and baseline score, with a prioritised action plan.</p></li>
+        <li><h3>CPA360 Professionalisation</h3><p>Support to close governance, administration and financial-control gaps and embed systems.</p></li>
+        <li><h3>CPA360 Managed Services</h3><p>Ongoing institutional administration support, working alongside the CPA's own office.</p></li>
+        <li><h3>CPA360 Productivity &amp; Commercialisation</h3><p>Support to put land to work and develop enterprises, markets and revenue.</p></li>
+      </ul>
+      <div class="lp-center"><button class="btn primary" data-open-form="proposal" type="button">Request a CPA360 Proposal</button></div>
+    </div>
+  </section>
+
+  <!-- 14 · FAQ -->
+  <section class="lp-section" id="lp-faq">
+    <div class="lp-container lp-narrow">
+      <p class="eyebrow">Frequently asked</p>
+      <h2>Questions CPAs ask us.</h2>
+    </div>
+    <div class="lp-container lp-narrow">
+      <div class="lp-faq" id="lp-faq-list"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- 15 · FINAL CTA -->
+  <section class="lp-final">
+    <div class="lp-container lp-narrow lp-center">
+      <h2>Your land deserves a stronger institution behind it.</h2>
+      <p class="lp-sub">Start understanding where your CPA stands — and what needs to happen next.</p>
+      <div class="lp-hero-cta lp-center">
+        <button class="btn primary lg" data-open-form="assessment" type="button">Start Your CPA Assessment</button>
+        <button class="btn gold lg" data-consult type="button">Book a Consultation</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="lp-footer">
+  <div class="lp-container lp-footer-row">
+    <div>
+      <div class="lp-brand">
+        <span class="lp-brand-mark" aria-hidden="true">C</span>
+        <span class="lp-brand-txt"><b>CPA360<sup>™</sup></b><span>A GAD Foundation Programme</span></span>
+      </div>
+      <p class="lp-footer-tag">Stronger CPAs. Brighter Futures.</p>
+    </div>
+    <nav class="lp-footer-nav" aria-label="Footer">
+      <a href="#lp-solution">Platform</a>
+      <a href="#lp-journey">Journey</a>
+      <a href="#lp-modules">Modules</a>
+      <a href="#lp-faq">FAQ</a>
+      <a href="./app.html">Sign in</a>
+    </nav>
+  </div>
+  <div class="lp-container lp-footer-fine">
+    <p>CPA360™ supports institutional management. It does not replace a CPA's lawful governance structures, and it does not provide government funding. Figures shown on this page are illustrative.</p>
+    <p>© <span id="lp-year">2026</span> GAD Foundation. CPA360™ is a trademark of the GAD Foundation.</p>
+  </div>
+</footer>
+
+<!-- LEAD FORM MODAL -->
+<div class="lp-modal" id="lp-form-modal" hidden>
+  <div class="lp-modal-scrim" data-close-form></div>
+  <div class="lp-modal-card" role="dialog" aria-modal="true" aria-labelledby="lp-form-title">
+    <button class="lp-modal-x" aria-label="Close" data-close-form type="button">&times;</button>
+    <div class="lp-form-head">
+      <p class="eyebrow" id="lp-form-eyebrow">CPA360 Assessment enquiry</p>
+      <h3 id="lp-form-title">Find out where your CPA stands.</h3>
+      <div class="lp-form-progress" id="lp-form-progress" aria-hidden="true"></div>
+    </div>
+    <form id="lp-form" novalidate>
+      <input type="text" name="hp" id="lp-hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+      <div class="lp-form-body" id="lp-form-body"><!-- steps injected --></div>
+      <div class="lp-form-foot">
+        <button class="btn" type="button" id="lp-form-back" hidden>Back</button>
+        <button class="btn primary" type="button" id="lp-form-next">Next</button>
+      </div>
+      <p class="lp-form-msg" id="lp-form-msg" role="status"></p>
+    </form>
+    <div class="lp-form-done" id="lp-form-done" hidden>
+      <div class="lp-form-done-mark" aria-hidden="true">✓</div>
+      <h3>Thank you. Your CPA360 enquiry has been received.</h3>
+      <p>Our team will review your information and contact you regarding the next step.</p>
+      <button class="btn primary" type="button" data-close-form>Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="./config.js"></script>
+<script src="./src/landing.js"></script>
 </body>
 </html>
