@@ -62,6 +62,11 @@ export async function loadOrg(orgId) {
     sel("permits", "sort"),
     supabase.from("finance_figures").select("*").eq("org_id", orgId).maybeSingle(),
     sel("budget_categories", "sort"),
+    sel("fin_transactions", "sort"),
+    sel("proc_suppliers", "sort"),
+    sel("proc_requisitions", "sort"),
+    sel("proc_purchase_orders", "sort"),
+    sel("fin_payments", "sort"),
     sel("projects", "sort"),
     supabase.from("impact_figures").select("*").eq("org_id", orgId).maybeSingle(),
     supabase.from("documents").select("section, ref_id").eq("org_id", orgId),
@@ -71,7 +76,8 @@ export async function loadOrg(orgId) {
   const [org, gates, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
          govCal, actions, mf, bene, beneReg, households, succession, beneDisputes,
          land, leases,
-         allocations, movable, permits, fin, cats, projects, impact, docs] =
+         allocations, movable, permits, fin, cats, finTxn, procSup, procReq, procPo,
+         finPay, projects, impact, docs] =
     results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
@@ -148,6 +154,18 @@ export async function loadOrg(orgId) {
       ytdExpActual: num(f.ytd_exp_actual), cashBalance: num(f.cash_balance),
       cashMonths: f.cash_months || [], cashTrend: (f.cash_trend || []).map(Number),
       categories: (cats || []).map((r) => tagArr([r.name, num(r.budget), num(r.actual)], r)),
+    },
+    finProc: {
+      transactions: (finTxn || []).map((r) => tagArr(
+        [r.txn_date || "", r.description, r.category || "", r.ttype, num(r.amount), r.method || "", r.reference || "", !!r.reconciled], r)),
+      suppliers: (procSup || []).map((r) => tagArr(
+        [r.name, r.category || "", r.contact || "", r.reg_no || "", r.tax_clearance, r.bee_level || "", r.status], r)),
+      requisitions: (procReq || []).map((r) => tagArr(
+        [r.ref || "", r.req_date || "", r.description, r.category || "", num(r.amount), r.requested_by || "", r.approved_by || "", r.status], r)),
+      pos: (procPo || []).map((r) => tagArr(
+        [r.ref || "", r.po_date || "", r.supplier || "", r.description, num(r.amount), r.requisition_ref || "", r.status], r)),
+      payments: (finPay || []).map((r) => tagArr(
+        [r.pay_date || "", r.payee, r.description || "", num(r.amount), r.method || "", r.po_ref || "", r.reference || "", r.status], r)),
     },
     impact: {
       jobsThisYear: num(i.jobs_this_year), jobsCumulative: num(i.jobs_cumulative),
@@ -387,6 +405,29 @@ export async function saveSection(orgId, section, D) {
     case "categories":
       return reconcile("budget_categories", orgId, D.finance.categories, (r, i) => ({
         name: r[0], budget: num(r[1]), actual: num(r[2]), sort: i,
+      }));
+
+    case "fin_transactions":
+      return reconcile("fin_transactions", orgId, D.finProc.transactions, (r, i) => ({
+        txn_date: nn(r[0]), description: r[1], category: nn(r[2]), ttype: r[3], amount: num(r[4]),
+        method: nn(r[5]), reference: nn(r[6]), reconciled: !!r[7], sort: i,
+      }));
+    case "proc_suppliers":
+      return reconcile("proc_suppliers", orgId, D.finProc.suppliers, (r, i) => ({
+        name: r[0], category: nn(r[1]), contact: nn(r[2]), reg_no: nn(r[3]), tax_clearance: r[4], bee_level: nn(r[5]), status: r[6], sort: i,
+      }));
+    case "proc_requisitions":
+      return reconcile("proc_requisitions", orgId, D.finProc.requisitions, (r, i) => ({
+        ref: nn(r[0]), req_date: nn(r[1]), description: r[2], category: nn(r[3]), amount: num(r[4]),
+        requested_by: nn(r[5]), approved_by: nn(r[6]), status: r[7], sort: i,
+      }));
+    case "proc_purchase_orders":
+      return reconcile("proc_purchase_orders", orgId, D.finProc.pos, (r, i) => ({
+        ref: nn(r[0]), po_date: nn(r[1]), supplier: nn(r[2]), description: r[3], amount: num(r[4]), requisition_ref: nn(r[5]), status: r[6], sort: i,
+      }));
+    case "fin_payments":
+      return reconcile("fin_payments", orgId, D.finProc.payments, (r, i) => ({
+        pay_date: nn(r[0]), payee: r[1], description: nn(r[2]), amount: num(r[3]), method: nn(r[4]), po_ref: nn(r[5]), reference: nn(r[6]), status: r[7], sort: i,
       }));
 
     case "projects":

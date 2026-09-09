@@ -1328,24 +1328,266 @@ function renderAssets() {
     `<tr><td style="font-weight:600;">${esc(bene)}</td><td>${esc(portion)}</td><td style="color:var(--ink-2);">${esc(purpose)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td class="mono">${esc(date)}</td><td class="mono">${esc(ref)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(7, "No beneficiary land allocations recorded.");
 }
 
+const FIN_TABS = [
+  { id: "budget", label: "Budget" },
+  { id: "transactions", label: "Transactions" },
+  { id: "requisitions", label: "Requisitions" },
+  { id: "pos", label: "Purchase Orders" },
+  { id: "suppliers", label: "Suppliers" },
+  { id: "payments", label: "Payments" },
+  { id: "bva", label: "Budget vs Actual" },
+  { id: "compliance", label: "Procurement Compliance" },
+];
+const FIN_PANELS = {
+  budget: renderFinBudget, transactions: renderFinTransactions, requisitions: renderFinRequisitions,
+  pos: renderFinPOs, suppliers: renderFinSuppliers, payments: renderFinPayments,
+  bva: renderFinBVA, compliance: renderFinCompliance,
+};
 function renderFinance() {
+  const strip = $("finance-subtabs");
+  strip.innerHTML = subtabStrip("finance", FIN_TABS);
+  wireSubtabs(strip);
+  const cur = SUBTAB.finance || "budget";
+  (FIN_PANELS[cur] || renderFinBudget)($("finance-body"));
+}
+
+/* actual spend per category: the entered YTD figure is authoritative; when a
+   category has no entered actual we roll it up from the transactions ledger. */
+function categoryActual(name) {
+  const cat = DATA.finance.categories.find((c) => c[0] === name);
+  const entered = cat ? +cat[2] || 0 : 0;
+  if (entered) return entered;
+  return (DATA.finProc.transactions || [])
+    .filter((t) => t[2] === name && t[3] === "Expense")
+    .reduce((s, t) => s + (+t[4] || 0), 0);
+}
+function ledgerByCategory(name) {
+  return (DATA.finProc.transactions || [])
+    .filter((t) => t[2] === name && t[3] === "Expense")
+    .reduce((s, t) => s + (+t[4] || 0), 0);
+}
+
+function renderFinBudget(host) {
   const f = DATA.finance;
   const netYtd = f.ytdIncomeActual - f.ytdExpActual;
   const pctOf = (a, b) => (b ? fmtPct(a / b * 100) : "0%");
-  $("finance-stats").innerHTML = [
-    statTile("Annual Budget", fmtR(f.annualBudget), "Total planned expenditure", ""),
-    statTile("YTD Income", fmtR(f.ytdIncomeActual), pctOf(f.ytdIncomeActual, f.ytdIncomeBudget) + " of YTD budget", f.ytdIncomeActual >= f.ytdIncomeBudget * 0.9 ? "good" : "warning"),
-    statTile("YTD Expenditure", fmtR(f.ytdExpActual), pctOf(f.ytdExpActual, f.ytdExpBudget) + " of YTD budget", f.ytdExpActual <= f.ytdExpBudget ? "good" : "warning"),
-    statTile("Cash Balance", fmtR(f.cashBalance), (netYtd >= 0 ? "+" : "") + fmtR(netYtd) + " YTD net position", netYtd >= 0 ? "good" : "critical"),
-  ].join("");
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Annual Budget", fmtR(f.annualBudget), "Total planned expenditure", "")}
+      ${statTile("YTD Income", fmtR(f.ytdIncomeActual), pctOf(f.ytdIncomeActual, f.ytdIncomeBudget) + " of YTD budget", f.ytdIncomeActual >= f.ytdIncomeBudget * 0.9 ? "good" : "warning")}
+      ${statTile("YTD Expenditure", fmtR(f.ytdExpActual), pctOf(f.ytdExpActual, f.ytdExpBudget) + " of YTD budget", f.ytdExpActual <= f.ytdExpBudget ? "good" : "warning")}
+      ${statTile("Cash Balance", fmtR(f.cashBalance), (netYtd >= 0 ? "+" : "") + fmtR(netYtd) + " YTD net position", netYtd >= 0 ? "good" : "critical")}
+    </div>
+    <div class="split split-finance" style="margin-top:14px;">
+      <div class="card">
+        <div class="card-head"><h3>Cash Balance — Trailing 12 Months</h3>${CAN_EDIT ? `<button class="btn" id="fin-edit-figures" type="button">Edit figures</button>` : ""}</div>
+        <div id="finance-line" class="chart-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Budget Used by Category</h3>
+          <span style="display:flex;gap:6px;">
+            ${CAN_EDIT ? `<button class="btn" id="fin-import-cats" type="button">Import</button><button class="btn" id="fin-manage-cats" type="button">Manage</button>` : ""}
+          </span></div>
+        <div id="finance-bars"></div>
+      </div>
+    </div>`;
   lineChart("finance-line", f.cashMonths, f.cashTrend);
   $("finance-bars").innerHTML = f.categories.length ? barRows(
-    f.categories.map(([name, budget, actual]) => ({
-      label: name, value: actual, max: budget || 1,
-      cls: budget && actual / budget > 1 ? "critical" : budget && actual / budget < 0.4 ? "warning" : "",
-    })),
+    f.categories.map(([name, budget]) => {
+      const actual = categoryActual(name);
+      return { label: name, value: actual, max: budget || 1,
+        cls: budget && actual / budget > 1 ? "critical" : budget && actual / budget < 0.4 ? "warning" : "" };
+    }),
     { fmtVal: (it) => (it.max ? fmtPct(it.value / it.max * 100) : "—") }
   ) : `<p class="muted">No budget categories recorded.</p>`;
+  const ef = host.querySelector("#fin-edit-figures"); if (ef) ef.onclick = editFinanceFigures;
+  const mc = host.querySelector("#fin-manage-cats"); if (mc) mc.onclick = editCategories;
+  const ic = host.querySelector("#fin-import-cats"); if (ic) ic.onclick = () => importModal(IMPORT.categories);
+}
+
+const TXN_TYPES = ["Income", "Expense"];
+function renderFinTransactions(host) {
+  const t = DATA.finProc.transactions;
+  const inc = t.filter((r) => r[3] === "Income").reduce((s, r) => s + (+r[4] || 0), 0);
+  const exp = t.filter((r) => r[3] === "Expense").reduce((s, r) => s + (+r[4] || 0), 0);
+  const unrec = t.filter((r) => !r[7]).length;
+  mountRegister(host, {
+    title: "Transactions Ledger", importKey: "fin_transactions",
+    hint: "Every receipt and payment. Expense rows feed Budget vs Actual by category.",
+    stats: () => [
+      statTile("Income (ledger)", fmtR(inc), t.filter((r) => r[3] === "Income").length + " receipts", "good"),
+      statTile("Expenditure (ledger)", fmtR(exp), t.filter((r) => r[3] === "Expense").length + " payments", ""),
+      statTile("Net", fmtR(inc - exp), inc - exp >= 0 ? "surplus" : "deficit", inc - exp >= 0 ? "good" : "critical"),
+      statTile("Unreconciled", unrec, "Not yet matched to the bank", unrec ? "warning" : "good"),
+    ],
+    columns: [{ label: "Date" }, { label: "Description" }, { label: "Category" }, { label: "Type" }, { label: "Amount", cls: "num" }, { label: "Method" }, { label: "Ref." }, { label: "Rec." }],
+    rows: () => t,
+    empty: "No transactions captured.",
+    cell: (r) => [`<span class="mono">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]),
+      `<span class="pill ${r[3] === "Income" ? "good" : "neutral"}">${esc(r[3])}</span>`,
+      `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, esc(r[5]), `<span class="mono">${esc(r[6])}</span>`,
+      r[7] ? '<span class="pill good">✓</span>' : '<span class="pill warning">—</span>'],
+    manage: () => listEditor(FIN_EDITORS.transactions()),
+  });
+}
+const REQ_STATUSES = ["Submitted", "Approved", "Rejected", "Converted"];
+function renderFinRequisitions(host) {
+  const q = DATA.finProc.requisitions;
+  const pending = q.filter((r) => r[7] === "Submitted").length;
+  mountRegister(host, {
+    title: "Purchase Requisitions", importKey: "proc_requisitions",
+    hint: "Requests to spend — approved before a purchase order is raised.",
+    stats: () => [
+      statTile("Requisitions", q.length, "This cycle", ""),
+      statTile("Awaiting approval", pending, "Submitted, not decided", pending ? "warning" : "good"),
+      statTile("Approved / Converted", q.filter((r) => ["Approved", "Converted"].includes(r[7])).length, "Cleared to purchase", "good"),
+      statTile("Value requested", fmtR(q.reduce((s, r) => s + (+r[4] || 0), 0)), "All requisitions", ""),
+    ],
+    columns: [{ label: "Ref." }, { label: "Date" }, { label: "Description" }, { label: "Category" }, { label: "Amount", cls: "num" }, { label: "Requested by" }, { label: "Approved by" }, { label: "Status" }],
+    rows: () => q,
+    empty: "No requisitions recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`,
+      `<span style="font-weight:600;">${esc(r[2])}</span>`, esc(r[3]), `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`,
+      esc(r[5]), esc(r[6]) || "—", statusPill(r[7])],
+    manage: () => listEditor(FIN_EDITORS.requisitions()),
+  });
+}
+const PO_STATUSES = ["Open", "Delivered", "Invoiced", "Paid", "Cancelled"];
+function renderFinPOs(host) {
+  const p = DATA.finProc.pos;
+  const noReq = p.filter((r) => !r[5] && r[6] !== "Cancelled").length;
+  mountRegister(host, {
+    title: "Purchase Orders", importKey: "proc_purchase_orders",
+    hint: "Commitments to suppliers. Each should trace back to an approved requisition.",
+    stats: () => [
+      statTile("Purchase orders", p.length, "This cycle", ""),
+      statTile("Open / Delivered", p.filter((r) => ["Open", "Delivered", "Invoiced"].includes(r[6])).length, "Not yet paid", ""),
+      statTile("Committed value", fmtR(p.reduce((s, r) => s + (+r[4] || 0), 0)), "All live POs", ""),
+      statTile("No requisition", noReq, "Raised without a REQ", noReq ? "critical" : "good"),
+    ],
+    columns: [{ label: "Ref." }, { label: "Date" }, { label: "Supplier" }, { label: "Description" }, { label: "Amount", cls: "num" }, { label: "Requisition" }, { label: "Status" }],
+    rows: () => p,
+    empty: "No purchase orders recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`,
+      `<span style="font-weight:600;">${esc(r[2])}</span>`, esc(r[3]), `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`,
+      r[5] ? `<span class="mono">${esc(r[5])}</span>` : `<span class="pill critical">none</span>`, statusPill(r[6])],
+    manage: () => listEditor(FIN_EDITORS.pos()),
+  });
+}
+const SUPP_STATUSES = ["Active", "Suspended", "Archived"];
+const TAX_STATES = ["Valid", "Expired", "None"];
+function renderFinSuppliers(host) {
+  const s = DATA.finProc.suppliers;
+  const noTax = s.filter((r) => r[4] !== "Valid" && r[6] === "Active").length;
+  mountRegister(host, {
+    title: "Supplier Register", importKey: "proc_suppliers",
+    hint: "Vendors the CPA transacts with, and their tax-clearance / B-BBEE standing.",
+    stats: () => [
+      statTile("Suppliers", s.length, "On the register", ""),
+      statTile("Active", s.filter((r) => r[6] === "Active").length, "Approved to transact", "good"),
+      statTile("Tax clearance issue", noTax, "Active supplier, no valid TCC", noTax ? "critical" : "good"),
+      statTile("Suspended", s.filter((r) => r[6] === "Suspended").length, "Blocked", s.filter((r) => r[6] === "Suspended").length ? "warning" : "good"),
+    ],
+    columns: [{ label: "Supplier" }, { label: "Category" }, { label: "Contact" }, { label: "Reg. no." }, { label: "Tax clearance" }, { label: "B-BBEE" }, { label: "Status" }],
+    rows: () => s,
+    empty: "No suppliers recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), `<span class="mono">${esc(r[2])}</span>`,
+      `<span class="mono">${esc(r[3])}</span>`, statusPill(r[4] === "Valid" ? "Valid" : r[4] === "Expired" ? "Expired" : "Outstanding"),
+      esc(r[5]), statusPill(r[6])],
+    manage: () => listEditor(FIN_EDITORS.suppliers()),
+  });
+}
+const PAY_STATUSES = ["Pending", "Paid", "Failed"];
+function renderFinPayments(host) {
+  const p = DATA.finProc.payments;
+  const paid = p.filter((r) => r[7] === "Paid").reduce((s, r) => s + (+r[3] || 0), 0);
+  mountRegister(host, {
+    title: "Payments", importKey: "fin_payments",
+    hint: "Money leaving the account — ideally each references a purchase order.",
+    stats: () => [
+      statTile("Payments", p.length, "This cycle", ""),
+      statTile("Paid", fmtR(paid), p.filter((r) => r[7] === "Paid").length + " settled", "good"),
+      statTile("Pending", p.filter((r) => r[7] === "Pending").length, "Awaiting release", p.filter((r) => r[7] === "Pending").length ? "warning" : "good"),
+      statTile("Failed", p.filter((r) => r[7] === "Failed").length, "Need to re-issue", p.filter((r) => r[7] === "Failed").length ? "critical" : "good"),
+    ],
+    columns: [{ label: "Date" }, { label: "Payee" }, { label: "Description" }, { label: "Amount", cls: "num" }, { label: "Method" }, { label: "PO ref." }, { label: "Bank ref." }, { label: "Status" }],
+    rows: () => p,
+    empty: "No payments recorded.",
+    cell: (r) => [`<span class="mono">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]),
+      `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`, esc(r[4]),
+      r[5] ? `<span class="mono">${esc(r[5])}</span>` : "—", `<span class="mono">${esc(r[6])}</span>`, statusPill(r[7])],
+    manage: () => listEditor(FIN_EDITORS.payments()),
+  });
+}
+function renderFinBVA(host) {
+  const cats = DATA.finance.categories;
+  const rows = cats.map(([name, budget]) => {
+    const actual = categoryActual(name);
+    return { name, budget: +budget || 0, actual, variance: (+budget || 0) - actual };
+  });
+  const tB = rows.reduce((s, r) => s + r.budget, 0);
+  const tA = rows.reduce((s, r) => s + r.actual, 0);
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Total budget", fmtR(tB), "All categories", "")}
+      ${statTile("Actual (ledger + entered)", fmtR(tA), fmtPct(tB ? tA / tB * 100 : 0) + " of budget", tA <= tB ? "good" : "critical")}
+      ${statTile("Variance", fmtR(tB - tA), tB - tA >= 0 ? "under budget" : "over budget", tB - tA >= 0 ? "good" : "critical")}
+      ${statTile("Over budget", rows.filter((r) => r.variance < 0).length, "Categories overspent", rows.filter((r) => r.variance < 0).length ? "warning" : "good")}
+    </div>
+    <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Budget vs Actual by category</h3>
+      <span class="hint">Actual = matching expense transactions where captured, otherwise the entered figure.</span></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Category</th><th class="num">Budget</th><th class="num">Actual (YTD)</th><th class="num">Ledger</th><th class="num">Variance</th><th style="min-width:140px;">Used</th></tr></thead>
+      <tbody>${rows.length ? rows.map((r) => {
+        const pct = r.budget ? Math.round(r.actual / r.budget * 100) : 0;
+        const tone = pct > 100 ? "critical" : pct < 40 ? "warning" : "good";
+        return `<tr>
+          <td style="font-weight:600;">${esc(r.name)}</td>
+          <td class="num mono">${r.budget.toLocaleString()}</td>
+          <td class="num mono">${r.actual.toLocaleString()}</td>
+          <td class="num mono" style="color:var(--ink-muted);">${ledgerByCategory(r.name).toLocaleString()}</td>
+          <td class="num mono" style="${r.variance < 0 ? "color:var(--status-critical);font-weight:700;" : ""}">${r.variance.toLocaleString()}</td>
+          <td><div class="bar-track"><div class="bar-fill ${tone}" style="width:${Math.max(3, Math.min(100, pct))}%"></div></div>
+            <span class="hint">${pct}%</span></td>
+        </tr>`;
+      }).join("") : emptyRow(6, "No budget categories — add them on the Budget tab.")}</tbody>
+    </table></div>`;
+}
+function renderFinCompliance(host) {
+  const s = DATA.finProc.suppliers, q = DATA.finProc.requisitions, p = DATA.finProc.pos, pay = DATA.finProc.payments;
+  const pct = (n, d) => (d ? Math.round(n / d * 100) : 100);
+  const checks = [
+    ["Active suppliers with a valid tax clearance",
+      s.filter((r) => r[6] === "Active" && r[4] === "Valid").length, s.filter((r) => r[6] === "Active").length],
+    ["Purchase orders linked to a requisition",
+      p.filter((r) => r[5]).length, p.filter((r) => r[6] !== "Cancelled").length],
+    ["Requisitions with a recorded approver",
+      q.filter((r) => r[6] || r[7] === "Rejected").length, q.length],
+    ["Payments referencing a purchase order",
+      pay.filter((r) => r[5]).length, pay.filter((r) => !/sars|paye|payroll|stipend/i.test(r[1] + r[2])).length],
+    ["Transactions reconciled to the bank",
+      (DATA.finProc.transactions || []).filter((r) => r[7]).length, (DATA.finProc.transactions || []).length],
+  ];
+  const overall = Math.round(checks.reduce((a, c) => a + pct(c[1], c[2]), 0) / checks.length);
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Procurement compliance", overall + "%", "Average across checks", overall >= 80 ? "good" : overall >= 50 ? "warning" : "critical")}
+      ${statTile("Suppliers OK", pct(checks[0][1], checks[0][2]) + "%", "Valid tax clearance", "")}
+      ${statTile("PO → requisition trace", pct(checks[1][1], checks[1][2]) + "%", "Authorised spend", "")}
+      ${statTile("Payment → PO trace", pct(checks[3][1], checks[3][2]) + "%", "Excludes statutory", "")}
+    </div>
+    <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Procurement control checklist</h3>
+      <span class="hint">Computed from the suppliers, requisitions, PO and payment registers.</span></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Control</th><th class="num">Met</th><th class="num">Of</th><th style="min-width:160px;">Compliance</th></tr></thead>
+      <tbody>${checks.map((c) => {
+        const v = pct(c[1], c[2]);
+        const tone = v >= 80 ? "good" : v >= 50 ? "warning" : "critical";
+        return `<tr><td>${esc(c[0])}</td><td class="num mono">${c[1]}</td><td class="num mono">${c[2]}</td>
+          <td><div class="bar-track"><div class="bar-fill ${tone}" style="width:${Math.max(3, v)}%"></div></div>
+          <span class="hint">${v}%</span></td></tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
 }
 
 function renderProjects() {
@@ -1711,6 +1953,38 @@ const IMPORT = {
       { k: "desc", label: "Description" }, { k: "raised", label: "Raised on" }, { k: "status", label: "Status" }],
     make: (v) => [v.ref || "", v.dtype || "Duplicate", v.parties || "", v.desc || "", v.raised || "", v.status || "Open", ""],
   },
+  fin_transactions: {
+    title: "transactions", section: "fin_transactions", arr: () => DATA.finProc.transactions,
+    targets: [{ k: "date", label: "Date" }, { k: "desc", label: "Description", required: true }, { k: "cat", label: "Category" },
+      { k: "type", label: "Type (Income/Expense)" }, { k: "amount", label: "Amount" }, { k: "method", label: "Method" }, { k: "ref", label: "Reference" }],
+    make: (v) => [v.date || "", v.desc, v.cat || "", /^i/i.test(v.type || "") ? "Income" : "Expense",
+      parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, v.method || "EFT", v.ref || "", false],
+  },
+  proc_suppliers: {
+    title: "suppliers", section: "proc_suppliers", arr: () => DATA.finProc.suppliers,
+    targets: [{ k: "name", label: "Supplier", required: true }, { k: "cat", label: "Category" }, { k: "contact", label: "Contact" },
+      { k: "reg", label: "Reg. no." }, { k: "tax", label: "Tax clearance" }, { k: "bee", label: "B-BBEE level" }, { k: "status", label: "Status" }],
+    make: (v) => [v.name, v.cat || "", v.contact || "", v.reg || "", ["Valid", "Expired", "None"].includes(v.tax) ? v.tax : "None", v.bee || "", v.status || "Active"],
+  },
+  proc_requisitions: {
+    title: "requisitions", section: "proc_requisitions", arr: () => DATA.finProc.requisitions,
+    targets: [{ k: "ref", label: "Ref" }, { k: "date", label: "Date" }, { k: "desc", label: "Description", required: true },
+      { k: "cat", label: "Category" }, { k: "amount", label: "Amount" }, { k: "by", label: "Requested by" }, { k: "appr", label: "Approved by" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", v.date || "", v.desc, v.cat || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0,
+      v.by || "", v.appr || "", v.status || "Submitted"],
+  },
+  proc_purchase_orders: {
+    title: "purchase orders", section: "proc_purchase_orders", arr: () => DATA.finProc.pos,
+    targets: [{ k: "ref", label: "PO ref" }, { k: "date", label: "Date" }, { k: "supplier", label: "Supplier" },
+      { k: "desc", label: "Description", required: true }, { k: "amount", label: "Amount" }, { k: "req", label: "Requisition ref" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", v.date || "", v.supplier || "", v.desc, parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, v.req || "", v.status || "Open"],
+  },
+  fin_payments: {
+    title: "payments", section: "fin_payments", arr: () => DATA.finProc.payments,
+    targets: [{ k: "date", label: "Date" }, { k: "payee", label: "Payee", required: true }, { k: "desc", label: "Description" },
+      { k: "amount", label: "Amount" }, { k: "method", label: "Method" }, { k: "po", label: "PO ref" }, { k: "bankref", label: "Bank ref" }, { k: "status", label: "Status" }],
+    make: (v) => [v.date || "", v.payee, v.desc || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, v.method || "EFT", v.po || "", v.bankref || "", v.status || "Pending"],
+  },
   masterfile: {
     title: "master-file sections", section: "masterfile", arr: () => DATA.masterFile,
     targets: [{ k: "no", label: "Section no." }, { k: "name", label: "Name", required: true },
@@ -1905,6 +2179,88 @@ const BENE_EDITORS = {
       { key: "res", label: "Resolution", type: "textarea", value: r[6] },
     ],
     write: (r, o) => { r[0] = o.ref; r[1] = o.dtype; r[2] = o.parties; r[3] = o.desc; r[4] = o.raised; r[5] = o.status; r[6] = o.res; },
+  }),
+};
+
+/* listEditor configs for the Finance & Procurement registers */
+const FIN_EDITORS = {
+  transactions: () => ({
+    title: "Transactions", arr: DATA.finProc.transactions, section: "fin_transactions",
+    rowLabel: (r) => `${r[0] || "?"} — ${r[1]} · ${fmtR(r[4])}`,
+    blank: () => [new Date().toISOString().slice(0, 10), "", "", "Expense", 0, "EFT", "", false],
+    fields: (r) => [
+      { key: "date", label: "Date", type: "date", value: r[0] },
+      { key: "desc", label: "Description", type: "text", value: r[1], required: true },
+      { key: "cat", label: "Budget category", type: "select", options: ["", ...DATA.finance.categories.map((c) => c[0])], value: r[2] },
+      { key: "type", label: "Type", type: "select", options: TXN_TYPES, value: r[3] },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[4], min: 0 },
+      { key: "method", label: "Method", type: "select", options: ["EFT", "Cash", "Card", "Cheque", "Debit order"], value: r[5] || "EFT" },
+      { key: "ref", label: "Reference", type: "text", value: r[6] },
+      { key: "rec", label: "Reconciled", type: "select", options: ["No", "Yes"], value: r[7] ? "Yes" : "No" },
+    ],
+    write: (r, o) => { r[0] = o.date; r[1] = o.desc; r[2] = o.cat; r[3] = o.type; r[4] = parseFloat(o.amount) || 0; r[5] = o.method; r[6] = o.ref; r[7] = o.rec === "Yes"; },
+  }),
+  suppliers: () => ({
+    title: "Suppliers", arr: DATA.finProc.suppliers, section: "proc_suppliers",
+    rowLabel: (r) => `${r[0]} — ${r[6]}`,
+    blank: () => ["", "", "", "", "None", "", "Active"],
+    fields: (r) => [
+      { key: "name", label: "Supplier name", type: "text", value: r[0], required: true },
+      { key: "cat", label: "Category", type: "text", value: r[1] },
+      { key: "contact", label: "Contact", type: "text", value: r[2] },
+      { key: "reg", label: "Company reg. no.", type: "text", value: r[3] },
+      { key: "tax", label: "Tax clearance", type: "select", options: TAX_STATES, value: r[4] },
+      { key: "bee", label: "B-BBEE level", type: "text", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: SUPP_STATUSES, value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.name; r[1] = o.cat; r[2] = o.contact; r[3] = o.reg; r[4] = o.tax; r[5] = o.bee; r[6] = o.status; },
+  }),
+  requisitions: () => ({
+    title: "Purchase requisitions", arr: DATA.finProc.requisitions, section: "proc_requisitions",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2]} · ${r[7]}`,
+    blank: () => ["", new Date().toISOString().slice(0, 10), "", "", 0, "", "", "Submitted"],
+    fields: (r) => [
+      { key: "ref", label: "Reference", type: "text", value: r[0] },
+      { key: "date", label: "Date", type: "date", value: r[1] },
+      { key: "desc", label: "Description", type: "text", value: r[2], required: true },
+      { key: "cat", label: "Budget category", type: "select", options: ["", ...DATA.finance.categories.map((c) => c[0])], value: r[3] },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[4], min: 0 },
+      { key: "by", label: "Requested by", type: "text", value: r[5] },
+      { key: "appr", label: "Approved by", type: "text", value: r[6] },
+      { key: "status", label: "Status", type: "select", options: REQ_STATUSES, value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.date; r[2] = o.desc; r[3] = o.cat; r[4] = parseFloat(o.amount) || 0; r[5] = o.by; r[6] = o.appr; r[7] = o.status; },
+  }),
+  pos: () => ({
+    title: "Purchase orders", arr: DATA.finProc.pos, section: "proc_purchase_orders",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || "?"} · ${fmtR(r[4])}`,
+    blank: () => ["", new Date().toISOString().slice(0, 10), "", "", 0, "", "Open"],
+    fields: (r) => [
+      { key: "ref", label: "PO reference", type: "text", value: r[0] },
+      { key: "date", label: "Date", type: "date", value: r[1] },
+      { key: "supplier", label: "Supplier", type: "select", options: ["", ...DATA.finProc.suppliers.map((s) => s[0])], value: r[2] },
+      { key: "desc", label: "Description", type: "text", value: r[3], required: true },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[4], min: 0 },
+      { key: "req", label: "Requisition ref.", type: "select", options: ["", ...DATA.finProc.requisitions.map((q) => q[0]).filter(Boolean)], value: r[5] },
+      { key: "status", label: "Status", type: "select", options: PO_STATUSES, value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.date; r[2] = o.supplier; r[3] = o.desc; r[4] = parseFloat(o.amount) || 0; r[5] = o.req; r[6] = o.status; },
+  }),
+  payments: () => ({
+    title: "Payments", arr: DATA.finProc.payments, section: "fin_payments",
+    rowLabel: (r) => `${r[0] || "?"} — ${r[1]} · ${fmtR(r[3])}`,
+    blank: () => [new Date().toISOString().slice(0, 10), "", "", 0, "EFT", "", "", "Pending"],
+    fields: (r) => [
+      { key: "date", label: "Date", type: "date", value: r[0] },
+      { key: "payee", label: "Payee", type: "text", value: r[1], required: true },
+      { key: "desc", label: "Description", type: "text", value: r[2] },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[3], min: 0 },
+      { key: "method", label: "Method", type: "select", options: ["EFT", "Cash", "Card", "Cheque", "Debit order"], value: r[4] || "EFT" },
+      { key: "po", label: "PO reference", type: "select", options: ["", ...DATA.finProc.pos.map((x) => x[0]).filter(Boolean)], value: r[5] },
+      { key: "bankref", label: "Bank reference", type: "text", value: r[6] },
+      { key: "status", label: "Status", type: "select", options: PAY_STATUSES, value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.date; r[1] = o.payee; r[2] = o.desc; r[3] = parseFloat(o.amount) || 0; r[4] = o.method; r[5] = o.po; r[6] = o.bankref; r[7] = o.status; },
   }),
 };
 
@@ -2186,21 +2542,8 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-finance">
-    <div class="grid grid-4" id="finance-stats"></div>
-    <div class="split split-finance" style="margin-top:14px;">
-      <div class="card">
-        <div class="card-head"><h3>Cash Balance — Trailing 12 Months</h3><button class="btn" id="edit-finance-btn" type="button">Edit figures</button></div>
-        <div id="finance-line" class="chart-wrap"></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Budget Used by Category</h3>
-          <span style="display:flex;gap:6px;">
-            <button class="btn" id="import-categories-btn" type="button">Import</button>
-            <button class="btn" id="edit-categories-btn" type="button">Manage</button>
-          </span></div>
-        <div id="finance-bars"></div>
-      </div>
-    </div>
+    <div id="finance-subtabs"></div>
+    <div id="finance-body"></div>
   </section>
 
   <section class="view hidden" id="view-projects">
