@@ -335,6 +335,53 @@ function attachmentsModal(section, refId, title) {
   };
 }
 
+/* Inline file manager for a section/ref — used as a sub-tab panel. */
+function mountFileList(host, section, refId, title, hint) {
+  host.innerHTML = `
+    <div class="card">
+      <div class="card-head"><div><h3>${esc(title)}</h3>${hint ? `<span class="hint">${esc(hint)}</span>` : ""}</div>
+        ${CAN_EDIT ? `<label class="btn primary" style="cursor:pointer;">Upload a file<input type="file" id="fl-file" hidden></label>` : ""}</div>
+      <div id="fl-msg" style="font-size:11.5px;color:var(--ink-muted);margin-bottom:8px;"></div>
+      <div id="fl-list"><p class="muted">Loading…</p></div>
+    </div>`;
+  const listEl = host.querySelector("#fl-list");
+  const msg = host.querySelector("#fl-msg");
+  async function refresh() {
+    try {
+      const docs = await repo.listDocs(orgId, section, refId);
+      listEl.innerHTML = docs.length ? `<div class="table-wrap"><table><tbody>${docs.map((d) => `
+        <tr><td style="font-weight:600;">${esc(d.name)}</td>
+          <td class="mono" style="color:var(--ink-muted);">${fmtBytes(d.size)}</td>
+          <td class="mono" style="color:var(--ink-muted);">${esc((d.uploaded_at || "").slice(0, 10))}</td>
+          <td><span class="row-actions">
+            <button type="button" data-dl="${d.id}" title="Download" aria-label="Download">${CLIP}</button>
+            ${CAN_EDIT ? `<button type="button" data-rm="${d.id}" title="Delete" aria-label="Delete">${TRASH}</button>` : ""}
+          </span></td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">No files yet.</p>`;
+      listEl.querySelectorAll("[data-dl]").forEach((b) => (b.onclick = async () => {
+        const d = docs.find((x) => x.id === b.dataset.dl);
+        try { window.open(await repo.docUrl(d.path), "_blank", "noopener"); } catch (e) { toast("Couldn't open file", true); }
+      }));
+      listEl.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => {
+        const d = docs.find((x) => x.id === b.dataset.rm);
+        confirmModal(`Delete "${d.name}"?`, async () => {
+          try { await repo.deleteDoc(d); bumpDocCount(section, refId, -1); refresh(); if (onChange) onChange(); }
+          catch (e) { toast("Couldn't delete", true); }
+        });
+      }));
+    } catch (e) { listEl.innerHTML = `<p class="muted">Couldn't load files — ${esc(e.message || e)}</p>`; }
+  }
+  refresh();
+  const fi = host.querySelector("#fl-file");
+  if (fi) fi.onchange = async () => {
+    const f = fi.files[0];
+    if (!f) return;
+    if (f.size > 25 * 1048576) { msg.textContent = "Max 25 MB."; fi.value = ""; return; }
+    msg.textContent = "Uploading…";
+    try { await repo.uploadDoc(orgId, section, refId, f); bumpDocCount(section, refId, 1); msg.textContent = ""; fi.value = ""; refresh(); if (onChange) onChange(); }
+    catch (e) { msg.textContent = "Failed: " + (e.message || e); }
+  };
+}
+
 function bumpDocCount(section, refId, delta) {
   if (!DATA._docCounts) DATA._docCounts = {};
   (DATA._docCounts[section] ||= {});
@@ -1063,31 +1110,195 @@ function renderMasterFile() {
   if (gb) gb.textContent = "General documents" + (generalFiles ? ` · ${generalFiles}` : "");
 }
 
+const BENE_TABS = [
+  { id: "register", label: "Master Register" },
+  { id: "verification", label: "Verification" },
+  { id: "households", label: "Households" },
+  { id: "succession", label: "Succession" },
+  { id: "deceased", label: "Deceased Members" },
+  { id: "disputes", label: "Duplicate / Conflict" },
+  { id: "evidence", label: "Verification Evidence" },
+];
+const BENE_PANELS = {
+  register: renderBeneRegister, verification: renderBeneVerification, households: renderBeneHouseholds,
+  succession: renderBeneSuccession, deceased: renderBeneDeceased, disputes: renderBeneDisputes, evidence: renderBeneEvidence,
+};
+/* rollups: use the live register when it has rows, else the figures singleton */
+function beneRollup() {
+  const reg = DATA.beneficiaryCentre.register || [];
+  if (!reg.length) return { ...DATA.beneficiary, fromRegister: false };
+  const active = reg.filter((r) => r[8] !== "Removed");
+  const c = (p) => active.filter(p).length;
+  return {
+    total: active.length,
+    verified: c((r) => r[9] === "Verified"),
+    pending: c((r) => r[9] === "Pending"),
+    disputed: c((r) => r[9] === "Disputed" || r[9] === "Rejected"),
+    female: c((r) => /^f/i.test(r[2])),
+    male: c((r) => /^m/i.test(r[2])),
+    households: new Set(active.map((r) => r[5]).filter(Boolean)).size,
+    succession: (DATA.beneficiaryCentre.succession || []).filter((s) => !["Registered", "Rejected"].includes(s[6])).length,
+    fromRegister: true,
+  };
+}
 function renderBeneficiary() {
-  const b = DATA.beneficiary;
+  const strip = $("beneficiary-subtabs");
+  strip.innerHTML = subtabStrip("beneficiary", BENE_TABS);
+  wireSubtabs(strip);
+  const cur = SUBTAB.beneficiary || "register";
+  (BENE_PANELS[cur] || renderBeneRegister)($("beneficiary-body"));
+}
+const BENE_STATUSES = ["Active", "Deceased", "Removed", "Transferred"];
+const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
+
+function beneStats() {
+  const b = beneRollup();
   const t = b.total || 1;
-  $("beneficiary-stats").innerHTML = [
-    statTile("Total Registered", b.total.toLocaleString(), "Master Beneficiary Register", ""),
-    statTile("Verified", b.verified.toLocaleString(), fmtPct(b.verified / t * 100) + " of total", "good"),
-    statTile("Pending Verification", b.pending.toLocaleString(), fmtPct(b.pending / t * 100) + " of total", "warning"),
-    statTile("Disputed", b.disputed.toLocaleString(), fmtPct(b.disputed / t * 100) + " of total", "critical"),
-  ].join("");
-  $("beneficiary-donut").innerHTML = donut([
-    { value: b.verified, color: "var(--status-good)" },
-    { value: b.pending, color: "var(--status-warning)" },
-    { value: b.disputed, color: "var(--status-critical)" },
-  ]) + `<div class="legend">
-    <span class="sw"><i style="background:var(--status-good)"></i>Verified</span>
-    <span class="sw"><i style="background:var(--status-warning)"></i>Pending</span>
-    <span class="sw"><i style="background:var(--status-critical)"></i>Disputed</span></div>`;
-  $("beneficiary-gender").innerHTML = barRows([
-    { label: "Female", value: b.female, max: t, cls: "s2" },
-    { label: "Male", value: b.male, max: t },
-  ], { fmtVal: (it) => it.value.toLocaleString() + " (" + fmtPct(it.value / t * 100) + ")" });
-  $("beneficiary-household").innerHTML = `
-    <dt>Households represented</dt><dd>${(b.households || 0).toLocaleString()}</dd>
-    <dt>Succession cases pending</dt><dd>${b.succession}</dd>
-    <dt>Avg. members per household</dt><dd>${b.households ? (b.total / b.households).toFixed(1) : "—"}</dd>`;
+  return [
+    statTile("On Register", (b.total || 0).toLocaleString(), b.fromRegister ? "Live count from records" : "From figures", ""),
+    statTile("Verified", (b.verified || 0).toLocaleString(), fmtPct(b.verified / t * 100) + " of active", "good"),
+    statTile("Pending", (b.pending || 0).toLocaleString(), fmtPct(b.pending / t * 100) + " of active", b.pending ? "warning" : "good"),
+    statTile("Disputed / Rejected", (b.disputed || 0).toLocaleString(), fmtPct(b.disputed / t * 100) + " of active", b.disputed ? "critical" : "good"),
+  ];
+}
+function renderBeneRegister(host) {
+  mountRegister(host, {
+    title: "Master Beneficiary Register", importKey: "beneficiaries", stats: beneStats,
+    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score.",
+    columns: [{ label: "Ref." }, { label: "Full name" }, { label: "Gender" }, { label: "DOB" }, { label: "Household" },
+      { label: "Contact" }, { label: "Joined" }, { label: "Status" }, { label: "Verification" }],
+    rows: () => DATA.beneficiaryCentre.register,
+    empty: "No beneficiaries captured yet — Import a spreadsheet or add them.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
+      `<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]), `<span class="mono">${esc(r[3])}</span>`,
+      `<span class="mono">${esc(r[5])}</span>`, esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
+      statusPill(r[8]), statusPill(r[9])],
+    manage: () => listEditor(BENE_EDITORS.register()),
+  });
+}
+function renderBeneVerification(host) {
+  const b = beneRollup();
+  const t = b.total || 1;
+  const reg = DATA.beneficiaryCentre.register || [];
+  const byStatus = VERIF_STATUSES.map((s) => ({ s, n: reg.filter((r) => r[9] === s && r[8] !== "Removed").length }));
+  const evidence = docCount("beneficiary", null);
+  host.innerHTML = `
+    <div class="grid grid-4">${beneStats().join("")}</div>
+    <div class="split split-bene" style="margin-top:18px;">
+      <div class="card">
+        <div class="card-head"><h3>Verification status</h3>${CAN_EDIT ? `<button class="btn" id="bene-edit-figures" type="button">Edit fallback figures</button>` : ""}</div>
+        <div class="chart-wrap">${donut([
+          { value: b.verified, color: "var(--status-good)" },
+          { value: b.pending, color: "var(--status-warning)" },
+          { value: b.disputed, color: "var(--status-critical)" },
+        ])}<div class="legend">
+          <span class="sw"><i style="background:var(--status-good)"></i>Verified</span>
+          <span class="sw"><i style="background:var(--status-warning)"></i>Pending</span>
+          <span class="sw"><i style="background:var(--status-critical)"></i>Disputed / Rejected</span></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Breakdown</h3>
+          <button class="btn view-ok" id="bene-evidence-btn" type="button">Evidence library${evidence ? ` · ${evidence}` : ""}</button></div>
+        <table><tbody>${byStatus.map((x) => `<tr><td>${statusPill(x.s)}</td>
+          <td class="num mono" style="font-weight:600;">${x.n}</td>
+          <td style="color:var(--ink-muted);">${fmtPct(x.n / t * 100)}</td></tr>`).join("")}</tbody></table>
+        <dl class="kv" style="margin-top:14px;">
+          <dt>Households represented</dt><dd>${(b.households || 0).toLocaleString()}</dd>
+          <dt>Female / Male</dt><dd>${b.female || 0} / ${b.male || 0}</dd>
+          <dt>Succession cases open</dt><dd>${b.succession || 0}</dd>
+        </dl>
+      </div>
+    </div>`;
+  const ef = host.querySelector("#bene-edit-figures");
+  if (ef) ef.onclick = editBeneficiary;
+  host.querySelector("#bene-evidence-btn").onclick = () => attachmentsModal("beneficiary", null, "Beneficiary verification evidence");
+}
+function renderBeneHouseholds(host) {
+  const reg = DATA.beneficiaryCentre.register || [];
+  mountRegister(host, {
+    title: "Household Records", importKey: "households",
+    hint: "Each household and its head; members are linked from the register by household ref.",
+    columns: [{ label: "Ref." }, { label: "Head of household" }, { label: "Members", cls: "num" }, { label: "On register", cls: "num" },
+      { label: "Village" }, { label: "Portion" }, { label: "Contact" }, { label: "Status" }],
+    rows: () => DATA.beneficiaryCentre.households,
+    empty: "No households recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
+      `<span style="font-weight:600;">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`,
+      `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
+      esc(r[3]), esc(r[4]), esc(r[5]), statusPill(r[6])],
+    manage: () => listEditor(BENE_EDITORS.households()),
+  });
+}
+function renderBeneSuccession(host) {
+  const s = DATA.beneficiaryCentre.succession;
+  const open = s.filter((r) => !["Registered", "Rejected"].includes(r[6])).length;
+  mountRegister(host, {
+    title: "Succession Cases", importKey: "succession_cases",
+    hint: "Transfer of membership on the death of a beneficiary.",
+    stats: () => [
+      statTile("Cases", s.length, "On record", ""),
+      statTile("Open", open, "Not yet registered", open ? "warning" : "good"),
+      statTile("Registered", s.filter((r) => r[6] === "Registered").length, "Completed", "good"),
+      statTile("Awaiting nominee", s.filter((r) => !r[3] || /not yet/i.test(r[3])).length, "No successor named", ""),
+    ],
+    columns: [{ label: "Deceased ref." }, { label: "Deceased" }, { label: "Date of death" }, { label: "Successor" }, { label: "Relationship" }, { label: "Lodged" }, { label: "Status" }],
+    rows: () => s,
+    empty: "No succession cases recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+      `<span class="mono">${esc(r[2])}</span>`, esc(r[3]), esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
+    manage: () => listEditor(BENE_EDITORS.succession()),
+  });
+}
+function renderBeneDeceased(host) {
+  const reg = DATA.beneficiaryCentre.register || [];
+  const dead = reg.filter((r) => r[8] === "Deceased");
+  const sMap = {};
+  (DATA.beneficiaryCentre.succession || []).forEach((s) => { if (s[0]) sMap[s[0]] = s[6]; });
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Deceased on register", dead.length, "Status = Deceased", "")}
+      ${statTile("Succession lodged", dead.filter((r) => sMap[r[0]]).length, "Linked case exists", "")}
+      ${statTile("No succession case", dead.filter((r) => !sMap[r[0]]).length, "Needs a case opened", dead.filter((r) => !sMap[r[0]]).length ? "warning" : "good")}
+      ${statTile("Registered successions", Object.values(sMap).filter((v) => v === "Registered").length, "Completed transfers", "good")}
+    </div>
+    <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Deceased Members</h3>
+      <span class="hint">Set a member's status to "Deceased" in the Master Register; open a case in Succession.</span></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Ref.</th><th>Full name</th><th>Household</th><th>Joined</th><th>Succession case</th></tr></thead>
+      <tbody>${dead.length ? dead.map((r) => `<tr>
+        <td class="mono" style="color:var(--ink-muted);">${esc(r[0])}</td>
+        <td style="font-weight:600;">${esc(r[1])}</td>
+        <td class="mono">${esc(r[5])}</td>
+        <td class="mono">${esc(r[7])}</td>
+        <td>${sMap[r[0]] ? statusPill(sMap[r[0]]) : `<span class="pill critical">None</span>`}</td>
+      </tr>`).join("") : emptyRow(5, "No members marked deceased.")}</tbody>
+    </table></div>`;
+}
+const DISPUTE_TYPES = ["Duplicate", "Identity", "Membership", "Boundary", "Other"];
+function renderBeneDisputes(host) {
+  const d = DATA.beneficiaryCentre.disputes;
+  const open = d.filter((r) => !["Resolved"].includes(r[5])).length;
+  mountRegister(host, {
+    title: "Duplicate / Conflict Cases", importKey: "beneficiary_disputes",
+    hint: "Duplicate records, identity mismatches, membership claims and boundary disputes.",
+    stats: () => [
+      statTile("Cases", d.length, "On record", ""),
+      statTile("Open", open, "Unresolved", open ? "critical" : "good"),
+      statTile("Duplicates", d.filter((r) => r[1] === "Duplicate").length, "Suspected duplicate records", ""),
+      statTile("Resolved", d.filter((r) => r[5] === "Resolved").length, "Closed out", "good"),
+    ],
+    columns: [{ label: "Ref." }, { label: "Type" }, { label: "Parties" }, { label: "Description" }, { label: "Raised" }, { label: "Status" }],
+    rows: () => d,
+    empty: "No cases recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+      esc(r[2]), `<span style="color:var(--ink-2);min-width:220px;display:inline-block;">${esc(r[3])}</span>`,
+      `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
+    manage: () => listEditor(BENE_EDITORS.disputes()),
+  });
+}
+function renderBeneEvidence(host) {
+  mountFileList(host, "beneficiary", null, "Verification Evidence",
+    "Certified IDs, proof of residence, verification meeting minutes and the signed beneficiary list.");
 }
 
 function renderAssets() {
@@ -1473,6 +1684,33 @@ const IMPORT = {
       { k: "recurrence", label: "Recurrence" }, { k: "responsible", label: "Responsible" }, { k: "status", label: "Status" }],
     make: (v) => [v.item, v.category || "Statutory", v.due || "", v.recurrence || "", v.responsible || "", v.status || "Upcoming"],
   },
+  beneficiaries: {
+    title: "beneficiaries", section: "beneficiaries", arr: () => DATA.beneficiaryCentre.register,
+    targets: [{ k: "ref", label: "Register no." }, { k: "name", label: "Full name", required: true }, { k: "gender", label: "Gender" },
+      { k: "dob", label: "Date of birth" }, { k: "idm", label: "ID (masked)" }, { k: "hh", label: "Household ref" },
+      { k: "contact", label: "Contact" }, { k: "joined", label: "Joined on" }, { k: "status", label: "Status" }, { k: "verif", label: "Verification" }],
+    make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || "", v.idm || "", v.hh || "", v.contact || "", v.joined || "",
+      ["Active", "Deceased", "Removed", "Transferred"].includes(v.status) ? v.status : "Active",
+      ["Verified", "Pending", "Disputed", "Rejected"].includes(v.verif) ? v.verif : "Pending", ""],
+  },
+  households: {
+    title: "households", section: "households", arr: () => DATA.beneficiaryCentre.households,
+    targets: [{ k: "ref", label: "Household ref" }, { k: "head", label: "Head of household", required: true }, { k: "members", label: "Members" },
+      { k: "village", label: "Village" }, { k: "portion", label: "Portion" }, { k: "contact", label: "Contact" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", v.head, parseFloat(v.members) || 0, v.village || "", v.portion || "", v.contact || "", v.status || "Active"],
+  },
+  succession_cases: {
+    title: "succession cases", section: "succession_cases", arr: () => DATA.beneficiaryCentre.succession,
+    targets: [{ k: "dref", label: "Deceased ref" }, { k: "dname", label: "Deceased name", required: true }, { k: "dod", label: "Date of death" },
+      { k: "succ", label: "Successor" }, { k: "rel", label: "Relationship" }, { k: "lodged", label: "Lodged on" }, { k: "status", label: "Status" }],
+    make: (v) => [v.dref || "", v.dname, v.dod || "", v.succ || "", v.rel || "", v.lodged || "", v.status || "Lodged", ""],
+  },
+  beneficiary_disputes: {
+    title: "duplicate / conflict cases", section: "beneficiary_disputes", arr: () => DATA.beneficiaryCentre.disputes,
+    targets: [{ k: "ref", label: "Case ref" }, { k: "dtype", label: "Type" }, { k: "parties", label: "Parties" },
+      { k: "desc", label: "Description" }, { k: "raised", label: "Raised on" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", v.dtype || "Duplicate", v.parties || "", v.desc || "", v.raised || "", v.status || "Open", ""],
+  },
   masterfile: {
     title: "master-file sections", section: "masterfile", arr: () => DATA.masterFile,
     targets: [{ k: "no", label: "Section no." }, { k: "name", label: "Name", required: true },
@@ -1598,6 +1836,75 @@ const GOV_EDITORS = {
       { key: "status", label: "Status", type: "select", options: ["Upcoming", "In Progress", "Done", "Overdue"], value: r[5] },
     ],
     write: (r, o) => { r[0] = o.item; r[1] = o.category; r[2] = o.due; r[3] = o.recurrence; r[4] = o.responsible; r[5] = o.status; },
+  }),
+};
+
+/* listEditor configs for the Beneficiary Centre registers */
+const BENE_EDITORS = {
+  register: () => ({
+    title: "Master Beneficiary Register", arr: DATA.beneficiaryCentre.register, section: "beneficiaries",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[9]}`,
+    blank: () => ["", "", "Female", "", "", "", "", new Date().toISOString().slice(0, 10), "Active", "Pending", ""],
+    fields: (r) => [
+      { key: "ref", label: "Register / member no.", type: "text", value: r[0] },
+      { key: "name", label: "Full name", type: "text", value: r[1], required: true },
+      { key: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other", "Unspecified"], value: r[2] || "Female" },
+      { key: "dob", label: "Date of birth", type: "date", value: r[3] },
+      { key: "idm", label: "ID (masked, e.g. ****1234)", type: "text", value: r[4] },
+      { key: "hh", label: "Household ref.", type: "text", value: r[5] },
+      { key: "contact", label: "Contact", type: "text", value: r[6] },
+      { key: "joined", label: "Joined on", type: "date", value: r[7] },
+      { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
+      { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[10] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = o.idm; r[5] = o.hh; r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes; },
+  }),
+  households: () => ({
+    title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]}`,
+    blank: () => ["", "", 0, "", "Portion 1", "", "Active"],
+    fields: (r) => [
+      { key: "ref", label: "Household ref.", type: "text", value: r[0] },
+      { key: "head", label: "Head of household", type: "text", value: r[1], required: true },
+      { key: "members", label: "Members in household", type: "number", value: r[2], min: 0 },
+      { key: "village", label: "Village / area", type: "text", value: r[3] },
+      { key: "portion", label: "Portion", type: "text", value: r[4] },
+      { key: "contact", label: "Contact", type: "text", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.head; r[2] = parseFloat(o.members) || 0; r[3] = o.village; r[4] = o.portion; r[5] = o.contact; r[6] = o.status; },
+  }),
+  succession: () => ({
+    title: "Succession cases", arr: DATA.beneficiaryCentre.succession, section: "succession_cases",
+    rowLabel: (r) => `${r[1]} → ${r[3] || "?"} (${r[6]})`,
+    blank: () => ["", "", "", "", "", new Date().toISOString().slice(0, 10), "Lodged", ""],
+    fields: (r) => [
+      { key: "dref", label: "Deceased member ref.", type: "text", value: r[0] },
+      { key: "dname", label: "Deceased name", type: "text", value: r[1], required: true },
+      { key: "dod", label: "Date of death", type: "date", value: r[2] },
+      { key: "succ", label: "Nominated successor", type: "text", value: r[3] },
+      { key: "rel", label: "Relationship", type: "text", value: r[4] },
+      { key: "lodged", label: "Lodged on", type: "date", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: ["Lodged", "Verifying", "Approved", "Rejected", "Registered"], value: r[6] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.dref; r[1] = o.dname; r[2] = o.dod; r[3] = o.succ; r[4] = o.rel; r[5] = o.lodged; r[6] = o.status; r[7] = o.notes; },
+  }),
+  disputes: () => ({
+    title: "Duplicate / conflict cases", arr: DATA.beneficiaryCentre.disputes, section: "beneficiary_disputes",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[5]}`,
+    blank: () => ["", "Duplicate", "", "", new Date().toISOString().slice(0, 10), "Open", ""],
+    fields: (r) => [
+      { key: "ref", label: "Case ref.", type: "text", value: r[0] },
+      { key: "dtype", label: "Type", type: "select", options: DISPUTE_TYPES, value: r[1] },
+      { key: "parties", label: "Parties", type: "text", value: r[2] },
+      { key: "desc", label: "Description", type: "textarea", value: r[3] },
+      { key: "raised", label: "Raised on", type: "date", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: ["Open", "Mediation", "Escalated", "Resolved"], value: r[5] },
+      { key: "res", label: "Resolution", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.dtype; r[2] = o.parties; r[3] = o.desc; r[4] = o.raised; r[5] = o.status; r[6] = o.res; },
   }),
 };
 
@@ -1816,23 +2123,8 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-beneficiary">
-    <div class="split split-bene">
-      <div class="grid grid-2" id="beneficiary-stats" style="align-content:start;"></div>
-      <div class="card">
-        <div class="card-head"><h3>Verification Status</h3><button class="btn" id="edit-beneficiary-btn" type="button">Edit figures</button></div>
-        <div id="beneficiary-donut" class="chart-wrap"></div>
-      </div>
-    </div>
-    <div class="grid grid-2" style="margin-top:14px;">
-      <div class="card">
-        <div class="card-head"><h3>Membership by Gender</h3><span class="hint">Verified &amp; pending members</span></div>
-        <div id="beneficiary-gender"></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Household &amp; Succession</h3></div>
-        <dl class="kv" id="beneficiary-household"></dl>
-      </div>
-    </div>
+    <div id="beneficiary-subtabs"></div>
+    <div id="beneficiary-body"></div>
   </section>
 
   <section class="view hidden" id="view-assets">

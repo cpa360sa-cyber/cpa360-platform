@@ -51,6 +51,10 @@ export async function loadOrg(orgId) {
     sel("actions", "created_at"),
     sel("masterfile_sections", "sort"),
     supabase.from("beneficiary_figures").select("*").eq("org_id", orgId).maybeSingle(),
+    sel("beneficiaries", "sort"),
+    sel("households", "sort"),
+    sel("succession_cases", "sort"),
+    sel("beneficiary_disputes", "sort"),
     sel("land_portions", "sort"),
     sel("land_leases", "sort"),
     sel("land_allocations", "sort"),
@@ -65,7 +69,8 @@ export async function loadOrg(orgId) {
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
   const [org, gates, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
-         govCal, actions, mf, bene, land, leases,
+         govCal, actions, mf, bene, beneReg, households, succession, beneDisputes,
+         land, leases,
          allocations, movable, permits, fin, cats, projects, impact, docs] =
     results.map((r) => r.data);
 
@@ -116,6 +121,18 @@ export async function loadOrg(orgId) {
           disputed: num(bene.disputed), female: num(bene.female), male: num(bene.male),
           households: num(bene.households), succession: num(bene.succession) }
       : { ...EMPTY_BENE },
+    beneficiaryCentre: {
+      register: (beneReg || []).map((r) => tagArr(
+        [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
+         r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || ""], r)),
+      households: (households || []).map((r) => tagArr(
+        [r.ref || "", r.head_name, num(r.members_count), r.village || "", r.portion || "", r.contact || "", r.status], r)),
+      succession: (succession || []).map((r) => tagArr(
+        [r.deceased_ref || "", r.deceased_name, r.date_of_death || "", r.successor_name || "", r.relationship || "",
+         r.lodged_on || "", r.status, r.notes || ""], r)),
+      disputes: (beneDisputes || []).map((r) => tagArr(
+        [r.ref || "", r.dtype, r.parties || "", r.description || "", r.raised_on || "", r.status, r.resolution || ""], r)),
+    },
     assets: {
       land: (land || []).map((r) => tagArr([r.portion, r.primary_use || "", num(r.extent_ha), r.lease || "", r.status], r)),
       leases: (leases || []).map((r) => tagArr(
@@ -308,6 +325,25 @@ export async function saveSection(orgId, section, D) {
       return reconcile("masterfile_sections", orgId, D.masterFile, (r, i) => ({
         section_no: nn(r[0]), name: r[1], doc_count_label: nn(r[2]),
         completeness_pct: Math.max(0, Math.min(100, num(r[3]))), sort: i,
+      }));
+
+    case "beneficiaries":
+      return reconcile("beneficiaries", orgId, D.beneficiaryCentre.register, (r, i) => ({
+        ref: nn(r[0]), full_name: r[1], gender: nn(r[2]), dob: nn(r[3]), id_masked: nn(r[4]),
+        household_ref: nn(r[5]), contact: nn(r[6]), joined_on: nn(r[7]), status: r[8], verification: r[9], notes: nn(r[10]), sort: i,
+      }));
+    case "households":
+      return reconcile("households", orgId, D.beneficiaryCentre.households, (r, i) => ({
+        ref: nn(r[0]), head_name: r[1], members_count: num(r[2]), village: nn(r[3]), portion: nn(r[4]), contact: nn(r[5]), status: r[6], sort: i,
+      }));
+    case "succession_cases":
+      return reconcile("succession_cases", orgId, D.beneficiaryCentre.succession, (r, i) => ({
+        deceased_ref: nn(r[0]), deceased_name: r[1], date_of_death: nn(r[2]), successor_name: nn(r[3]),
+        relationship: nn(r[4]), lodged_on: nn(r[5]), status: r[6], notes: nn(r[7]), sort: i,
+      }));
+    case "beneficiary_disputes":
+      return reconcile("beneficiary_disputes", orgId, D.beneficiaryCentre.disputes, (r, i) => ({
+        ref: nn(r[0]), dtype: r[1], parties: nn(r[2]), description: nn(r[3]), raised_on: nn(r[4]), status: r[5], resolution: nn(r[6]), sort: i,
       }));
 
     case "beneficiary":
