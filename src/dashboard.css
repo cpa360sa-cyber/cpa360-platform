@@ -193,6 +193,49 @@
 @media (max-width:900px){ .cpa-dash .health-grid{ grid-template-columns:repeat(2,1fr); } }
 .cpa-dash .health-cell .hc-top{ display:flex; justify-content:space-between; font-size:11.5px; font-weight:600; margin-bottom:5px; }
 
+/* ---- exec dashboard v3 ---- */
+.cpa-dash .illus-banner{ display:flex; align-items:center; gap:9px; font-size:11.5px; font-weight:600; color:var(--accent-strong);
+  background:var(--accent-tint); border:1px solid color-mix(in oklab,var(--accent) 35%,transparent); border-radius:9px; padding:8px 12px; margin-bottom:14px; }
+.cpa-dash .illus-banner::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none; }
+
+.cpa-dash .ex-next{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--brand-tint);
+  border:1px solid color-mix(in oklab,var(--brand) 22%,transparent); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
+.cpa-dash .ex-next .en-txt{ flex:1; min-width:220px; }
+.cpa-dash .ex-next .en-eyebrow{ font-size:9.5px; letter-spacing:1.2px; text-transform:uppercase; font-weight:700; color:var(--brand); }
+.cpa-dash .ex-next .en-line{ font-size:13.5px; font-weight:600; color:var(--ink); margin-top:2px; }
+
+.cpa-dash .exec-top{ display:grid; grid-template-columns:290px 1fr; gap:14px; }
+@media (max-width:820px){ .cpa-dash .exec-top{ grid-template-columns:1fr; } }
+.cpa-dash .ex-score{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px;
+  box-shadow:var(--shadow-card); display:flex; flex-direction:column; align-items:center; text-align:center; }
+.cpa-dash .ex-score .es-lbl{ font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:700; color:var(--ink-muted); margin-bottom:6px; }
+.cpa-dash .ex-score .es-band{ margin-top:8px; }
+.cpa-dash .ex-score .es-desc{ font-size:11px; color:var(--ink-2); margin-top:8px; line-height:1.45; }
+.cpa-dash .ex-score .btn{ margin-top:12px; }
+.cpa-dash .ex-cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+@media (max-width:1000px){ .cpa-dash .ex-cards{ grid-template-columns:1fr 1fr; } }
+@media (max-width:560px){ .cpa-dash .ex-cards{ grid-template-columns:1fr; } }
+.cpa-dash .ex-card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:15px 16px; box-shadow:var(--shadow-card); }
+.cpa-dash .ex-card .k{ font-size:10px; letter-spacing:.7px; text-transform:uppercase; font-weight:700; color:var(--ink-muted); }
+.cpa-dash .ex-card .v{ font-family:var(--font-display); font-size:24px; font-weight:800; margin-top:6px; line-height:1; }
+.cpa-dash .ex-card .v span{ font-size:14px; color:var(--ink-muted); font-weight:700; }
+.cpa-dash .ex-card .s{ font-size:11.5px; color:var(--ink-2); margin-top:5px; }
+.cpa-dash .ex-card .s.good{ color:var(--status-good); } .cpa-dash .ex-card .s.warning{ color:var(--status-warning); } .cpa-dash .ex-card .s.critical{ color:var(--status-critical); }
+.cpa-dash .ex-card a.mini{ display:inline-block; margin-top:8px; font-size:11px; font-weight:700; color:var(--brand); cursor:pointer; }
+
+.cpa-dash .exec-priority{ margin-top:16px; }
+.cpa-dash .exec-priority .table-wrap{ box-shadow:none; }
+.cpa-dash .pa-pri{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
+.cpa-dash .pa-pri.high{ background:var(--status-critical-tint); color:var(--status-critical); }
+.cpa-dash .pa-pri.medium{ background:var(--status-warning-tint); color:var(--status-warning); }
+.cpa-dash .pa-pri.low{ background:var(--status-neutral-tint); color:var(--status-neutral); }
+.cpa-dash .pa-over{ color:var(--status-critical); font-weight:700; }
+
+.cpa-dash .dom-row{ display:grid; grid-template-columns:1fr 1fr 46px; align-items:center; gap:12px; padding:7px 0; font-size:12px; }
+.cpa-dash .dom-row + .dom-row{ border-top:1px solid var(--border); }
+.cpa-dash .dom-row .dr-name{ color:var(--ink-2); font-weight:600; }
+.cpa-dash .dom-row .dr-val{ text-align:right; font-family:var(--font-mono); color:var(--ink-muted); }
+
 .cpa-dash .exec-list{ list-style:none; margin:0; padding:0; }
 .cpa-dash .exec-list li{ display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border); font-size:12.5px; }
 .cpa-dash .exec-list li:first-child{ border-top:0; }

@@ -2010,65 +2010,101 @@ function renderImpact() {
 function domainByName(n) { return DATA.score.domains.find((d) => d.name === n) || { achieved: 0, weight: 1 }; }
 function healthTone(pct) { return pct >= 75 ? "good" : pct >= 45 ? "warning" : "critical"; }
 
+const PRIORITY = (days, status) => status === "Overdue" || days < 0 ? "high" : days <= 14 ? "high" : days <= 45 ? "medium" : "low";
 function renderExec() {
   const total = scoreTotal();
   const band = maturityBand(total);
+  const bandRow = (DATA.score.bands || []).find((b) => b[0] === band.name) || [band.name, "", ""];
   const stage = DATA.gates.find((g) => g.state === "current") || DATA.gates[0] || { n: 1, name: "Assess" };
   const jb = JOURNEY.find((s) => s.n === stage.n) || JOURNEY[0];
+  const now = new Date();
+  const alerts = computeAlerts();
 
-  $("exec-hero").innerHTML = `
-    <div class="exec-hero-card">
-      <div class="ehc-num">${total}<span>/100</span></div>
-      <div class="ehc-lbl">Institutional Score</div>
-      <div class="pill brand" style="margin-top:8px;">${esc(band.name)} band</div>
+  $("exec-illus").innerHTML = isDemoOrg()
+    ? `<div class="illus-banner">Illustrative CPA360 assessment — this workspace is the Kwezi Valley demo dataset.</div>` : "";
+
+  const ns = nextStep();
+  $("exec-next").innerHTML = `
+    <div class="en-txt"><div class="en-eyebrow">What must happen next</div><div class="en-line">${esc(ns.line)}</div></div>
+    <button class="btn primary view-ok" data-goto="${ns.goto}" type="button">${esc(ns.label)}</button>`;
+
+  const closed = DATA.actions.filter((a) => a[5] === "Completed").length;
+  const openN = DATA.actions.length - closed;
+  const evidence = Object.values((DATA._docCounts || {}).action || {}).reduce((s, n) => s + n, 0);
+  const domTone = alerts.some((a) => a.tone === "critical") ? "critical" : alerts.length ? "warning" : "good";
+
+  $("exec-top").innerHTML = `
+    <div class="ex-score">
+      <div class="es-lbl">CPA360 Institutional Score</div>
+      ${scoreGauge(total, 100, 148)}
+      <div class="pill brand es-band">${esc(band.name)} band</div>
+      <div class="es-desc">${esc(bandRow[2] || "")}</div>
+      <button class="btn view-ok" data-goto="#/v/score" type="button">View performance</button>
     </div>
-    <div class="exec-hero-card">
-      <div class="ehc-num">${stage.n}<span>/7</span></div>
-      <div class="ehc-lbl">Current Stage — ${esc(jb.key)}</div>
-      <div class="hint" style="margin-top:8px;max-width:34ch;">${esc(jb.blurb)}</div>
+    <div class="ex-cards">
+      <div class="ex-card">
+        <div class="k">Journey stage</div>
+        <div class="v">${stage.n}<span> / 7</span></div>
+        <div class="s">${esc(jb.key)}</div>
+        <a class="mini view-ok" data-goto="#/v/journey">Open the Journey</a>
+      </div>
+      <div class="ex-card">
+        <div class="k">This cycle</div>
+        <div class="v">${closed}<span> closed</span></div>
+        <div class="s">${openN} action${openN === 1 ? "" : "s"} still open · ${evidence} evidence file${evidence === 1 ? "" : "s"}</div>
+      </div>
+      <div class="ex-card">
+        <div class="k">Needs attention</div>
+        <div class="v">${alerts.length}</div>
+        <div class="s ${domTone === "good" ? "good" : domTone}">${alerts.length ? esc(alerts[0].text) : "Nothing outstanding"}</div>
+      </div>
     </div>`;
 
-  // health indicators — one per domain group
-  const H = [
-    ["Governance", ["Governance"]],
-    ["Beneficiaries", ["Beneficiaries"]],
-    ["Administration", ["Administration"]],
-    ["Finance", ["Finance"]],
-    ["Land & Assets", ["Land & Assets"]],
-    ["Productivity", ["Productivity"]],
-    ["Commercial", ["Commercialisation"]],
-    ["Compliance", ["Compliance"]],
-  ];
-  $("exec-health").innerHTML = H.map(([label, names]) => {
-    const w = names.reduce((s, n) => s + (+domainByName(n).weight || 0), 0) || 1;
-    const a = names.reduce((s, n) => s + (+domainByName(n).achieved || 0), 0);
-    const pct = Math.round((a / w) * 100);
-    return `<div class="health-cell">
-      <div class="hc-top"><span>${esc(label)}</span><span class="mono">${pct}%</span></div>
-      <div class="bar-track"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div>
+  // priority actions — the centrepiece
+  const pri = DATA.actions
+    .filter((a) => a[5] !== "Completed")
+    .map((a) => ({ a, days: a[4] ? (new Date(a[4]) - now) / 86400000 : 9e9 }))
+    .sort((x, y) => x.days - y.days)
+    .slice(0, 8);
+  $("exec-actions").innerHTML = pri.length ? pri.map(({ a, days }) => {
+    const over = a[5] === "Overdue" || (a[4] && days < 0);
+    const p = PRIORITY(days, a[5]);
+    return `<tr>
+      <td style="min-width:220px;font-weight:600;">${esc(a[2])}</td>
+      <td>${esc(a[3]) || "—"}</td>
+      <td class="mono ${over ? "pa-over" : ""}" style="white-space:nowrap;">${esc(a[4] || "—")}</td>
+      <td><span class="pa-pri ${p}">${p}</span></td>
+      <td>${statusPill(a[5])}</td>
+    </tr>`;
+  }).join("") : emptyRow(5, "No open actions — every item is closed.");
+
+  // performance by domain
+  $("exec-domains").innerHTML = DATA.score.domains.map((d) => {
+    const sc = domainScore(d), pct = Math.round((sc / (d.weight || 1)) * 100);
+    return `<div class="dom-row">
+      <span class="dr-name">${esc(d.name)}</span>
+      <span class="bar-track"><span class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></span></span>
+      <span class="dr-val">${sc}/${d.weight}</span>
     </div>`;
   }).join("");
 
-  // critical actions
-  const now = new Date();
-  const crit = DATA.actions
-    .map((a) => ({ a, days: a[4] ? (new Date(a[4]) - now) / 86400000 : 999 }))
-    .filter((x) => x.a[5] === "Overdue" || (x.a[5] !== "Completed" && x.days <= 30))
-    .sort((x, y) => x.days - y.days).slice(0, 6);
-  $("exec-actions").innerHTML = crit.length ? crit.map(({ a }) => `
-    <li><span class="ea-cat">${esc(a[1] || "—")}</span>
-      <span class="ea-desc">${esc(a[2])}</span>
-      <span>${statusPill(a[5])}</span>
-      <span class="mono ea-due">${esc(a[4] || "")}</span></li>`).join("")
-    : `<li class="muted">No overdue or imminent actions. </li>`;
+  // what needs attention
+  $("exec-attention").innerHTML = alerts.length
+    ? alerts.slice(0, 7).map((x) => `<li>${pill(x.tone === "critical" ? "Risk" : x.tone === "warning" ? "Watch" : "Note", x.tone === "info" ? "neutral" : x.tone)}
+        <span class="ea-desc">${esc(x.text)}</span>
+        <button class="btn view-ok" data-goto="${x.goto}" type="button" style="padding:3px 9px;font-size:10.5px;">Open</button></li>`).join("")
+    : `<li class="muted">Nothing needs attention right now.</li>`;
 
-  // governance deadlines — from actions in the Governance category with a future date
-  const deadlines = DATA.actions
-    .filter((a) => a[5] !== "Completed" && a[4] && new Date(a[4]) >= now)
-    .sort((x, y) => new Date(x[4]) - new Date(y[4])).slice(0, 5);
-  $("exec-deadlines").innerHTML = deadlines.length ? deadlines.map((a) => `
-    <li><span class="mono ea-due">${esc(a[4])}</span><span class="ea-desc">${esc(a[2])}</span>
-      <span class="ea-cat">${esc(a[3] || a[1] || "")}</span></li>`).join("")
+  // upcoming deadlines — merge action due-dates + governance calendar
+  const dl = [
+    ...DATA.actions.filter((a) => a[5] !== "Completed" && a[4] && new Date(a[4]) >= now)
+      .map((a) => ({ date: a[4], label: a[2], who: a[3] || a[1] || "Action" })),
+    ...(DATA.governance?.calendar || []).filter((r) => r[2] && new Date(r[2]) >= now && r[5] !== "Done")
+      .map((r) => ({ date: r[2], label: r[0], who: r[1] })),
+  ].sort((x, y) => new Date(x.date) - new Date(y.date)).slice(0, 6);
+  $("exec-deadlines").innerHTML = dl.length ? dl.map((d) => `
+    <li><span class="mono ea-due">${esc(d.date)}</span><span class="ea-desc">${esc(d.label)}</span>
+      <span class="ea-cat">${esc(d.who)}</span></li>`).join("")
     : `<li class="muted">No upcoming deadlines recorded.</li>`;
 
   // financial alerts
@@ -3028,8 +3064,10 @@ export function mountView(el, viewId) {
     const b = el.querySelector("#" + id);
     if (b) b.addEventListener("click", fn);
   });
-  el.querySelectorAll("[data-goto]").forEach((b) =>
-    b.addEventListener("click", () => { location.hash = b.dataset.goto; }));
+  el.addEventListener("click", (e) => {
+    const g = e.target.closest && e.target.closest("[data-goto]");
+    if (g && el.contains(g)) location.hash = g.dataset.goto;
+  });
   el.querySelectorAll("svg:not([aria-label])").forEach((s) => { s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false"); });
   rendered.clear();
   showView(currentView);
@@ -3045,14 +3083,10 @@ export function showView(name, tab) {
   window.scrollTo({ top: 0 });
 }
 
-/* headline snapshot for the shell (journey strip, notifications, topbar) */
-export function dashSummary() {
-  if (!DATA) return null;
-  const total = scoreTotal();
-  const band = maturityBand(total);
-  const cur = DATA.gates.find((g) => g.state === "current") || DATA.gates[0] || { n: 1, name: "Assess" };
-  const now = new Date();
-  const a = [];
+/* consolidated "needs attention" list — shared by the shell + exec dashboard */
+function computeAlerts() {
+  if (!DATA) return [];
+  const now = new Date(), a = [];
   const overdue = DATA.actions.filter((x) => x[5] === "Overdue");
   if (overdue.length) a.push({ tone: "critical", text: `${overdue.length} action${overdue.length > 1 ? "s" : ""} overdue`, goto: "#/v/actions" });
   const soon = DATA.actions.filter((x) => {
@@ -3068,10 +3102,44 @@ export function dashSummary() {
   if (unrec) a.push({ tone: "info", text: `${unrec} transaction${unrec > 1 ? "s" : ""} not reconciled`, goto: "#/v/finance" });
   const disp = (DATA.beneficiaryCentre?.disputes || []).filter((r) => r[5] !== "Resolved").length;
   if (disp) a.push({ tone: "warning", text: `${disp} beneficiary dispute${disp > 1 ? "s" : ""} open`, goto: "#/v/beneficiary" });
+  const pend = (DATA.beneficiaryCentre?.register || []).filter((r) => r[9] === "Pending").length;
+  if (pend) a.push({ tone: "info", text: `${pend} beneficiar${pend > 1 ? "ies" : "y"} pending verification`, goto: "#/v/beneficiary" });
+  const noReqPO = (DATA.finProc?.pos || []).filter((r) => !r[5] && r[6] !== "Cancelled").length;
+  if (noReqPO) a.push({ tone: "critical", text: `${noReqPO} purchase order${noReqPO > 1 ? "s" : ""} with no requisition`, goto: "#/v/finance/pos" });
+  const maintOver = (DATA.assets.maintenance || []).filter((r) => r[7] !== "Completed" && r[3] && new Date(r[3]) < now).length;
+  if (maintOver) a.push({ tone: "warning", text: `${maintOver} maintenance task${maintOver > 1 ? "s" : ""} overdue`, goto: "#/v/assets/maintenance" });
+  return a;
+}
+
+function isDemoOrg() {
+  return DATA && (DATA.cpa.reg === "CPA 2005/0000142/00" || /kwezi valley/i.test(DATA.cpa.name || ""));
+}
+function nextStep() {
+  const now = new Date();
+  const overdue = DATA.actions.filter((x) => x[5] === "Overdue");
+  if (overdue.length)
+    return { line: `Clear ${overdue.length} overdue action${overdue.length > 1 ? "s" : ""} — start with "${(overdue[0][2] || "").slice(0, 60)}".`, label: "Open Action Tracker", goto: "#/v/actions" };
+  const lowest = [...DATA.score.domains].sort((x, y) => domainScore(x) / (x.weight || 1) - domainScore(y) / (y.weight || 1))[0];
+  if (lowest && domainScore(lowest) / (lowest.weight || 1) < 0.45)
+    return { line: `${lowest.name} is your weakest domain at ${domainScore(lowest)}/${lowest.weight}. Focus improvement here.`, label: "View performance", goto: "#/v/score" };
+  const cur = DATA.gates.find((g) => g.state === "current") || { n: 7 };
+  if (cur.n < 7) {
+    const nxt = JOURNEY.find((s) => s.n === cur.n + 1);
+    return { line: `Systems are holding. Work toward Stage ${cur.n + 1}: ${nxt ? nxt.key : ""} — ${nxt ? nxt.blurb : ""}`, label: "Open the Journey", goto: "#/v/journey" };
+  }
+  return { line: `You're at the final stage. Sustain investment readiness and keep the score above 85.`, label: "View performance", goto: "#/v/score" };
+}
+
+/* headline snapshot for the shell (journey strip, notifications, topbar) */
+export function dashSummary() {
+  if (!DATA) return null;
+  const total = scoreTotal();
+  const band = maturityBand(total);
+  const cur = DATA.gates.find((g) => g.state === "current") || DATA.gates[0] || { n: 1, name: "Assess" };
   return {
     score: total, band: band.name, stageN: cur.n, stageName: cur.name,
     journey: DATA.gates.map((g) => ({ n: g.n, name: g.name, state: g.state })),
-    alerts: a.slice(0, 6),
+    alerts: computeAlerts().slice(0, 6),
     cpaName: DATA.cpa.name,
   };
 }
@@ -3100,27 +3168,44 @@ const VIEW_HTML = `
   <div class="print-only" id="print-header"></div>
 
   <section class="view" id="view-exec">
-    <div class="exec-hero" id="exec-hero"></div>
-    <div class="section-title">Overall health indicators</div>
-    <div class="health-grid" id="exec-health"></div>
-    <div class="grid grid-2" style="margin-top:18px;">
-      <div class="card"><div class="card-head"><h3>Critical actions</h3>
-        <button class="btn view-ok" data-goto="#/v/actions" type="button">Open tracker</button></div>
-        <ul class="exec-list" id="exec-actions"></ul></div>
-      <div class="card"><div class="card-head"><h3>Upcoming governance deadlines</h3></div>
-        <ul class="exec-list" id="exec-deadlines"></ul></div>
+    <div id="exec-illus"></div>
+    <div class="ex-next" id="exec-next"></div>
+    <div class="exec-top" id="exec-top"></div>
+
+    <div class="card exec-priority">
+      <div class="card-head"><div><h3>Priority actions</h3>
+        <span class="hint">The open items that need the Committee's attention, most urgent first.</span></div>
+        <button class="btn view-ok" data-goto="#/v/actions" type="button">Open Action Tracker</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
+        <tbody id="exec-actions"></tbody>
+      </table></div>
     </div>
+
     <div class="grid grid-2" style="margin-top:14px;">
+      <div class="card"><div class="card-head"><h3>Performance by domain</h3>
+        <button class="btn view-ok" data-goto="#/v/score" type="button">View performance</button></div>
+        <div id="exec-domains"></div></div>
+      <div class="card"><div class="card-head"><h3>What needs attention</h3></div>
+        <ul class="exec-list" id="exec-attention"></ul></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:14px;">
+      <div class="card"><div class="card-head"><h3>Upcoming deadlines</h3></div>
+        <ul class="exec-list" id="exec-deadlines"></ul></div>
       <div class="card"><div class="card-head"><h3>Financial alerts</h3>
         <button class="btn view-ok" data-goto="#/v/finance" type="button">Open finance</button></div>
         <ul class="exec-list" id="exec-finance"></ul></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:14px;">
       <div class="card"><div class="card-head"><h3>Project status</h3>
         <button class="btn view-ok" data-goto="#/v/projects" type="button">Open projects</button></div>
         <ul class="exec-list" id="exec-projects"></ul></div>
+      <div class="card"><div class="card-head"><h3>Recent documents</h3>
+        <button class="btn view-ok" data-goto="#/v/masterfile" type="button">Master File</button></div>
+        <ul class="exec-list" id="exec-docs"></ul></div>
     </div>
-    <div class="card" style="margin-top:14px;"><div class="card-head"><h3>Recent documents</h3>
-      <button class="btn view-ok" data-goto="#/v/masterfile" type="button">Master File</button></div>
-      <ul class="exec-list" id="exec-docs"></ul></div>
   </section>
 
   <section class="view hidden" id="view-journey">
