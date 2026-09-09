@@ -3035,13 +3035,45 @@ export function mountView(el, viewId) {
   showView(currentView);
 }
 
-export function showView(name) {
+export function showView(name, tab) {
   if (!RENDERERS[name]) name = "exec";
   currentView = name;
+  if (tab) { SUBTAB[name] = tab; rendered.delete(name); }
   container.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + name));
   if (!rendered.has(name)) { renderCurrent(); rendered.add(name); }
   else applyRoleGate();
   window.scrollTo({ top: 0 });
+}
+
+/* headline snapshot for the shell (journey strip, notifications, topbar) */
+export function dashSummary() {
+  if (!DATA) return null;
+  const total = scoreTotal();
+  const band = maturityBand(total);
+  const cur = DATA.gates.find((g) => g.state === "current") || DATA.gates[0] || { n: 1, name: "Assess" };
+  const now = new Date();
+  const a = [];
+  const overdue = DATA.actions.filter((x) => x[5] === "Overdue");
+  if (overdue.length) a.push({ tone: "critical", text: `${overdue.length} action${overdue.length > 1 ? "s" : ""} overdue`, goto: "#/v/actions" });
+  const soon = DATA.actions.filter((x) => {
+    if (x[5] === "Completed" || !x[4]) return false;
+    const d = (new Date(x[4]) - now) / 86400000; return d >= 0 && d <= 14;
+  });
+  if (soon.length) a.push({ tone: "warning", text: `${soon.length} action${soon.length > 1 ? "s" : ""} due within 14 days`, goto: "#/v/actions" });
+  const gcOver = (DATA.governance?.calendar || []).filter((r) => r[2] && new Date(r[2]) < now && r[5] !== "Done").length;
+  if (gcOver) a.push({ tone: "critical", text: `${gcOver} governance-calendar item${gcOver > 1 ? "s" : ""} past due`, goto: "#/v/profile" });
+  const lease = (DATA.assets.leases || []).filter((r) => ["Expiring Soon", "Expired"].includes(r[7])).length;
+  if (lease) a.push({ tone: "warning", text: `${lease} land lease${lease > 1 ? "s" : ""} expiring or expired`, goto: "#/v/assets" });
+  const unrec = (DATA.finProc?.transactions || []).filter((r) => !r[7]).length;
+  if (unrec) a.push({ tone: "info", text: `${unrec} transaction${unrec > 1 ? "s" : ""} not reconciled`, goto: "#/v/finance" });
+  const disp = (DATA.beneficiaryCentre?.disputes || []).filter((r) => r[5] !== "Resolved").length;
+  if (disp) a.push({ tone: "warning", text: `${disp} beneficiary dispute${disp > 1 ? "s" : ""} open`, goto: "#/v/beneficiary" });
+  return {
+    score: total, band: band.name, stageN: cur.n, stageName: cur.name,
+    journey: DATA.gates.map((g) => ({ n: g.n, name: g.name, state: g.state })),
+    alerts: a.slice(0, 6),
+    cpaName: DATA.cpa.name,
+  };
 }
 
 export function printPack() {

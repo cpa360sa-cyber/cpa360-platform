@@ -6,7 +6,7 @@ const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
 const BRAND = `
   <div class="auth-brand">
     <div class="auth-mark">C</div>
-    <div><b>CPA360&trade;</b><span>Your CPA Institutional Operating System</span></div>
+    <div><b>CPA360&trade;</b><span>Institutional Operating System</span></div>
   </div>`;
 
 const COPY = {
@@ -29,27 +29,43 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
 
   root.className = "";
   root.innerHTML = `
-    <div class="auth-wrap"><div class="auth-card">
-      ${BRAND}
-      <h1>${esc(c.h)}</h1>
-      <p class="sub">${esc(c.sub)}</p>
-      <div id="auth-msg"></div>
-      <form id="auth-form" novalidate>
-        ${needsEmail ? `
-          <div class="field">
-            <label for="au-email">Email</label>
-            <input id="au-email" type="email" autocomplete="email" required />
-          </div>` : ""}
-        ${needsPw ? `
-          <div class="field">
-            <label for="au-pw">${mode === "setpw" ? "New password" : "Password"}</label>
-            <input id="au-pw" type="password" minlength="8"
-                   autocomplete="${mode === "signin" ? "current-password" : "new-password"}" required />
-          </div>` : ""}
-        <button class="btn primary" type="submit" id="au-submit">${esc(c.h)}</button>
-      </form>
-      <div class="auth-alt" id="auth-alt"></div>
-    </div></div>`;
+    <div class="auth-split">
+      <aside class="auth-hero">
+        <div class="ah-brand">
+          <div class="ah-mark">C</div>
+          <div><b>CPA360&trade;</b><span>A GAD Foundation Programme</span></div>
+        </div>
+        <h2>Your CPA Institutional Operating System.</h2>
+        <p class="ah-sub">Governance, beneficiaries, land, finance, productivity and commercialisation — one institutional view, one score, one journey.</p>
+        <ul>
+          <li>See your institutional health on a standardised 100-point score</li>
+          <li>Turn every gap into a tracked action with an owner and evidence</li>
+          <li>Build the record funders, regulators and banks ask for</li>
+        </ul>
+        <p class="ah-tag">Stronger CPAs. Brighter Futures.</p>
+      </aside>
+      <div class="auth-side"><div class="auth-card">
+        ${BRAND}
+        <h1>${esc(c.h)}</h1>
+        <p class="sub">${esc(c.sub)}</p>
+        <div id="auth-msg"></div>
+        <form id="auth-form" novalidate>
+          ${needsEmail ? `
+            <div class="field">
+              <label for="au-email">Email</label>
+              <input id="au-email" type="email" autocomplete="email" required />
+            </div>` : ""}
+          ${needsPw ? `
+            <div class="field">
+              <label for="au-pw">${mode === "setpw" ? "New password" : "Password"}</label>
+              <input id="au-pw" type="password" minlength="8"
+                     autocomplete="${mode === "signin" ? "current-password" : "new-password"}" required />
+            </div>` : ""}
+          <button class="btn primary" type="submit" id="au-submit">${esc(c.h)}</button>
+        </form>
+        <div class="auth-alt" id="auth-alt"></div>
+      </div></div>
+    </div>`;
 
   const alt = root.querySelector("#auth-alt");
   const links = {
