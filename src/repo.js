@@ -73,6 +73,9 @@ export async function loadOrg(orgId) {
     sel("proc_purchase_orders", "sort"),
     sel("fin_payments", "sort"),
     sel("projects", "sort"),
+    sel("markets", "sort"),
+    sel("partnerships", "sort"),
+    sel("revenue_streams", "sort"),
     supabase.from("impact_figures").select("*").eq("org_id", orgId).maybeSingle(),
     supabase.from("documents").select("section, ref_id").eq("org_id", orgId),
   ]);
@@ -83,7 +86,7 @@ export async function loadOrg(orgId) {
          land, leases,
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
-         finPay, projects, impact, docs] =
+         finPay, projects, markets, partnerships, revenue, impact, docs] =
     results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
@@ -184,6 +187,17 @@ export async function loadOrg(orgId) {
         [r.ref || "", r.po_date || "", r.supplier || "", r.description, num(r.amount), r.requisition_ref || "", r.status], r)),
       payments: (finPay || []).map((r) => tagArr(
         [r.pay_date || "", r.payee, r.description || "", num(r.amount), r.method || "", r.po_ref || "", r.reference || "", r.status], r)),
+    },
+    projects: (projects || []).map((r) => tagArr(
+      [r.name, r.stage || "", num(r.budget), num(r.spent), num(r.progress_pct), r.status,
+       r.business_case || "None", r.funder || "", num(r.cofunding), num(r.readiness), r.impact || "Medium"], r)),
+    commercial: {
+      markets: (markets || []).map((r) => tagArr(
+        [r.commodity, r.buyer || "", r.channel || "", r.volume || "", r.price_basis || "", r.agreement, r.status, r.notes || ""], r)),
+      partnerships: (partnerships || []).map((r) => tagArr(
+        [r.partner, r.ptype, r.purpose || "", r.start_date || "", r.end_date || "", r.status, r.notes || ""], r)),
+      revenue: (revenue || []).map((r) => tagArr(
+        [r.stream, r.source, num(r.annual_amount), !!r.recurring, r.status, r.notes || ""], r)),
     },
     impact: {
       jobsThisYear: num(i.jobs_this_year), jobsCumulative: num(i.jobs_cumulative),
@@ -473,7 +487,23 @@ export async function saveSection(orgId, section, D) {
     case "projects":
       return reconcile("projects", orgId, D.projects, (r, i) => ({
         name: r[0], stage: nn(r[1]), budget: num(r[2]), spent: num(r[3]),
-        progress_pct: Math.max(0, Math.min(100, num(r[4]))), status: r[5], sort: i,
+        progress_pct: Math.max(0, Math.min(100, num(r[4]))), status: r[5],
+        business_case: r[6] || "None", funder: nn(r[7]), cofunding: num(r[8]),
+        readiness: Math.max(0, Math.min(100, num(r[9]))), impact: r[10] || "Medium", sort: i,
+      }));
+
+    case "markets":
+      return reconcile("markets", orgId, D.commercial.markets, (r, i) => ({
+        commodity: r[0], buyer: nn(r[1]), channel: nn(r[2]), volume: nn(r[3]), price_basis: nn(r[4]),
+        agreement: r[5], status: r[6], notes: nn(r[7]), sort: i,
+      }));
+    case "partnerships":
+      return reconcile("partnerships", orgId, D.commercial.partnerships, (r, i) => ({
+        partner: r[0], ptype: r[1], purpose: nn(r[2]), start_date: nn(r[3]), end_date: nn(r[4]), status: r[5], notes: nn(r[6]), sort: i,
+      }));
+    case "revenue_streams":
+      return reconcile("revenue_streams", orgId, D.commercial.revenue, (r, i) => ({
+        stream: r[0], source: r[1], annual_amount: num(r[2]), recurring: !!r[3], status: r[4], notes: nn(r[5]), sort: i,
       }));
 
     case "impact":

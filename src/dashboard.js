@@ -641,18 +641,15 @@ function editCommittee() {
   });
 }
 function editMasterFile() {
-  listEditor({
-    title: "Master File sections", arr: DATA.masterFile, section: "masterfile",
-    rowLabel: (r) => `${r[0]}. ${r[1] || "—"} — ${r[3]}%`,
-    blank: () => [String(DATA.masterFile.length + 1), "", "0 documents", 0],
-    fields: (r) => [
-      { key: "no", label: "Section no.", type: "text", value: r[0] },
-      { key: "name", label: "Section name", type: "text", value: r[1], required: true },
-      { key: "count", label: "Document count (e.g. “12 documents”)", type: "text", value: r[2] },
-      { key: "pct", label: "Completeness %", type: "number", value: r[3], min: 0, max: 100 },
-    ],
-    write: (r, o) => { r[0] = o.no; r[1] = o.name; r[2] = o.count; r[3] = Math.max(0, Math.min(100, parseFloat(o.pct) || 0)); },
-  });
+  openModal("Master File completeness (%)",
+    DATA.masterFile.map((r, i) => ({ key: "c" + i, label: r[1], type: "number", value: r[3], min: 0, max: 100 })),
+    (out) => {
+      DATA.masterFile.forEach((r, i) => {
+        const v = parseFloat(out["c" + i]);
+        if (!isNaN(v)) r[3] = Math.max(0, Math.min(100, v));
+      });
+      commit("masterfile");
+    });
 }
 function editBeneficiary() {
   objectEditor("Beneficiary register figures", DATA.beneficiary, [
@@ -783,6 +780,8 @@ function editCategories() {
     write: (r, o) => { r[0] = o.name; r[1] = parseFloat(o.budget) || 0; r[2] = parseFloat(o.actual) || 0; },
   });
 }
+const BUSINESS_CASE_STATES = ["None", "Concept note", "Draft", "Complete", "Approved", "Funded"];
+const IMPACT_RATINGS = ["Low", "Medium", "High"];
 function editProject(idx) {
   const p = idx == null ? null : DATA.projects[idx];
   openModal(p ? "Edit project" : "Add project", [
@@ -792,9 +791,16 @@ function editProject(idx) {
     { key: "spent", label: "Spent (R)", type: "number", value: p ? p[3] : 0, min: 0 },
     { key: "pct", label: "Progress %", type: "number", value: p ? p[4] : 0, min: 0, max: 100 },
     { key: "status", label: "Status", type: "select", options: PROJECT_STATUSES, value: p ? p[5] : "Not Started" },
+    { key: "bc", label: "Business case", type: "select", options: BUSINESS_CASE_STATES, value: p ? p[6] : "None" },
+    { key: "funder", label: "Funder", type: "text", value: p ? p[7] : "" },
+    { key: "cofund", label: "Co-funding secured (R)", type: "number", value: p ? p[8] : 0, min: 0 },
+    { key: "rdy", label: "Funding readiness %", type: "number", value: p ? p[9] : 0, min: 0, max: 100 },
+    { key: "impact", label: "Expected impact", type: "select", options: IMPACT_RATINGS, value: p ? p[10] : "Medium" },
   ], (out) => {
     const row = [out.name, out.stage, parseFloat(out.budget) || 0, parseFloat(out.spent) || 0,
-      Math.max(0, Math.min(100, parseFloat(out.pct) || 0)), out.status];
+      Math.max(0, Math.min(100, parseFloat(out.pct) || 0)), out.status,
+      out.bc || "None", out.funder, parseFloat(out.cofund) || 0,
+      Math.max(0, Math.min(100, parseFloat(out.rdy) || 0)), out.impact || "Medium"];
     if (p) { row._id = p._id; DATA.projects[idx] = row; }
     else DATA.projects.push(row);
     commit("projects");
@@ -1076,38 +1082,52 @@ function renderActions() {
   tbody.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => deleteAction(b.dataset.del)));
 }
 
+const MF_BLURB = {
+  Governance: "Constitution, registration, EXCO, minutes, resolutions, the DoA matrix.",
+  Beneficiaries: "The Master Beneficiary Register, verification evidence, household and succession records.",
+  Land: "Title deeds, the SG diagram, the land audit, allocation and lease agreements.",
+  Assets: "The asset register, infrastructure records, valuations and maintenance logs.",
+  Finance: "Budgets, cashbooks, bank statements, annual financial statements and audit reports.",
+  HR: "Employment contracts, payroll, policies, the organogram.",
+  Projects: "Business cases, funding agreements, progress and completion reports.",
+  Productivity: "Production plans and records, enterprise agreements, water-use licences.",
+  Commercial: "Market agreements, offtake contracts, partnership MOUs, revenue records.",
+  Compliance: "Statutory returns, regulatory permits, DALRRD reports, the policy framework.",
+  Performance: "Institutional assessments, the CPA360 scorecard, M&E and board packs.",
+};
 function renderMasterFile() {
   const mf = DATA.masterFile;
   const avg = mf.length ? Math.round(mf.reduce((s, r) => s + (+r[3] || 0), 0) / mf.length) : 0;
   const complete = mf.filter((r) => r[3] >= 90).length;
-  const sectionFiles = Object.values((DATA._docCounts || {}).masterfile || {}).reduce((s, n) => s + n, 0);
-  const generalFiles = ((DATA._docCounts || {}).general || {})._ || 0;
+  const totalFiles = Object.values((DATA._docCounts || {}).masterfile || {}).reduce((s, n) => s + n, 0)
+    + (((DATA._docCounts || {}).general || {})._ || 0);
   $("masterfile-stats").innerHTML = [
-    statTile("Sections Tracked", mf.length, "Per Master File Index", ""),
-    statTile("Overall Completeness", avg + "%", "Weighted across sections", avg >= 70 ? "good" : "warning"),
-    statTile("Sections Complete", complete + " / " + mf.length, "", "good"),
-    statTile("Files Uploaded", sectionFiles + generalFiles, "Across all sections + general", ""),
+    statTile("Categories", mf.length, "The CPA360™ Master File structure", ""),
+    statTile("Overall Completeness", avg + "%", "Average across categories", avg >= 70 ? "good" : avg >= 40 ? "warning" : "critical"),
+    statTile("Categories Complete", complete + " / " + mf.length, "≥ 90% complete", complete === mf.length ? "good" : ""),
+    statTile("Documents Filed", totalFiles, "Across all categories", ""),
   ].join("");
   $("masterfile-grid").innerHTML = mf.length ? mf.map((row) => {
-    const [no, name, count, pct] = row;
+    const [no, name, , pct] = row;
     const tone = pct >= 90 ? "good" : pct >= 50 ? "warning" : "critical";
-    const status = pct >= 90 ? "Complete" : pct >= 50 ? "In Progress" : "Not Started";
+    const status = pct >= 90 ? "Complete" : pct >= 40 ? "In Progress" : "Not Started";
     const nf = docCount("masterfile", row._id);
     return `<div class="doc-card">
-      <div class="top"><span class="sec">SECTION ${esc(no)}</span>${statusPill(status)}</div>
+      <div class="top"><span class="sec">${esc(no)}</span>${statusPill(status)}</div>
       <div class="title">${esc(name)}</div>
-      <div class="count">${esc(count)}</div>
+      <div class="count" style="min-height:32px;">${esc(MF_BLURB[name] || "")}</div>
       <div class="progress"><span style="width:${Math.max(0, Math.min(100, +pct || 0))}%; background:var(--status-${tone});"></span></div>
-      <button class="btn" type="button" data-mf-files="${esc(row._id || "")}" style="margin-top:10px;padding:4px 10px;font-size:11px;">
-        Files${nf ? ` · ${nf}` : ""}</button>
+      <div class="hint" style="margin-top:4px;">${pct}% complete · ${nf} file${nf === 1 ? "" : "s"}</div>
+      <button class="btn ${CAN_EDIT ? "" : "view-ok"}" type="button" data-mf-files="${esc(row._id || "")}" style="margin-top:8px;padding:4px 10px;font-size:11px;">
+        Open files</button>
     </div>`;
-  }).join("") : `<p class="muted">No master-file sections tracked yet.</p>`;
+  }).join("") : `<p class="muted">No master-file categories — reload the page.</p>`;
   $("masterfile-grid").querySelectorAll("[data-mf-files]").forEach((b) => (b.onclick = () => {
     const r = mf.find((x) => String(x._id) === b.dataset.mfFiles);
-    if (r) attachmentsModal("masterfile", r._id, "Files — " + (r[1] || "section " + r[0]));
+    if (r) attachmentsModal("masterfile", r._id, r[1] + " — Master File documents");
   }));
   const gb = $("mf-general-btn");
-  if (gb) gb.textContent = "General documents" + (generalFiles ? ` · ${generalFiles}` : "");
+  if (gb) gb.textContent = "General documents" + ((((DATA._docCounts || {}).general || {})._ || 0) ? ` · ${((DATA._docCounts || {}).general || {})._}` : "");
 }
 
 const BENE_TABS = [
@@ -1723,32 +1743,246 @@ function renderFinCompliance(host) {
     </table></div>`;
 }
 
+const PROJ_TABS = [
+  { id: "pipeline", label: "Pipeline" },
+  { id: "scorecards", label: "Scorecards" },
+  { id: "cases", label: "Business Cases" },
+  { id: "funding", label: "Funding Readiness" },
+  { id: "markets", label: "Markets" },
+  { id: "partnerships", label: "Partnerships" },
+  { id: "revenue", label: "Revenue" },
+  { id: "investment", label: "Investment Readiness" },
+];
+const PROJ_PANELS = {
+  pipeline: renderProjPipeline, scorecards: renderProjScorecards, cases: renderProjCases, funding: renderProjFunding,
+  markets: renderProjMarkets, partnerships: renderProjPartnerships, revenue: renderProjRevenue, investment: renderProjInvestment,
+};
 function renderProjects() {
+  const strip = $("projects-subtabs");
+  strip.innerHTML = subtabStrip("projects", PROJ_TABS);
+  wireSubtabs(strip);
+  const cur = SUBTAB.projects || "pipeline";
+  (PROJ_PANELS[cur] || renderProjPipeline)($("projects-body"));
+}
+function renderProjPipeline(host) {
   const p = DATA.projects;
-  const totalBudget = p.reduce((s, r) => s + (+r[2] || 0), 0);
-  const totalSpent = p.reduce((s, r) => s + (+r[3] || 0), 0);
-  $("projects-stats").innerHTML = [
-    statTile("Active Projects", p.length, "In pipeline", ""),
-    statTile("Total Project Budget", fmtR(totalBudget), "", ""),
-    statTile("Total Spent", fmtR(totalSpent), (totalBudget ? fmtPct(totalSpent / totalBudget * 100) : "0%") + " of pipeline budget", ""),
-    statTile("At Risk", p.filter((r) => r[5] === "At Risk").length, "Needs Committee attention", p.filter((r) => r[5] === "At Risk").length ? "warning" : "good"),
-  ].join("");
-  const tbody = $("projects-body");
-  tbody.innerHTML = p.length ? p.map(([name, stage, budget, spent, pct, status], i) => `
-    <tr>
-      <td style="font-weight:600;">${esc(name)}</td>
-      <td><span class="pill brand">${esc(stage)}</span></td>
-      <td class="num mono">${(+budget || 0).toLocaleString()}</td>
-      <td class="num mono">${(+spent || 0).toLocaleString()}</td>
-      <td style="min-width:140px;"><div class="progress"><span style="width:${Math.max(0, Math.min(100, +pct || 0))}%"></span></div></td>
-      <td>${statusPill(status)}</td>
-      <td><div class="row-actions">
-        <button type="button" data-e="${i}" title="Edit" aria-label="Edit project">${PENCIL}</button>
-        <button type="button" data-d="${i}" title="Delete" aria-label="Delete project">${TRASH}</button>
-      </div></td>
-    </tr>`).join("") : emptyRow(7, "No projects in the pipeline yet.");
-  tbody.querySelectorAll("[data-e]").forEach((b) => (b.onclick = () => editProject(+b.dataset.e)));
-  tbody.querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => deleteProject(+b.dataset.d)));
+  const tB = p.reduce((s, r) => s + (+r[2] || 0), 0), tS = p.reduce((s, r) => s + (+r[3] || 0), 0);
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Projects", p.length, "In the pipeline", "")}
+      ${statTile("Total budget", fmtR(tB), "", "")}
+      ${statTile("Total spent", fmtR(tS), (tB ? fmtPct(tS / tB * 100) : "0%") + " of pipeline budget", "")}
+      ${statTile("At risk", p.filter((r) => r[5] === "At Risk").length, "Needs Committee attention", p.filter((r) => r[5] === "At Risk").length ? "warning" : "good")}
+    </div>
+    <div id="projects-toolbar" style="display:flex;justify-content:flex-end;gap:6px;margin:16px 0 10px;">
+      ${CAN_EDIT ? `<button class="btn" id="proj-import" type="button">Import CSV</button><button class="btn primary" id="proj-add" type="button">+ Add project</button>` : ""}
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Project</th><th>Stage</th><th class="num">Budget</th><th class="num">Spent</th><th style="min-width:130px;">Progress</th><th>Status</th>${CAN_EDIT ? "<th></th>" : ""}</tr></thead>
+      <tbody>${p.length ? p.map((r, i) => `<tr>
+        <td style="font-weight:600;">${esc(r[0])}</td>
+        <td><span class="pill brand">${esc(r[1])}</span></td>
+        <td class="num mono">${(+r[2] || 0).toLocaleString()}</td>
+        <td class="num mono">${(+r[3] || 0).toLocaleString()}</td>
+        <td><div class="progress"><span style="width:${Math.max(0, Math.min(100, +r[4] || 0))}%"></span></div></td>
+        <td>${statusPill(r[5])}</td>
+        ${CAN_EDIT ? `<td><div class="row-actions">
+          <button type="button" data-e="${i}" title="Edit">${PENCIL}</button>
+          <button type="button" data-d="${i}" title="Delete">${TRASH}</button></div></td>` : ""}
+      </tr>`).join("") : emptyRow(CAN_EDIT ? 7 : 6, "No projects in the pipeline yet.")}</tbody>
+    </table></div>`;
+  const a = host.querySelector("#proj-add"); if (a) a.onclick = () => editProject(null);
+  const im = host.querySelector("#proj-import"); if (im) im.onclick = () => importModal(IMPORT.projects);
+  host.querySelectorAll("[data-e]").forEach((b) => (b.onclick = () => editProject(+b.dataset.e)));
+  host.querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => deleteProject(+b.dataset.d)));
+}
+function renderProjScorecards(host) {
+  const p = DATA.projects;
+  host.innerHTML = `
+    <div class="card-head" style="margin:2px 0 12px;"><div><h3 style="font-size:13px;">Project Scorecards</h3>
+      <span class="hint">Delivery, spend and readiness at a glance. Edit a project on the Pipeline tab.</span></div></div>
+    <div class="grid grid-2">${p.length ? p.map((r) => {
+      const pct = +r[4] || 0, spendPct = r[2] ? Math.round((+r[3] || 0) / r[2] * 100) : 0;
+      const rdy = +r[9] || 0;
+      const tone = r[5] === "At Risk" || r[5] === "Delayed" ? "critical" : r[5] === "On Track" || r[5] === "Complete" ? "good" : "warning";
+      return `<div class="card">
+        <div class="card-head"><h3>${esc(r[0])}</h3>${statusPill(r[5])}</div>
+        <dl class="kv">
+          <dt>Stage</dt><dd>${esc(r[1])}</dd>
+          <dt>Budget</dt><dd>${fmtR(r[2])} · ${spendPct}% spent</dd>
+          <dt>Expected impact</dt><dd>${esc(r[10] || "Medium")}</dd>
+          <dt>Business case</dt><dd>${esc(r[6] || "None")}</dd>
+          <dt>Funder</dt><dd>${esc(r[7]) || "—"}</dd>
+        </dl>
+        <div style="margin-top:8px;"><span class="hint">Delivery ${pct}%</span>
+          <div class="bar-track"><div class="bar-fill ${tone}" style="width:${Math.max(3, pct)}%"></div></div></div>
+        <div style="margin-top:6px;"><span class="hint">Funding readiness ${rdy}%</span>
+          <div class="bar-track"><div class="bar-fill ${healthTone(rdy)}" style="width:${Math.max(3, rdy)}%"></div></div></div>
+      </div>`;
+    }).join("") : `<p class="muted">No projects yet.</p>`}</div>`;
+}
+function renderProjCases(host) {
+  const p = DATA.projects;
+  const done = p.filter((r) => ["Complete", "Approved", "Funded"].includes(r[6])).length;
+  mountRegister(host, {
+    title: "Business Cases", hint: "Business-case status per project — set it on the Pipeline tab. Attach documents on the Master File (Projects).",
+    stats: () => [
+      statTile("Projects", p.length, "In the pipeline", ""),
+      statTile("Case complete+", done, "Complete / Approved / Funded", done ? "good" : "warning"),
+      statTile("In drafting", p.filter((r) => ["Concept note", "Draft"].includes(r[6])).length, "Concept note / Draft", ""),
+      statTile("No case", p.filter((r) => (r[6] || "None") === "None").length, "Not started", p.filter((r) => (r[6] || "None") === "None").length ? "critical" : "good"),
+    ],
+    columns: [{ label: "Project" }, { label: "Stage" }, { label: "Business case" }, { label: "Budget", cls: "num" }, { label: "Funder" }, { label: "Impact" }],
+    rows: () => p,
+    empty: "No projects yet.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), statusPill(r[6] || "None"),
+      `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, esc(r[7]) || "—", esc(r[10] || "Medium")],
+    manage: () => listEditor({
+      title: "Projects", arr: DATA.projects, section: "projects",
+      rowLabel: (r) => `${r[0]} — ${r[6] || "None"}`,
+      blank: () => ["", "Concept", 0, 0, 0, "Not Started", "None", "", 0, 0, "Medium"],
+      fields: (r) => [
+        { key: "name", label: "Project", type: "text", value: r[0], required: true },
+        { key: "bc", label: "Business case", type: "select", options: BUSINESS_CASE_STATES, value: r[6] || "None" },
+        { key: "funder", label: "Funder", type: "text", value: r[7] },
+        { key: "cofund", label: "Co-funding secured (R)", type: "number", value: r[8], min: 0 },
+        { key: "rdy", label: "Funding readiness %", type: "number", value: r[9], min: 0, max: 100 },
+        { key: "impact", label: "Expected impact", type: "select", options: IMPACT_RATINGS, value: r[10] || "Medium" },
+      ],
+      write: (r, o) => { r[0] = o.name; r[6] = o.bc; r[7] = o.funder; r[8] = parseFloat(o.cofund) || 0; r[9] = parseFloat(o.rdy) || 0; r[10] = o.impact; },
+    }),
+  });
+}
+function renderProjFunding(host) {
+  const p = DATA.projects;
+  const rows = p.map((r) => {
+    const checks = [
+      ["Business case", ["Complete", "Approved", "Funded"].includes(r[6])],
+      ["Budget defined", (+r[2] || 0) > 0],
+      ["Funder engaged", !!r[7]],
+      ["Co-funding secured", (+r[8] || 0) > 0],
+      ["Readiness ≥ 60%", (+r[9] || 0) >= 60],
+    ];
+    const met = checks.filter((c) => c[1]).length;
+    return { name: r[0], funder: r[7], readiness: +r[9] || 0, met, of: checks.length, checks };
+  });
+  const avg = rows.length ? Math.round(rows.reduce((s, r) => s + r.readiness, 0) / rows.length) : 0;
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Portfolio readiness", avg + "%", "Average across projects", avg >= 60 ? "good" : avg >= 35 ? "warning" : "critical")}
+      ${statTile("Funder-linked", rows.filter((r) => r.funder).length + " / " + rows.length, "Have a named funder", "")}
+      ${statTile("Fully ready", rows.filter((r) => r.met === r.of).length, "All checks met", rows.filter((r) => r.met === r.of).length ? "good" : "warning")}
+      ${statTile("Co-funding", fmtR(p.reduce((s, r) => s + (+r[8] || 0), 0)), "Secured across the pipeline", "")}
+    </div>
+    <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Funding readiness by project</h3>
+      <span class="hint">Computed from the project's business case, budget, funder and co-funding fields.</span></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Project</th><th>Funder</th><th class="num">Checks met</th><th style="min-width:180px;">Readiness</th></tr></thead>
+      <tbody>${rows.length ? rows.map((r) => {
+        const v = Math.round(r.met / r.of * 100);
+        return `<tr><td style="font-weight:600;">${esc(r.name)}</td><td>${esc(r.funder) || "—"}</td>
+          <td class="num mono">${r.met} / ${r.of}</td>
+          <td><div class="bar-track"><div class="bar-fill ${healthTone(v)}" style="width:${Math.max(3, v)}%"></div></div>
+          <span class="hint">${r.checks.filter((c) => !c[1]).map((c) => c[0]).join(", ") || "all met"}</span></td></tr>`;
+      }).join("") : emptyRow(4, "No projects yet.")}</tbody>
+    </table></div>`;
+}
+const MARKET_STATUSES = ["Exploring", "Negotiating", "Active", "Lapsed"];
+const AGREEMENT_STATES = ["None", "Verbal", "MOU", "Signed offtake"];
+function renderProjMarkets(host) {
+  const m = DATA.commercial.markets;
+  mountRegister(host, {
+    title: "Markets", importKey: "markets",
+    hint: "Buyers and channels for the CPA's produce, livestock and timber.",
+    stats: () => [
+      statTile("Market links", m.length, "On record", ""),
+      statTile("Active", m.filter((r) => r[6] === "Active").length, "Selling now", "good"),
+      statTile("With an agreement", m.filter((r) => ["MOU", "Signed offtake"].includes(r[5])).length, "MOU or signed offtake", ""),
+      statTile("Exploring", m.filter((r) => r[6] === "Exploring").length, "Early stage", ""),
+    ],
+    columns: [{ label: "Commodity" }, { label: "Buyer" }, { label: "Channel" }, { label: "Volume" }, { label: "Price basis" }, { label: "Agreement" }, { label: "Status" }],
+    rows: () => m,
+    empty: "No market links recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), esc(r[2]), esc(r[3]), esc(r[4]),
+      `<span class="pill ${["MOU", "Signed offtake"].includes(r[5]) ? "good" : "neutral"}">${esc(r[5])}</span>`, statusPill(r[6])],
+    manage: () => listEditor(COM_EDITORS.markets()),
+  });
+}
+const PARTNER_TYPES = ["Funder", "Technical", "Market", "Government", "NGO", "Other"];
+const PARTNER_STATUSES = ["Prospective", "Active", "Concluded", "Lapsed"];
+function renderProjPartnerships(host) {
+  const pt = DATA.commercial.partnerships;
+  mountRegister(host, {
+    title: "Partnerships", importKey: "partnerships",
+    hint: "Funders, technical partners, government and market relationships.",
+    stats: () => [
+      statTile("Partnerships", pt.length, "On record", ""),
+      statTile("Active", pt.filter((r) => r[5] === "Active").length, "", "good"),
+      statTile("Funders", pt.filter((r) => r[1] === "Funder" || r[1] === "Government").length, "Funding / government", ""),
+      statTile("Prospective", pt.filter((r) => r[5] === "Prospective").length, "In discussion", ""),
+    ],
+    columns: [{ label: "Partner" }, { label: "Type" }, { label: "Purpose" }, { label: "Start" }, { label: "End" }, { label: "Status" }],
+    rows: () => pt,
+    empty: "No partnerships recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+      `<span style="color:var(--ink-2);">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3])}</span>`, `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
+    manage: () => listEditor(COM_EDITORS.partnerships()),
+  });
+}
+const REVENUE_SOURCES = ["Lease", "Enterprise sales", "Grant", "Services", "Other"];
+function renderProjRevenue(host) {
+  const rv = DATA.commercial.revenue;
+  const recurring = rv.filter((r) => r[3] && r[4] === "Active").reduce((s, r) => s + (+r[2] || 0), 0);
+  const bySource = REVENUE_SOURCES.map((s) => ({ s, n: rv.filter((r) => r[1] === s && r[4] === "Active").reduce((a, r) => a + (+r[2] || 0), 0) })).filter((x) => x.n > 0);
+  mountRegister(host, {
+    title: "Revenue Streams", importKey: "revenue_streams",
+    hint: "How the CPA earns — leases, enterprise sales, grants and services.",
+    stats: () => [
+      statTile("Recurring revenue", fmtR(recurring), "Active & recurring, per year", "good"),
+      statTile("Streams", rv.filter((r) => r[4] === "Active").length + " active", rv.length + " total on record", ""),
+      statTile("Lease income", fmtR(rv.filter((r) => r[1] === "Lease" && r[4] === "Active").reduce((s, r) => s + (+r[2] || 0), 0)), "From land leases", ""),
+      statTile("Own vs grant", recurring || bySource.length ? "diversified" : "grant-reliant", "Recurring non-grant revenue " + (recurring ? "in place" : "absent"), recurring ? "good" : "critical"),
+    ],
+    columns: [{ label: "Stream" }, { label: "Source" }, { label: "Annual amount", cls: "num" }, { label: "Recurring" }, { label: "Status" }],
+    rows: () => rv,
+    empty: "No revenue streams recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+      `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, r[3] ? "Yes" : "One-off", statusPill(r[4])],
+    manage: () => listEditor(COM_EDITORS.revenue()),
+  });
+}
+function renderProjInvestment(host) {
+  const dom = DATA.score.domains.find((d) => d.name === "Investment readiness") || { achieved: 0, weight: 8 };
+  const crits = critFor("Investment readiness");
+  const p = DATA.projects;
+  const rv = DATA.commercial.revenue;
+  const ownRev = rv.filter((r) => r[1] !== "Grant" && r[4] === "Active").reduce((s, r) => s + (+r[2] || 0), 0);
+  const signals = [
+    ["Investment-readiness score", `${domainScore(dom)} / ${dom.weight}`, domainScore(dom) / dom.weight >= 0.6 ? "good" : "warning"],
+    ["Own (non-grant) recurring revenue", fmtR(ownRev), ownRev > 0 ? "good" : "critical"],
+    ["Projects with a complete business case", p.filter((r) => ["Complete", "Approved", "Funded"].includes(r[6])).length + " / " + p.length, ""],
+    ["Signed market agreements", DATA.commercial.markets.filter((r) => r[5] === "Signed offtake").length, ""],
+    ["Active partnerships", DATA.commercial.partnerships.filter((r) => r[5] === "Active").length, ""],
+  ];
+  host.innerHTML = `
+    <div class="grid grid-4">${signals.slice(0, 4).map((s) => statTile(s[0], s[1], "", s[2])).join("")}</div>
+    <div class="grid grid-2" style="margin-top:18px;">
+      <div class="card"><div class="card-head"><h3>Investment-readiness rubric</h3>
+        <button class="btn view-ok" data-goto="#/v/score" type="button">Open scorecard</button></div>
+        ${crits.length ? `<ul class="crit-list">${crits.map((c) => {
+          const cp = Math.round((+c.achieved || 0) / (c.weight || 1) * 100);
+          return `<li><span class="crit-name">${esc(c.name)}</span>
+            <span class="bar-track sm"><span class="bar-fill ${healthTone(cp)}" style="width:${Math.max(3, cp)}%"></span></span>
+            <span class="mono crit-val">${(+c.achieved || 0)}/${c.weight}</span></li>`;
+        }).join("")}</ul>` : `<p class="muted">Score this domain on Institutional Performance.</p>`}
+      </div>
+      <div class="card"><div class="card-head"><h3>Readiness signals</h3></div>
+        <table><tbody>${signals.map((s) => `<tr><td>${esc(s[0])}</td>
+          <td class="num mono" style="font-weight:600;">${esc(String(s[1]))}</td>
+          <td>${s[2] ? pill(s[2] === "good" ? "OK" : s[2] === "critical" ? "Gap" : "Watch", s[2]) : ""}</td></tr>`).join("")}</tbody></table>
+      </div>
+    </div>`;
+  host.querySelectorAll("[data-goto]").forEach((b) => (b.onclick = () => { location.hash = b.dataset.goto; }));
 }
 
 function renderImpact() {
@@ -2274,6 +2508,27 @@ const IMPORT = {
     make: (v) => [["Labour", "Inputs", "Harvest", "Sales"].includes(v.rtype) ? v.rtype : "Inputs", v.ent || "", v.period || "", v.desc,
       parseFloat(v.qty) || 0, v.unit || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0],
   },
+  markets: {
+    title: "markets", section: "markets", arr: () => DATA.commercial.markets,
+    targets: [{ k: "commodity", label: "Commodity", required: true }, { k: "buyer", label: "Buyer" }, { k: "channel", label: "Channel" },
+      { k: "volume", label: "Volume" }, { k: "price", label: "Price basis" }, { k: "agreement", label: "Agreement" }, { k: "status", label: "Status" }],
+    make: (v) => [v.commodity, v.buyer || "", v.channel || "Contract", v.volume || "", v.price || "",
+      ["None", "Verbal", "MOU", "Signed offtake"].includes(v.agreement) ? v.agreement : "None", v.status || "Exploring", ""],
+  },
+  partnerships: {
+    title: "partnerships", section: "partnerships", arr: () => DATA.commercial.partnerships,
+    targets: [{ k: "partner", label: "Partner", required: true }, { k: "ptype", label: "Type" }, { k: "purpose", label: "Purpose" },
+      { k: "start", label: "Start date" }, { k: "end", label: "End date" }, { k: "status", label: "Status" }],
+    make: (v) => [v.partner, ["Funder", "Technical", "Market", "Government", "NGO", "Other"].includes(v.ptype) ? v.ptype : "Technical",
+      v.purpose || "", v.start || "", v.end || "", v.status || "Active", ""],
+  },
+  revenue_streams: {
+    title: "revenue streams", section: "revenue_streams", arr: () => DATA.commercial.revenue,
+    targets: [{ k: "stream", label: "Stream", required: true }, { k: "source", label: "Source" }, { k: "amount", label: "Annual amount" },
+      { k: "recurring", label: "Recurring (Yes/No)" }, { k: "status", label: "Status" }],
+    make: (v) => [v.stream, ["Lease", "Enterprise sales", "Grant", "Services", "Other"].includes(v.source) ? v.source : "Enterprise sales",
+      parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, !/^n/i.test(v.recurring || "y"), v.status || "Active", ""],
+  },
   masterfile: {
     title: "master-file sections", section: "masterfile", arr: () => DATA.masterFile,
     targets: [{ k: "no", label: "Section no." }, { k: "name", label: "Name", required: true },
@@ -2638,6 +2893,55 @@ const PROD_EDITORS = {
   }),
 };
 
+/* listEditor configs — Commercialisation registers */
+const COM_EDITORS = {
+  markets: () => ({
+    title: "Markets", arr: DATA.commercial.markets, section: "markets",
+    rowLabel: (r) => `${r[0]} → ${r[1] || "?"} (${r[6]})`,
+    blank: () => ["", "", "Contract", "", "", "None", "Exploring", ""],
+    fields: (r) => [
+      { key: "commodity", label: "Commodity", type: "text", value: r[0], required: true },
+      { key: "buyer", label: "Buyer", type: "text", value: r[1] },
+      { key: "channel", label: "Channel", type: "select", options: ["Contract", "Spot", "Auction", "Local", "Export"], value: r[2] || "Contract" },
+      { key: "volume", label: "Volume", type: "text", value: r[3] },
+      { key: "price", label: "Price basis", type: "text", value: r[4] },
+      { key: "agreement", label: "Agreement", type: "select", options: AGREEMENT_STATES, value: r[5] },
+      { key: "status", label: "Status", type: "select", options: MARKET_STATUSES, value: r[6] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.commodity; r[1] = o.buyer; r[2] = o.channel; r[3] = o.volume; r[4] = o.price; r[5] = o.agreement; r[6] = o.status; r[7] = o.notes; },
+  }),
+  partnerships: () => ({
+    title: "Partnerships", arr: DATA.commercial.partnerships, section: "partnerships",
+    rowLabel: (r) => `${r[0]} (${r[1]}) — ${r[5]}`,
+    blank: () => ["", "Technical", "", "", "", "Active", ""],
+    fields: (r) => [
+      { key: "partner", label: "Partner", type: "text", value: r[0], required: true },
+      { key: "ptype", label: "Type", type: "select", options: PARTNER_TYPES, value: r[1] },
+      { key: "purpose", label: "Purpose", type: "textarea", value: r[2] },
+      { key: "start", label: "Start date", type: "date", value: r[3] },
+      { key: "end", label: "End date", type: "date", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: PARTNER_STATUSES, value: r[5] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.partner; r[1] = o.ptype; r[2] = o.purpose; r[3] = o.start; r[4] = o.end; r[5] = o.status; r[6] = o.notes; },
+  }),
+  revenue: () => ({
+    title: "Revenue streams", arr: DATA.commercial.revenue, section: "revenue_streams",
+    rowLabel: (r) => `${r[0]} — ${fmtR(r[2])}/yr`,
+    blank: () => ["", "Enterprise sales", 0, true, "Active", ""],
+    fields: (r) => [
+      { key: "stream", label: "Stream", type: "text", value: r[0], required: true },
+      { key: "source", label: "Source", type: "select", options: REVENUE_SOURCES, value: r[1] },
+      { key: "amount", label: "Annual amount (R)", type: "number", value: r[2], min: 0 },
+      { key: "recurring", label: "Recurring", type: "select", options: ["Yes", "No"], value: r[3] ? "Yes" : "No" },
+      { key: "status", label: "Status", type: "select", options: ["Projected", "Active", "Ended"], value: r[4] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[5] },
+    ],
+    write: (r, o) => { r[0] = o.stream; r[1] = o.source; r[2] = parseFloat(o.amount) || 0; r[3] = o.recurring === "Yes"; r[4] = o.status; r[5] = o.notes; },
+  }),
+};
+
 const BUTTONS = {
   "edit-identity-btn": editIdentity, "edit-journey-btn": editJourney,
   "edit-committee-btn": editCommittee, "add-action-btn": () => editAction(null), "edit-masterfile-btn": editMasterFile,
@@ -2843,11 +3147,10 @@ const VIEW_HTML = `
 
   <section class="view hidden" id="view-masterfile">
     <div class="grid grid-4" id="masterfile-stats"></div>
-    <div class="card-head" style="margin:20px 0 12px;"><h3 style="font-size:13px;">Master File Sections</h3>
+    <div class="card-head" style="margin:20px 0 12px;"><h3 style="font-size:13px;">The 11 Master File categories</h3>
       <span style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn view-ok" id="mf-general-btn" type="button">General documents</button>
-        <button class="btn" id="import-masterfile-btn" type="button">Import CSV</button>
-        <button class="btn" id="edit-masterfile-btn" type="button">Manage sections</button>
+        <button class="btn" id="edit-masterfile-btn" type="button">Set completeness</button>
       </span>
     </div>
     <div class="doc-grid" id="masterfile-grid"></div>
@@ -2869,15 +3172,8 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-projects">
-    <div class="grid grid-4" id="projects-stats"></div>
-    <div id="projects-toolbar" style="display:flex; justify-content:flex-end; gap:6px; margin-top:16px;">
-      <button class="btn" id="import-projects-btn" type="button">Import CSV</button>
-      <button class="btn primary" id="add-project-btn" type="button">+ Add project</button>
-    </div>
-    <div class="table-wrap" style="margin-top:10px;"><table>
-      <thead><tr><th>Project</th><th>Stage</th><th class="num">Budget (R)</th><th class="num">Spent (R)</th><th>Progress</th><th>Status</th><th aria-label="Row actions"></th></tr></thead>
-      <tbody id="projects-body"></tbody>
-    </table></div>
+    <div id="projects-subtabs"></div>
+    <div id="projects-body"></div>
   </section>
 
   <section class="view hidden" id="view-impact">
