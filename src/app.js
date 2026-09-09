@@ -20,6 +20,8 @@ const IC = {
   grid: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
   columns: '<path d="M4 21h16M6 21V9m4 12V6m4 15V9m4 12V6M3 9l9-6 9 6"/>',
   users: '<circle cx="9" cy="8" r="3"/><path d="M15 11a3 3 0 1 0 0-6M4 20c0-2.8 2.2-5 5-5s5 2.2 5 5M15 15c2.4 0 5 1.6 5 5"/>',
+  adm: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  hr: '<circle cx="12" cy="7" r="3.4"/><path d="M5 21c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/>',
   wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14h2"/>',
   cart: '<circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M3 4h2l2.4 12h11L21 8H6"/>',
   map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
@@ -54,6 +56,8 @@ const NAV = [
   { group: "Institution", items: [
     { id: "profile", label: "Governance", icon: "columns" },
     { id: "beneficiary", label: "Beneficiaries", icon: "users" },
+    { id: "administration", label: "Administration", icon: "adm" },
+    { id: "hr", label: "HR", icon: "hr" },
   ]},
   { group: "Resources", items: [
     { id: "finance", label: "Finance", icon: "wallet" },

@@ -48,6 +48,13 @@ export async function loadOrg(orgId) {
     sel("gov_meetings", "sort"),
     sel("gov_coi", "sort"),
     sel("gov_calendar", "sort"),
+    sel("admin_correspondence", "sort"),
+    sel("admin_doa", "sort"),
+    sel("admin_policies", "sort"),
+    sel("admin_records", "sort"),
+    sel("hr_staff", "sort"),
+    sel("hr_positions", "sort"),
+    sel("hr_payroll", "sort"),
     sel("actions", "created_at"),
     sel("masterfile_sections", "sort"),
     supabase.from("beneficiary_figures").select("*").eq("org_id", orgId).maybeSingle(),
@@ -82,7 +89,8 @@ export async function loadOrg(orgId) {
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
   const [org, gates, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
-         govCal, actions, mf, bene, beneReg, households, succession, beneDisputes,
+         govCal, adCorr, adDoa, adPol, adRec, hrStaff, hrPos, hrPay,
+         actions, mf, bene, beneReg, households, succession, beneDisputes,
          land, leases,
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
@@ -115,6 +123,24 @@ export async function loadOrg(orgId) {
       bands: BANDS,
     },
     committee: (committee || []).map((r) => tagArr([r.role, r.name, r.term || "", r.body || "EXCO"], r)),
+    admin: {
+      correspondence: (adCorr || []).map((r) => tagArr(
+        [r.ref || "", r.direction, r.corr_date || "", r.party || "", r.subject, r.channel || "", r.response_due || "", r.owner || "", r.status], r)),
+      doa: (adDoa || []).map((r) => tagArr(
+        [r.fn, r.category || "", r.threshold_text || "", r.approver || "", r.secondary_approver || "", r.board_ref || ""], r)),
+      policies: (adPol || []).map((r) => tagArr(
+        [r.title, r.category || "", r.version || "", r.adopted_on || "", r.review_due || "", r.owner || "", r.status], r)),
+      records: (adRec || []).map((r) => tagArr(
+        [r.series, r.description || "", r.medium, r.location || "", r.custodian || "", r.retention || "", r.status], r)),
+    },
+    hr: {
+      staff: (hrStaff || []).map((r) => tagArr(
+        [r.ref || "", r.full_name, r.position || "", r.employment_type, r.start_date || "", r.reports_to || "", r.salary_band || "", r.status], r)),
+      positions: (hrPos || []).map((r) => tagArr(
+        [r.title, r.department || "", r.reports_to || "", r.incumbent || "", num(r.headcount), r.status], r)),
+      payroll: (hrPay || []).map((r) => tagArr(
+        [r.period, num(r.headcount), num(r.gross), num(r.deductions), num(r.net), r.paye_ref || "", r.uif_ref || "", r.status], r)),
+    },
     governance: {
       committees: (govComm || []).map((r) => tagArr(
         [r.name, r.mandate || "", r.chair || "", num(r.members_count), r.cadence || "", r.status], r)),
@@ -363,6 +389,38 @@ export async function saveSection(orgId, section, D) {
     case "gov_calendar":
       return reconcile("gov_calendar", orgId, D.governance.calendar, (r, i) => ({
         item: r[0], category: r[1], due_date: nn(r[2]), recurrence: nn(r[3]), responsible: nn(r[4]), status: r[5], sort: i,
+      }));
+
+    case "admin_correspondence":
+      return reconcile("admin_correspondence", orgId, D.admin.correspondence, (r, i) => ({
+        ref: nn(r[0]), direction: r[1], corr_date: nn(r[2]), party: nn(r[3]), subject: r[4], channel: nn(r[5]),
+        response_due: nn(r[6]), owner: nn(r[7]), status: r[8], sort: i,
+      }));
+    case "admin_doa":
+      return reconcile("admin_doa", orgId, D.admin.doa, (r, i) => ({
+        fn: r[0], category: nn(r[1]), threshold_text: nn(r[2]), approver: nn(r[3]), secondary_approver: nn(r[4]), board_ref: nn(r[5]), sort: i,
+      }));
+    case "admin_policies":
+      return reconcile("admin_policies", orgId, D.admin.policies, (r, i) => ({
+        title: r[0], category: nn(r[1]), version: nn(r[2]), adopted_on: nn(r[3]), review_due: nn(r[4]), owner: nn(r[5]), status: r[6], sort: i,
+      }));
+    case "admin_records":
+      return reconcile("admin_records", orgId, D.admin.records, (r, i) => ({
+        series: r[0], description: nn(r[1]), medium: r[2], location: nn(r[3]), custodian: nn(r[4]), retention: nn(r[5]), status: r[6], sort: i,
+      }));
+    case "hr_staff":
+      return reconcile("hr_staff", orgId, D.hr.staff, (r, i) => ({
+        ref: nn(r[0]), full_name: r[1], position: nn(r[2]), employment_type: r[3], start_date: nn(r[4]),
+        reports_to: nn(r[5]), salary_band: nn(r[6]), status: r[7], sort: i,
+      }));
+    case "hr_positions":
+      return reconcile("hr_positions", orgId, D.hr.positions, (r, i) => ({
+        title: r[0], department: nn(r[1]), reports_to: nn(r[2]), incumbent: nn(r[3]), headcount: num(r[4]), status: r[5], sort: i,
+      }));
+    case "hr_payroll":
+      return reconcile("hr_payroll", orgId, D.hr.payroll, (r, i) => ({
+        period: r[0], headcount: num(r[1]), gross: num(r[2]), deductions: num(r[3]), net: num(r[4]),
+        paye_ref: nn(r[5]), uif_ref: nn(r[6]), status: r[7], sort: i,
       }));
 
     case "actions":

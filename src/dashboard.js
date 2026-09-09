@@ -26,10 +26,12 @@ const CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const STATUS_TONE = {
   "Completed": "good", "Verified": "good", "Active": "good", "On Track": "good", "Complete": "good", "Valid": "good", "Paid": "good",
   "Implemented": "good", "Adopted": "good", "Closed": "good", "Quorate": "good", "Managed": "good", "Recused": "good", "Done": "good",
+  "Adopted": "good", "Actioned": "good", "Filled": "good", "Approved": "good",
   "In Progress": "warning", "Pending": "warning", "Pending Verification": "warning", "Expiring Soon": "warning", "At Risk": "warning", "Under Renewal": "warning",
   "Open": "warning", "Draft": "warning", "Forming": "warning", "Upcoming": "warning", "Declared": "warning", "Scheduled": "warning",
+  "Under Review": "warning", "On leave": "warning", "Archived": "warning", "Frozen": "warning",
   "Overdue": "critical", "Disputed": "critical", "Delayed": "critical", "Vacant": "critical", "Inquorate": "critical", "Outstanding": "critical", "Expired": "critical",
-  "Not Started": "neutral",
+  "Not Started": "neutral", "Retired": "neutral", "Exited": "neutral", "Disposed": "neutral",
 };
 const MATURITY = [
   { name: "Critical", min: 0, max: 30 }, { name: "Foundational", min: 31, max: 50 },
@@ -47,6 +49,8 @@ export const NAV = [
   { id: "journey", label: "CPA360 Journey", group: "Performance", eyebrow: "Performance", title: "The CPA360™ Journey", sub: "Seven stages from Assess to Scale — where this CPA is, and what comes next." },
   { id: "profile", label: "Governance Centre", group: "Operations", eyebrow: "Operations", title: "Governance Centre", sub: "Institutional identity, EXCO and office bearers, committees, resolutions, meetings and the governance calendar." },
   { id: "beneficiary", label: "Beneficiary Centre", group: "Operations", eyebrow: "Operations", title: "Beneficiary Centre", sub: "The Master Beneficiary Register — verification, households, succession, deceased members and disputes." },
+  { id: "administration", label: "Administration", group: "Operations", eyebrow: "Operations", title: "Administration Centre", sub: "Correspondence, the delegation-of-authority matrix, policies & SOPs and the institutional records index." },
+  { id: "hr", label: "HR", group: "Operations", eyebrow: "Operations", title: "HR Centre", sub: "Staff register, positions and the organogram, and monthly payroll summaries." },
   { id: "finance", label: "Finance & Procurement", group: "Operations", eyebrow: "Operations", title: "Finance & Procurement", sub: "Budget, transactions, requisitions, purchase orders, suppliers, payments and procurement compliance." },
   { id: "assets", label: "Land & Assets", group: "Operations", eyebrow: "Operations", title: "Land & Assets", sub: "Land parcels, allocations, leases, permits, infrastructure, the asset register and maintenance." },
   { id: "productivity", label: "Productivity Centre", group: "Operations", eyebrow: "Operations", title: "Productivity Centre", sub: "Crops, orchards, timber, livestock, water, labour, inputs, harvest, sales and cost of production." },
@@ -1330,6 +1334,258 @@ function renderBeneEvidence(host) {
     "Certified IDs, proof of residence, verification meeting minutes and the signed beneficiary list.");
 }
 
+/* ============ Administration Centre ============ */
+const ADMIN_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "correspondence", label: "Correspondence" },
+  { id: "doa", label: "Delegation of Authority" },
+  { id: "policies", label: "Policies & SOPs" },
+  { id: "records", label: "Records Index" },
+];
+const ADMIN_PANELS = {
+  overview: renderAdminOverview, correspondence: renderAdminCorr, doa: renderAdminDoa,
+  policies: renderAdminPolicies, records: renderAdminRecords,
+};
+function renderAdministration() {
+  const strip = $("administration-subtabs");
+  strip.innerHTML = subtabStrip("administration", ADMIN_TABS);
+  wireSubtabs(strip);
+  (ADMIN_PANELS[SUBTAB.administration || "overview"] || renderAdminOverview)($("administration-body"));
+}
+function renderAdminOverview(host) {
+  const d = DATA.score.domains.find((x) => x.name === "Administration") || { achieved: 0, weight: 10 };
+  const crits = critFor("Administration");
+  const now = new Date();
+  const corrOpen = DATA.admin.correspondence.filter((r) => !["Closed"].includes(r[8])).length;
+  const polDue = DATA.admin.policies.filter((r) => r[4] && new Date(r[4]) < now).length;
+  const polDraft = DATA.admin.policies.filter((r) => ["Draft", "Under Review"].includes(r[6])).length;
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Administration Score", `${domainScore(d)} / ${d.weight}`, "Institutional Performance domain", "")}
+      ${statTile("Open correspondence", corrOpen, "Awaiting action or reply", corrOpen ? "warning" : "good")}
+      ${statTile("Policies & SOPs", DATA.admin.policies.length, `${polDraft} in draft / review`, polDraft ? "warning" : "good")}
+      ${statTile("Delegation lines", DATA.admin.doa.length, "In the authority matrix", "")}
+    </div>
+    ${polDue ? `<div class="callout" style="margin-top:14px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3.5 22 20H2z"/><path d="M12 10v4M12 17.2v.1"/></svg>
+      <div>${polDue} polic${polDue > 1 ? "ies are" : "y is"} past their review date. Open the Policies &amp; SOPs tab.</div></div>` : ""}
+    <div class="grid grid-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-head"><h3>Administration rubric</h3>
+          <button class="btn view-ok" data-goto="#/v/score" type="button">Score this domain</button></div>
+        ${crits.length ? `<ul class="crit-list">${crits.map((c) => {
+          const cp = Math.round((+c.achieved || 0) / (c.weight || 1) * 100);
+          return `<li><span class="crit-name">${esc(c.name)}</span>
+            <span class="bar-track sm"><span class="bar-fill ${healthTone(cp)}" style="width:${Math.max(3, cp)}%"></span></span>
+            <span class="mono crit-val">${(+c.achieved || 0)}/${c.weight}</span></li>`;
+        }).join("")}</ul>` : `<p class="muted">Score this domain on Institutional Performance.</p>`}
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Records at a glance</h3>
+          <button class="btn view-ok" data-goto="#/v/masterfile" type="button">Master File</button></div>
+        <dl class="kv">
+          <dt>Record series tracked</dt><dd>${DATA.admin.records.length}</dd>
+          <dt>Digital or hybrid</dt><dd>${DATA.admin.records.filter((r) => r[2] !== "Physical").length}</dd>
+          <dt>Archived series</dt><dd>${DATA.admin.records.filter((r) => r[6] === "Archived").length}</dd>
+        </dl>
+        <p class="hint" style="margin-top:10px;">The Records Index lists where each record series lives and who is responsible; the Master File holds the documents themselves.</p>
+      </div>
+    </div>`;
+}
+const CORR_STATUSES = ["Open", "Actioned", "Closed", "Overdue"];
+function renderAdminCorr(host) {
+  const c = DATA.admin.correspondence;
+  const now = new Date();
+  const overdue = c.filter((r) => r[8] === "Overdue" || (r[6] && new Date(r[6]) < now && r[8] !== "Closed")).length;
+  mountRegister(host, {
+    title: "Correspondence Register", importKey: "admin_correspondence",
+    hint: "Incoming and outgoing letters, notices and emails — and whether they've been dealt with.",
+    stats: () => [
+      statTile("Items", c.length, "This period", ""),
+      statTile("Open", c.filter((r) => r[8] === "Open").length, "Awaiting action", ""),
+      statTile("Overdue reply", overdue, "Past the response date", overdue ? "critical" : "good"),
+      statTile("Incoming / Outgoing", c.filter((r) => r[1] === "Incoming").length + " / " + c.filter((r) => r[1] === "Outgoing").length, "", ""),
+    ],
+    columns: [{ label: "Ref." }, { label: "Dir." }, { label: "Date" }, { label: "Party" }, { label: "Subject" }, { label: "Response due" }, { label: "Owner" }, { label: "Status" }],
+    rows: () => c,
+    empty: "No correspondence recorded.",
+    cell: (r) => {
+      const late = r[6] && new Date(r[6]) < now && r[8] !== "Closed";
+      return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
+        `<span class="pill ${r[1] === "Incoming" ? "neutral" : "brand"}">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`,
+        esc(r[3]), `<span style="min-width:200px;display:inline-block;">${esc(r[4])}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[6])}</span>`, esc(r[7]), statusPill(r[8])];
+    },
+    manage: () => listEditor(ADMIN_EDITORS.correspondence()),
+  });
+}
+function renderAdminDoa(host) {
+  mountRegister(host, {
+    title: "Delegation of Authority Matrix", importKey: "admin_doa",
+    hint: "Who may approve what, and up to what value — the CPA's authorisation framework.",
+    columns: [{ label: "Function / decision" }, { label: "Category" }, { label: "Threshold" }, { label: "Approver" }, { label: "Secondary" }, { label: "Reference" }],
+    rows: () => DATA.admin.doa,
+    empty: "No delegation lines recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+      esc(r[2]), esc(r[3]), esc(r[4]) || "—", `<span class="mono" style="color:var(--ink-muted);">${esc(r[5])}</span>`],
+    manage: () => listEditor(ADMIN_EDITORS.doa()),
+  });
+}
+const POLICY_STATUSES = ["Draft", "Adopted", "Under Review", "Retired"];
+function renderAdminPolicies(host) {
+  const p = DATA.admin.policies;
+  const now = new Date();
+  const due = p.filter((r) => r[4] && new Date(r[4]) < now).length;
+  mountRegister(host, {
+    title: "Policies & SOPs", importKey: "admin_policies",
+    hint: "The institutional policy framework — versions, adoption and review dates.",
+    stats: () => [
+      statTile("Policies", p.length, "On the register", ""),
+      statTile("Adopted", p.filter((r) => r[6] === "Adopted").length, "In force", "good"),
+      statTile("Draft / under review", p.filter((r) => ["Draft", "Under Review"].includes(r[6])).length, "Not yet in force", ""),
+      statTile("Review overdue", due, "Past the review date", due ? "critical" : "good"),
+    ],
+    columns: [{ label: "Policy / SOP" }, { label: "Category" }, { label: "Version" }, { label: "Adopted" }, { label: "Review due" }, { label: "Owner" }, { label: "Status" }],
+    rows: () => p,
+    empty: "No policies recorded.",
+    cell: (r) => {
+      const late = r[4] && new Date(r[4]) < now;
+      return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+        `<span class="mono">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3]) || "—"}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[4]) || "—"}</span>`, esc(r[5]), statusPill(r[6])];
+    },
+    manage: () => listEditor(ADMIN_EDITORS.policies()),
+  });
+}
+const MEDIA = ["Physical", "Digital", "Both"];
+const RECORD_STATUSES = ["Current", "Archived", "Disposed"];
+function renderAdminRecords(host) {
+  mountRegister(host, {
+    title: "Institutional Records Index", importKey: "admin_records",
+    hint: "Every record series — where it lives, who keeps it, and how long it's retained.",
+    columns: [{ label: "Record series" }, { label: "Contents" }, { label: "Medium" }, { label: "Location" }, { label: "Custodian" }, { label: "Retention" }, { label: "Status" }],
+    rows: () => DATA.admin.records,
+    empty: "No record series recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span style="color:var(--ink-2);">${esc(r[1])}</span>`,
+      `<span class="pill neutral">${esc(r[2])}</span>`, esc(r[3]), esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
+    manage: () => listEditor(ADMIN_EDITORS.records()),
+  });
+}
+
+/* ============ HR Centre ============ */
+const HR_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "staff", label: "Staff" },
+  { id: "positions", label: "Positions" },
+  { id: "payroll", label: "Payroll" },
+  { id: "records", label: "HR Records" },
+];
+const HR_PANELS = { overview: renderHrOverview, staff: renderHrStaff, positions: renderHrPositions, payroll: renderHrPayroll, records: renderHrRecords };
+function renderHR() {
+  const strip = $("hr-subtabs");
+  strip.innerHTML = subtabStrip("hr", HR_TABS);
+  wireSubtabs(strip);
+  (HR_PANELS[SUBTAB.hr || "overview"] || renderHrOverview)($("hr-body"));
+}
+function renderHrOverview(host) {
+  const s = DATA.hr.staff, pos = DATA.hr.positions, pay = DATA.hr.payroll;
+  const active = s.filter((r) => r[7] === "Active" || r[7] === "On leave");
+  const vac = pos.filter((r) => r[5] === "Vacant").length;
+  const latest = pay[pay.length - 1];
+  const byType = ["Permanent", "Fixed-term", "Seasonal", "Contractor"].map((t) => ({ t, n: active.filter((r) => r[3] === t).length })).filter((x) => x.n);
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Active staff", active.length, `${s.filter((r) => r[7] === "On leave").length} on leave`, "")}
+      ${statTile("Positions", pos.length, `${vac} vacant`, vac ? "warning" : "good")}
+      ${statTile("Latest payroll (net)", latest ? fmtR(latest[4]) : "—", latest ? `${esc(latest[0])} · ${esc(latest[7])}` : "No runs recorded", latest && latest[7] === "Paid" ? "good" : "warning")}
+      ${statTile("Permanent share", active.length ? fmtPct(active.filter((r) => r[3] === "Permanent").length / active.length * 100) : "—", "of the active workforce", "")}
+    </div>
+    <div class="grid grid-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-head"><h3>Workforce composition</h3></div>
+        ${byType.length ? barRows(byType.map((x) => ({ label: x.t, value: x.n, max: Math.max(1, ...byType.map((y) => y.n)) })),
+          { fmtVal: (it) => it.value + "" }) : `<p class="muted">No active staff recorded.</p>`}
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>HR documents</h3>
+          <button class="btn view-ok" data-goto="#/v/hr/records" type="button">Open HR Records</button></div>
+        <dl class="kv">
+          <dt>Employment contracts</dt><dd>Filed per staff member in HR Records</dd>
+          <dt>HR policy</dt><dd>${esc((DATA.admin.policies.find((r) => r[1] === "HR") || [null, null, null, null, null, null, "not yet drafted"])[6])}</dd>
+          <dt>Master File — HR</dt><dd>${(DATA.masterFile.find((m) => m[1] === "HR") || [null, null, null, 0])[3]}% complete</dd>
+        </dl>
+      </div>
+    </div>`;
+}
+const EMP_TYPES = ["Permanent", "Fixed-term", "Seasonal", "Contractor"];
+const STAFF_STATUSES = ["Active", "On leave", "Exited"];
+function renderHrStaff(host) {
+  const s = DATA.hr.staff;
+  mountRegister(host, {
+    title: "Staff Register", importKey: "hr_staff",
+    hint: "Everyone the CPA employs or contracts — role, employment basis and status.",
+    stats: () => [
+      statTile("On the register", s.length, "All records", ""),
+      statTile("Active", s.filter((r) => r[7] === "Active").length, "Currently working", "good"),
+      statTile("On leave", s.filter((r) => r[7] === "On leave").length, "", ""),
+      statTile("Exited", s.filter((r) => r[7] === "Exited").length, "Historic", ""),
+    ],
+    columns: [{ label: "Ref." }, { label: "Name" }, { label: "Position" }, { label: "Type" }, { label: "Start" }, { label: "Reports to" }, { label: "Band" }, { label: "Status" }],
+    rows: () => s,
+    empty: "No staff recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+      esc(r[2]), `<span class="pill neutral">${esc(r[3])}</span>`, `<span class="mono">${esc(r[4])}</span>`, esc(r[5]), `<span class="mono">${esc(r[6])}</span>`, statusPill(r[7])],
+    manage: () => listEditor(HR_EDITORS.staff()),
+  });
+}
+const POS_STATUSES = ["Filled", "Vacant", "Frozen"];
+function renderHrPositions(host) {
+  const p = DATA.hr.positions;
+  const hc = p.reduce((s, r) => s + (r[5] === "Filled" ? (+r[4] || 0) : 0), 0);
+  mountRegister(host, {
+    title: "Positions & Organogram", importKey: "hr_positions",
+    hint: "The establishment — every position, who it reports to, and whether it's filled.",
+    stats: () => [
+      statTile("Positions", p.length, "In the establishment", ""),
+      statTile("Filled", p.filter((r) => r[5] === "Filled").length, `${hc} budgeted heads`, "good"),
+      statTile("Vacant", p.filter((r) => r[5] === "Vacant").length, "To recruit", p.filter((r) => r[5] === "Vacant").length ? "warning" : "good"),
+      statTile("Frozen", p.filter((r) => r[5] === "Frozen").length, "On hold", ""),
+    ],
+    columns: [{ label: "Position" }, { label: "Department" }, { label: "Reports to" }, { label: "Incumbent" }, { label: "Heads", cls: "num" }, { label: "Status" }],
+    rows: () => p,
+    empty: "No positions recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), esc(r[2]), esc(r[3]) || "—",
+      `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
+    manage: () => listEditor(HR_EDITORS.positions()),
+  });
+}
+const PAYROLL_STATUSES = ["Draft", "Approved", "Paid"];
+function renderHrPayroll(host) {
+  const p = DATA.hr.payroll;
+  const ytd = p.filter((r) => r[7] === "Paid").reduce((s, r) => s + (+r[4] || 0), 0);
+  mountRegister(host, {
+    title: "Payroll Summaries", importKey: "hr_payroll",
+    hint: "Monthly payroll totals and the statutory references — not individual pay slips.",
+    stats: () => [
+      statTile("Runs recorded", p.length, "This year", ""),
+      statTile("Net paid (YTD)", fmtR(ytd), p.filter((r) => r[7] === "Paid").length + " runs settled", "good"),
+      statTile("Awaiting approval", p.filter((r) => r[7] === "Draft").length, "Draft runs", p.filter((r) => r[7] === "Draft").length ? "warning" : "good"),
+      statTile("Latest headcount", p.length ? p[p.length - 1][1] : 0, "On the last run", ""),
+    ],
+    columns: [{ label: "Period" }, { label: "Heads", cls: "num" }, { label: "Gross", cls: "num" }, { label: "Deductions", cls: "num" }, { label: "Net", cls: "num" }, { label: "PAYE ref" }, { label: "UIF ref" }, { label: "Status" }],
+    rows: () => p,
+    empty: "No payroll runs recorded.",
+    cell: (r) => [`<span class="mono" style="font-weight:600;">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`,
+      `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`,
+      `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, `<span class="mono">${esc(r[5])}</span>`, `<span class="mono">${esc(r[6])}</span>`, statusPill(r[7])],
+    manage: () => listEditor(HR_EDITORS.payroll()),
+  });
+}
+function renderHrRecords(host) {
+  mountFileList(host, "hr", null, "HR Records",
+    "Employment contracts, the HR policy, leave records, disciplinary records and the organogram.");
+}
+
 const ASSET_TABS = [
   { id: "parcels", label: "Land Parcels" },
   { id: "allocations", label: "Allocations" },
@@ -2402,8 +2658,8 @@ function comingSoon(title, items, foot) {
 
 const RENDERERS = {
   exec: renderExec, score: renderScore, journey: renderJourney,
-  profile: renderProfile, beneficiary: renderBeneficiary, finance: renderFinance,
-  assets: renderAssets, productivity: renderProductivity, projects: renderProjects,
+  profile: renderProfile, beneficiary: renderBeneficiary, administration: renderAdministration, hr: renderHR,
+  finance: renderFinance, assets: renderAssets, productivity: renderProductivity, projects: renderProjects,
   masterfile: renderMasterFile, actions: renderActions, impact: renderImpact,
 };
 
@@ -2573,6 +2829,53 @@ const IMPORT = {
       { k: "recurring", label: "Recurring (Yes/No)" }, { k: "status", label: "Status" }],
     make: (v) => [v.stream, ["Lease", "Enterprise sales", "Grant", "Services", "Other"].includes(v.source) ? v.source : "Enterprise sales",
       parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, !/^n/i.test(v.recurring || "y"), v.status || "Active", ""],
+  },
+  admin_correspondence: {
+    title: "correspondence", section: "admin_correspondence", arr: () => DATA.admin.correspondence,
+    targets: [{ k: "ref", label: "Ref" }, { k: "dir", label: "Direction" }, { k: "date", label: "Date" }, { k: "party", label: "Party" },
+      { k: "subject", label: "Subject", required: true }, { k: "channel", label: "Channel" }, { k: "due", label: "Response due" }, { k: "owner", label: "Owner" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", /^o/i.test(v.dir || "") ? "Outgoing" : "Incoming", v.date || "", v.party || "", v.subject,
+      v.channel || "Email", v.due || "", v.owner || "", CORR_STATUSES.includes(v.status) ? v.status : "Open"],
+  },
+  admin_doa: {
+    title: "delegation of authority", section: "admin_doa", arr: () => DATA.admin.doa,
+    targets: [{ k: "fn", label: "Function", required: true }, { k: "cat", label: "Category" }, { k: "thr", label: "Threshold" },
+      { k: "app", label: "Approver" }, { k: "sec", label: "Secondary approver" }, { k: "ref", label: "Reference" }],
+    make: (v) => [v.fn, v.cat || "Finance", v.thr || "", v.app || "", v.sec || "", v.ref || ""],
+  },
+  admin_policies: {
+    title: "policies & SOPs", section: "admin_policies", arr: () => DATA.admin.policies,
+    targets: [{ k: "title", label: "Title", required: true }, { k: "cat", label: "Category" }, { k: "ver", label: "Version" },
+      { k: "adopted", label: "Adopted on" }, { k: "review", label: "Review due" }, { k: "owner", label: "Owner" }, { k: "status", label: "Status" }],
+    make: (v) => [v.title, v.cat || "", v.ver || "", v.adopted || "", v.review || "", v.owner || "", POLICY_STATUSES.includes(v.status) ? v.status : "Draft"],
+  },
+  admin_records: {
+    title: "records index", section: "admin_records", arr: () => DATA.admin.records,
+    targets: [{ k: "series", label: "Record series", required: true }, { k: "desc", label: "Contents" }, { k: "medium", label: "Medium" },
+      { k: "loc", label: "Location" }, { k: "cust", label: "Custodian" }, { k: "ret", label: "Retention" }, { k: "status", label: "Status" }],
+    make: (v) => [v.series, v.desc || "", MEDIA.includes(v.medium) ? v.medium : "Digital", v.loc || "", v.cust || "", v.ret || "",
+      RECORD_STATUSES.includes(v.status) ? v.status : "Current"],
+  },
+  hr_staff: {
+    title: "staff", section: "hr_staff", arr: () => DATA.hr.staff,
+    targets: [{ k: "ref", label: "Ref" }, { k: "name", label: "Full name", required: true }, { k: "pos", label: "Position" },
+      { k: "type", label: "Employment type" }, { k: "start", label: "Start date" }, { k: "reports", label: "Reports to" }, { k: "band", label: "Salary band" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", v.name, v.pos || "", EMP_TYPES.includes(v.type) ? v.type : "Permanent", v.start || "", v.reports || "", v.band || "",
+      STAFF_STATUSES.includes(v.status) ? v.status : "Active"],
+  },
+  hr_positions: {
+    title: "positions", section: "hr_positions", arr: () => DATA.hr.positions,
+    targets: [{ k: "title", label: "Position", required: true }, { k: "dept", label: "Department" }, { k: "reports", label: "Reports to" },
+      { k: "inc", label: "Incumbent" }, { k: "hc", label: "Heads" }, { k: "status", label: "Status" }],
+    make: (v) => [v.title, v.dept || "", v.reports || "", v.inc || "", parseFloat(v.hc) || 1, POS_STATUSES.includes(v.status) ? v.status : "Vacant"],
+  },
+  hr_payroll: {
+    title: "payroll", section: "hr_payroll", arr: () => DATA.hr.payroll,
+    targets: [{ k: "period", label: "Period", required: true }, { k: "hc", label: "Headcount" }, { k: "gross", label: "Gross" },
+      { k: "ded", label: "Deductions" }, { k: "net", label: "Net" }, { k: "paye", label: "PAYE ref" }, { k: "uif", label: "UIF ref" }, { k: "status", label: "Status" }],
+    make: (v) => [v.period, parseFloat(v.hc) || 0, parseFloat((v.gross || "").replace(/[^\d.-]/g, "")) || 0,
+      parseFloat((v.ded || "").replace(/[^\d.-]/g, "")) || 0, parseFloat((v.net || "").replace(/[^\d.-]/g, "")) || 0,
+      v.paye || "", v.uif || "", PAYROLL_STATUSES.includes(v.status) ? v.status : "Draft"],
   },
   masterfile: {
     title: "master-file sections", section: "masterfile", arr: () => DATA.masterFile,
@@ -2987,6 +3290,119 @@ const COM_EDITORS = {
   }),
 };
 
+/* listEditor configs — Administration + HR */
+const ADMIN_EDITORS = {
+  correspondence: () => ({
+    title: "Correspondence", arr: DATA.admin.correspondence, section: "admin_correspondence",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${(r[4] || "").slice(0, 44)}`,
+    blank: () => ["", "Incoming", new Date().toISOString().slice(0, 10), "", "", "Email", "", "", "Open"],
+    fields: (r) => [
+      { key: "ref", label: "Reference", type: "text", value: r[0] },
+      { key: "dir", label: "Direction", type: "select", options: ["Incoming", "Outgoing"], value: r[1] },
+      { key: "date", label: "Date", type: "date", value: r[2] },
+      { key: "party", label: "Party", type: "text", value: r[3] },
+      { key: "subject", label: "Subject", type: "text", value: r[4], required: true },
+      { key: "channel", label: "Channel", type: "select", options: ["Email", "Letter", "Hand delivery", "Fax", "Other"], value: r[5] || "Email" },
+      { key: "due", label: "Response due", type: "date", value: r[6] },
+      { key: "owner", label: "Owner", type: "text", value: r[7] },
+      { key: "status", label: "Status", type: "select", options: CORR_STATUSES, value: r[8] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.dir; r[2] = o.date; r[3] = o.party; r[4] = o.subject; r[5] = o.channel; r[6] = o.due; r[7] = o.owner; r[8] = o.status; },
+  }),
+  doa: () => ({
+    title: "Delegation of authority", arr: DATA.admin.doa, section: "admin_doa",
+    rowLabel: (r) => `${r[0]} (${r[2] || "any"}) → ${r[3] || "?"}`,
+    blank: () => ["", "Finance", "", "", "", ""],
+    fields: (r) => [
+      { key: "fn", label: "Function / decision", type: "text", value: r[0], required: true },
+      { key: "cat", label: "Category", type: "select", options: ["Finance", "Land", "HR", "Beneficiary", "Governance", "Projects", "Other"], value: r[1] || "Finance" },
+      { key: "thr", label: "Threshold (e.g. “up to R25 000”)", type: "text", value: r[2] },
+      { key: "app", label: "Approver", type: "text", value: r[3] },
+      { key: "sec", label: "Secondary approver", type: "text", value: r[4] },
+      { key: "ref", label: "Policy / resolution reference", type: "text", value: r[5] },
+    ],
+    write: (r, o) => { r[0] = o.fn; r[1] = o.cat; r[2] = o.thr; r[3] = o.app; r[4] = o.sec; r[5] = o.ref; },
+  }),
+  policies: () => ({
+    title: "Policies & SOPs", arr: DATA.admin.policies, section: "admin_policies",
+    rowLabel: (r) => `${r[0]} — ${r[6]}`,
+    blank: () => ["", "Governance", "v1.0", "", "", "", "Draft"],
+    fields: (r) => [
+      { key: "title", label: "Policy / SOP title", type: "text", value: r[0], required: true },
+      { key: "cat", label: "Category", type: "text", value: r[1] },
+      { key: "ver", label: "Version", type: "text", value: r[2] },
+      { key: "adopted", label: "Adopted on", type: "date", value: r[3] },
+      { key: "review", label: "Review due", type: "date", value: r[4] },
+      { key: "owner", label: "Owner", type: "text", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: POLICY_STATUSES, value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.title; r[1] = o.cat; r[2] = o.ver; r[3] = o.adopted; r[4] = o.review; r[5] = o.owner; r[6] = o.status; },
+  }),
+  records: () => ({
+    title: "Records index", arr: DATA.admin.records, section: "admin_records",
+    rowLabel: (r) => `${r[0]} — ${r[6]}`,
+    blank: () => ["", "", "Digital", "", "", "", "Current"],
+    fields: (r) => [
+      { key: "series", label: "Record series", type: "text", value: r[0], required: true },
+      { key: "desc", label: "What it contains", type: "textarea", value: r[1] },
+      { key: "medium", label: "Medium", type: "select", options: MEDIA, value: r[2] },
+      { key: "loc", label: "Location", type: "text", value: r[3] },
+      { key: "cust", label: "Custodian", type: "text", value: r[4] },
+      { key: "ret", label: "Retention period", type: "text", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: RECORD_STATUSES, value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.series; r[1] = o.desc; r[2] = o.medium; r[3] = o.loc; r[4] = o.cust; r[5] = o.ret; r[6] = o.status; },
+  }),
+};
+const HR_EDITORS = {
+  staff: () => ({
+    title: "Staff register", arr: DATA.hr.staff, section: "hr_staff",
+    rowLabel: (r) => `${r[1]} — ${r[2] || "?"} (${r[7]})`,
+    blank: () => ["", "", "", "Permanent", "", "", "", "Active"],
+    fields: (r) => [
+      { key: "ref", label: "Employee ref.", type: "text", value: r[0] },
+      { key: "name", label: "Full name", type: "text", value: r[1], required: true },
+      { key: "pos", label: "Position", type: "text", value: r[2] },
+      { key: "type", label: "Employment type", type: "select", options: EMP_TYPES, value: r[3] },
+      { key: "start", label: "Start date", type: "date", value: r[4] },
+      { key: "reports", label: "Reports to", type: "text", value: r[5] },
+      { key: "band", label: "Salary band", type: "text", value: r[6] },
+      { key: "status", label: "Status", type: "select", options: STAFF_STATUSES, value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.name; r[2] = o.pos; r[3] = o.type; r[4] = o.start; r[5] = o.reports; r[6] = o.band; r[7] = o.status; },
+  }),
+  positions: () => ({
+    title: "Positions", arr: DATA.hr.positions, section: "hr_positions",
+    rowLabel: (r) => `${r[0]} — ${r[5]}`,
+    blank: () => ["", "", "", "", 1, "Vacant"],
+    fields: (r) => [
+      { key: "title", label: "Position title", type: "text", value: r[0], required: true },
+      { key: "dept", label: "Department", type: "text", value: r[1] },
+      { key: "reports", label: "Reports to", type: "text", value: r[2] },
+      { key: "inc", label: "Incumbent", type: "text", value: r[3] },
+      { key: "hc", label: "Budgeted heads", type: "number", value: r[4], min: 0 },
+      { key: "status", label: "Status", type: "select", options: POS_STATUSES, value: r[5] },
+    ],
+    write: (r, o) => { r[0] = o.title; r[1] = o.dept; r[2] = o.reports; r[3] = o.inc; r[4] = parseFloat(o.hc) || 0; r[5] = o.status; },
+  }),
+  payroll: () => ({
+    title: "Payroll summaries", arr: DATA.hr.payroll, section: "hr_payroll",
+    rowLabel: (r) => `${r[0]} — ${fmtR(r[4])} (${r[7]})`,
+    blank: () => [new Date().toISOString().slice(0, 7), 0, 0, 0, 0, "", "", "Draft"],
+    fields: (r) => [
+      { key: "period", label: "Period (YYYY-MM)", type: "text", value: r[0], required: true },
+      { key: "hc", label: "Headcount", type: "number", value: r[1], min: 0 },
+      { key: "gross", label: "Gross (R)", type: "number", value: r[2], min: 0 },
+      { key: "ded", label: "Deductions (R)", type: "number", value: r[3], min: 0 },
+      { key: "net", label: "Net paid (R)", type: "number", value: r[4], min: 0 },
+      { key: "paye", label: "PAYE reference", type: "text", value: r[5] },
+      { key: "uif", label: "UIF reference", type: "text", value: r[6] },
+      { key: "status", label: "Status", type: "select", options: PAYROLL_STATUSES, value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.period; r[1] = parseFloat(o.hc) || 0; r[2] = parseFloat(o.gross) || 0; r[3] = parseFloat(o.ded) || 0; r[4] = parseFloat(o.net) || 0; r[5] = o.paye; r[6] = o.uif; r[7] = o.status; },
+  }),
+};
+
 const BUTTONS = {
   "edit-identity-btn": editIdentity, "edit-journey-btn": editJourney,
   "edit-committee-btn": editCommittee, "add-action-btn": () => editAction(null), "edit-masterfile-btn": editMasterFile,
@@ -3285,6 +3701,16 @@ const VIEW_HTML = `
   <section class="view hidden" id="view-beneficiary">
     <div id="beneficiary-subtabs"></div>
     <div id="beneficiary-body"></div>
+  </section>
+
+  <section class="view hidden" id="view-administration">
+    <div id="administration-subtabs"></div>
+    <div id="administration-body"></div>
+  </section>
+
+  <section class="view hidden" id="view-hr">
+    <div id="hr-subtabs"></div>
+    <div id="hr-body"></div>
   </section>
 
   <section class="view hidden" id="view-assets">
