@@ -46,6 +46,8 @@ export async function loadOrg(orgId) {
     sel("masterfile_sections", "sort"),
     supabase.from("beneficiary_figures").select("*").eq("org_id", orgId).maybeSingle(),
     sel("land_portions", "sort"),
+    sel("land_leases", "sort"),
+    sel("land_allocations", "sort"),
     sel("movable_assets", "sort"),
     sel("permits", "sort"),
     supabase.from("finance_figures").select("*").eq("org_id", orgId).maybeSingle(),
@@ -56,8 +58,9 @@ export async function loadOrg(orgId) {
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
-  const [org, gates, domains, committee, actions, mf, bene, land, movable,
-         permits, fin, cats, projects, impact, docs] = results.map((r) => r.data);
+  const [org, gates, domains, committee, actions, mf, bene, land, leases,
+         allocations, movable, permits, fin, cats, projects, impact, docs] =
+    results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
   const docCounts = {};
@@ -93,6 +96,10 @@ export async function loadOrg(orgId) {
       : { ...EMPTY_BENE },
     assets: {
       land: (land || []).map((r) => tagArr([r.portion, r.primary_use || "", num(r.extent_ha), r.lease || "", r.status], r)),
+      leases: (leases || []).map((r) => tagArr(
+        [r.party, r.portion || "", r.land_use || "", num(r.area_ha), r.start_date || "", r.end_date || "", num(r.rental), r.status], r)),
+      allocations: (allocations || []).map((r) => tagArr(
+        [r.beneficiary, r.portion || "", r.purpose || "", num(r.area_ha), r.allocated_on || "", r.agreement_ref || "", r.status], r)),
       movable: (movable || []).map((r) => tagArr([r.asset_class, num(r.item_count), r.condition || ""], r)),
       permits: (permits || []).map((r) => tagArr([r.name, r.valid_until || "", r.status], r)),
     },
@@ -248,6 +255,16 @@ export async function saveSection(orgId, section, D) {
     case "land":
       return reconcile("land_portions", orgId, D.assets.land, (r, i) => ({
         portion: r[0], primary_use: nn(r[1]), extent_ha: num(r[2]), lease: nn(r[3]), status: r[4], sort: i,
+      }));
+    case "leases":
+      return reconcile("land_leases", orgId, D.assets.leases, (r, i) => ({
+        party: r[0], portion: nn(r[1]), land_use: nn(r[2]), area_ha: num(r[3]),
+        start_date: nn(r[4]), end_date: nn(r[5]), rental: num(r[6]), status: r[7], sort: i,
+      }));
+    case "allocations":
+      return reconcile("land_allocations", orgId, D.assets.allocations, (r, i) => ({
+        beneficiary: r[0], portion: nn(r[1]), purpose: nn(r[2]), area_ha: num(r[3]),
+        allocated_on: nn(r[4]), agreement_ref: nn(r[5]), status: r[6], sort: i,
       }));
     case "movable":
       return reconcile("movable_assets", orgId, D.assets.movable, (r, i) => ({

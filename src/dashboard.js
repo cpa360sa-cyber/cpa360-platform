@@ -596,6 +596,47 @@ function editLand() {
     write: (r, o) => { r[0] = o.portion; r[1] = o.use; r[2] = parseFloat(o.ha) || 0; r[3] = o.lease; r[4] = o.status; },
   });
 }
+function editLeases() {
+  listEditor({
+    title: "Land leases", arr: DATA.assets.leases, section: "leases",
+    rowLabel: (r) => `${r[0] || "—"} — ${r[1] || "—"} (${(+r[3] || 0).toLocaleString()} ha)`,
+    blank: () => ["", "", "", 0, "", "", 0, "Active"],
+    fields: (r) => [
+      { key: "party", label: "Lessee / party", type: "text", value: r[0], required: true },
+      { key: "portion", label: "Land / portion", type: "text", value: r[1] },
+      { key: "use", label: "Land use", type: "text", value: r[2] },
+      { key: "ha", label: "Area (ha)", type: "number", value: r[3], min: 0 },
+      { key: "start", label: "Start date", type: "text", value: r[4] },
+      { key: "end", label: "End date", type: "text", value: r[5] },
+      { key: "rental", label: "Annual rental (R)", type: "number", value: r[6], min: 0 },
+      { key: "status", label: "Status", type: "select", options: ["Active", "Under Negotiation", "Expiring Soon", "Expired", "Terminated"], value: r[7] },
+    ],
+    write: (r, o) => {
+      r[0] = o.party; r[1] = o.portion; r[2] = o.use; r[3] = parseFloat(o.ha) || 0;
+      r[4] = o.start; r[5] = o.end; r[6] = parseFloat(o.rental) || 0; r[7] = o.status;
+    },
+  });
+}
+function editAllocations() {
+  listEditor({
+    title: "Land allocated to beneficiaries", arr: DATA.assets.allocations, section: "allocations",
+    rowLabel: (r) => `${r[0] || "—"} — ${r[1] || "—"} (${(+r[3] || 0).toLocaleString()} ha)`,
+    blank: () => ["", "", "", 0, "", "", "Active"],
+    fields: (r) => [
+      { key: "beneficiary", label: "Beneficiary / household", type: "text", value: r[0], required: true },
+      { key: "portion", label: "Land / portion", type: "text", value: r[1] },
+      { key: "purpose", label: "Purpose", type: "text", value: r[2] },
+      { key: "ha", label: "Area (ha)", type: "number", value: r[3], min: 0 },
+      { key: "date", label: "Allocated on", type: "text", value: r[4] },
+      { key: "ref", label: "Agreement ref.", type: "text", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: ["Active", "Pending", "Under Dispute", "Revoked"], value: r[6] },
+    ],
+    write: (r, o) => {
+      r[0] = o.beneficiary; r[1] = o.portion; r[2] = o.purpose; r[3] = parseFloat(o.ha) || 0;
+      r[4] = o.date; r[5] = o.ref; r[6] = o.status;
+    },
+  });
+}
 function editMovable() {
   listEditor({
     title: "Movable assets", arr: DATA.assets.movable, section: "movable",
@@ -903,11 +944,15 @@ function renderBeneficiary() {
 function renderAssets() {
   const a = DATA.assets;
   const active = a.land.filter((r) => r[4] === "Active").length;
+  const leases = a.leases || [];
+  const alloc = a.allocations || [];
+  const leaseAlert = leases.filter((r) => ["Expiring Soon", "Expired", "Under Negotiation"].includes(r[7])).length;
+  const allocHa = alloc.reduce((s, r) => s + (+r[3] || 0), 0);
   $("assets-stats").innerHTML = [
     statTile("Land Portions", a.land.length, (+DATA.cpa.landExtent || 0).toLocaleString() + " ha total", ""),
     statTile("Portions Actively Used", active + " / " + a.land.length, "", "good"),
-    statTile("Leases Under Renewal", a.land.filter((r) => r[4] === "Under Renewal").length, "See Action Tracker", "warning"),
-    statTile("Movable Assets Logged", a.movable.reduce((s, r) => s + (+r[1] || 0), 0), "Vehicles, equipment, buildings", ""),
+    statTile("Active Leases", leases.filter((r) => r[7] === "Active").length + " / " + leases.length, leaseAlert ? leaseAlert + " need attention" : "All current", leaseAlert ? "warning" : "good"),
+    statTile("Land Allocated to Beneficiaries", allocHa.toLocaleString() + " ha", alloc.length + " allocation" + (alloc.length === 1 ? "" : "s"), ""),
   ].join("");
   $("assets-land").innerHTML = a.land.length ? a.land.map(([p, use, ha, lease, status]) =>
     `<tr><td style="font-weight:600;">${esc(p)}</td><td>${esc(use)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td style="color:var(--ink-2);">${esc(lease)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(5, "No land portions recorded.");
@@ -915,6 +960,12 @@ function renderAssets() {
     `<tr><td>${esc(cls)}</td><td class="num mono">${esc(count)}</td><td style="color:var(--ink-2);">${esc(cond)}</td></tr>`).join("") : emptyRow(3, "No movable assets recorded.");
   $("assets-permits").innerHTML = a.permits.length ? a.permits.map(([name, valid, status]) =>
     `<tr><td>${esc(name)}</td><td class="mono">${esc(valid)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(3, "No permits recorded.");
+
+  $("assets-leases").innerHTML = leases.length ? leases.map(([party, portion, use, ha, start, end, rental, status]) =>
+    `<tr><td style="font-weight:600;">${esc(party)}</td><td>${esc(portion)}</td><td style="color:var(--ink-2);">${esc(use)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td class="mono">${esc(start)} – ${esc(end)}</td><td class="num mono">${(+rental || 0).toLocaleString()}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(7, "No land leases recorded.");
+
+  $("assets-allocations").innerHTML = alloc.length ? alloc.map(([bene, portion, purpose, ha, date, ref, status]) =>
+    `<tr><td style="font-weight:600;">${esc(bene)}</td><td>${esc(portion)}</td><td style="color:var(--ink-2);">${esc(purpose)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td class="mono">${esc(date)}</td><td class="mono">${esc(ref)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(7, "No beneficiary land allocations recorded.");
 }
 
 function renderFinance() {
@@ -1023,6 +1074,21 @@ const IMPORT = {
       { k: "ha", label: "Extent (ha)" }, { k: "lease", label: "Lease / tenure" }, { k: "status", label: "Status" }],
     make: (v) => [v.portion, v.use || "", parseFloat(v.ha) || 0, v.lease || "", v.status || "Active"],
   },
+  leases: {
+    title: "land leases", section: "leases", arr: () => DATA.assets.leases,
+    targets: [{ k: "party", label: "Lessee / party", required: true }, { k: "portion", label: "Land / portion" },
+      { k: "use", label: "Land use" }, { k: "ha", label: "Area (ha)" }, { k: "start", label: "Start date" },
+      { k: "end", label: "End date" }, { k: "rental", label: "Annual rental" }, { k: "status", label: "Status" }],
+    make: (v) => [v.party, v.portion || "", v.use || "", parseFloat(v.ha) || 0, v.start || "", v.end || "",
+      parseFloat((v.rental || "").replace(/[^\d.-]/g, "")) || 0, v.status || "Active"],
+  },
+  allocations: {
+    title: "beneficiary land allocations", section: "allocations", arr: () => DATA.assets.allocations,
+    targets: [{ k: "beneficiary", label: "Beneficiary / household", required: true }, { k: "portion", label: "Land / portion" },
+      { k: "purpose", label: "Purpose" }, { k: "ha", label: "Area (ha)" }, { k: "date", label: "Allocated on" },
+      { k: "ref", label: "Agreement ref." }, { k: "status", label: "Status" }],
+    make: (v) => [v.beneficiary, v.portion || "", v.purpose || "", parseFloat(v.ha) || 0, v.date || "", v.ref || "", v.status || "Active"],
+  },
   movable: {
     title: "movable assets", section: "movable", arr: () => DATA.assets.movable,
     targets: [{ k: "cls", label: "Asset class", required: true }, { k: "count", label: "Count" }, { k: "cond", label: "Condition" }],
@@ -1052,6 +1118,9 @@ const BUTTONS = {
   "edit-identity-btn": editIdentity, "edit-score-btn": editScore, "edit-gates-btn": editGates,
   "edit-committee-btn": editCommittee, "add-action-btn": () => editAction(null), "edit-masterfile-btn": editMasterFile,
   "edit-beneficiary-btn": editBeneficiary, "edit-land-btn": editLand, "edit-movable-btn": editMovable,
+  "edit-leases-btn": editLeases, "edit-allocations-btn": editAllocations,
+  "import-leases-btn": () => importModal(IMPORT.leases),
+  "import-allocations-btn": () => importModal(IMPORT.allocations),
   "edit-permits-btn": editPermits, "edit-finance-btn": editFinanceFigures, "edit-categories-btn": editCategories,
   "add-project-btn": () => editProject(null), "edit-jobs-btn": editJobsByYear, "edit-impact-btn": editImpactFigures,
   "score-doc-btn": () => attachmentsModal("score", null, "Institutional Score — assessment document"),
@@ -1274,6 +1343,27 @@ const VIEW_HTML = `
       <thead><tr><th>Portion</th><th>Primary Use</th><th class="num">Extent (ha)</th><th>Lease / Tenure</th><th>Status</th></tr></thead>
       <tbody id="assets-land"></tbody>
     </table></div>
+
+    <div class="card-head" style="margin:22px 0 10px;"><h3 style="font-size:13px;">Land Leases</h3>
+      <span style="display:flex;gap:6px;">
+        <button class="btn" id="import-leases-btn" type="button">Import CSV</button>
+        <button class="btn" id="edit-leases-btn" type="button">Manage</button>
+      </span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Lessee / Party</th><th>Land / Portion</th><th>Land Use</th><th class="num">Area (ha)</th><th>Term</th><th class="num">Annual Rental (R)</th><th>Status</th></tr></thead>
+      <tbody id="assets-leases"></tbody>
+    </table></div>
+
+    <div class="card-head" style="margin:22px 0 10px;"><h3 style="font-size:13px;">Land Allocated to Beneficiaries</h3>
+      <span style="display:flex;gap:6px;">
+        <button class="btn" id="import-allocations-btn" type="button">Import CSV</button>
+        <button class="btn" id="edit-allocations-btn" type="button">Manage</button>
+      </span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Beneficiary / Household</th><th>Land / Portion</th><th>Purpose</th><th class="num">Area (ha)</th><th>Allocated On</th><th>Agreement Ref.</th><th>Status</th></tr></thead>
+      <tbody id="assets-allocations"></tbody>
+    </table></div>
+
     <div class="grid grid-2" style="margin-top:20px;">
       <div>
         <div class="card-head" style="margin-bottom:8px;"><h3 style="font-size:13px;">Movable Assets</h3>
