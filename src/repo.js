@@ -43,6 +43,11 @@ export async function loadOrg(orgId) {
     sel("score_domains", "sort"),
     sel("score_criteria", "sort"),
     sel("committee", "sort"),
+    sel("gov_committees", "sort"),
+    sel("gov_resolutions", "sort"),
+    sel("gov_meetings", "sort"),
+    sel("gov_coi", "sort"),
+    sel("gov_calendar", "sort"),
     sel("actions", "created_at"),
     sel("masterfile_sections", "sort"),
     supabase.from("beneficiary_figures").select("*").eq("org_id", orgId).maybeSingle(),
@@ -59,7 +64,8 @@ export async function loadOrg(orgId) {
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
-  const [org, gates, domains, criteria, committee, actions, mf, bene, land, leases,
+  const [org, gates, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
+         govCal, actions, mf, bene, land, leases,
          allocations, movable, permits, fin, cats, projects, impact, docs] =
     results.map((r) => r.data);
 
@@ -88,7 +94,19 @@ export async function loadOrg(orgId) {
         { domain: c.domain, name: c.name, weight: num(c.weight), achieved: num(c.achieved) }, c)),
       bands: BANDS,
     },
-    committee: (committee || []).map((r) => tagArr([r.role, r.name, r.term || ""], r)),
+    committee: (committee || []).map((r) => tagArr([r.role, r.name, r.term || "", r.body || "EXCO"], r)),
+    governance: {
+      committees: (govComm || []).map((r) => tagArr(
+        [r.name, r.mandate || "", r.chair || "", num(r.members_count), r.cadence || "", r.status], r)),
+      resolutions: (govRes || []).map((r) => tagArr(
+        [r.ref || "", r.res_date || "", r.meeting || "", r.decision || "", r.responsible || "", r.due_date || "", r.status], r)),
+      meetings: (govMeet || []).map((r) => tagArr(
+        [r.kind, r.meeting_date || "", r.venue || "", r.quorum || "", num(r.attendance), r.minutes_status, r.notes || ""], r)),
+      coi: (govCoi || []).map((r) => tagArr(
+        [r.member, r.position || "", r.interest || "", r.nature || "", r.declared_on || "", r.status], r)),
+      calendar: (govCal || []).map((r) => tagArr(
+        [r.item, r.category, r.due_date || "", r.recurrence || "", r.responsible || "", r.status], r)),
+    },
     actions: (actions || []).map((r) =>
       tagArr([r.ref || "", r.category || "", r.description || "", r.owner || "", r.due_date || "", r.status], r)),
     masterFile: (mf || []).map((r) =>
@@ -257,7 +275,28 @@ export async function saveSection(orgId, section, D) {
     }
 
     case "committee":
-      return reconcile("committee", orgId, D.committee, (r, i) => ({ role: r[0], name: r[1], term: nn(r[2]), sort: i }));
+      return reconcile("committee", orgId, D.committee, (r, i) => ({ role: r[0], name: r[1], term: nn(r[2]), body: r[3] || "EXCO", sort: i }));
+
+    case "gov_committees":
+      return reconcile("gov_committees", orgId, D.governance.committees, (r, i) => ({
+        name: r[0], mandate: nn(r[1]), chair: nn(r[2]), members_count: num(r[3]), cadence: nn(r[4]), status: r[5], sort: i,
+      }));
+    case "gov_resolutions":
+      return reconcile("gov_resolutions", orgId, D.governance.resolutions, (r, i) => ({
+        ref: nn(r[0]), res_date: nn(r[1]), meeting: nn(r[2]), decision: r[3], responsible: nn(r[4]), due_date: nn(r[5]), status: r[6], sort: i,
+      }));
+    case "gov_meetings":
+      return reconcile("gov_meetings", orgId, D.governance.meetings, (r, i) => ({
+        kind: r[0], meeting_date: nn(r[1]), venue: nn(r[2]), quorum: nn(r[3]), attendance: num(r[4]), minutes_status: r[5], notes: nn(r[6]), sort: i,
+      }));
+    case "gov_coi":
+      return reconcile("gov_coi", orgId, D.governance.coi, (r, i) => ({
+        member: r[0], position: nn(r[1]), interest: nn(r[2]), nature: nn(r[3]), declared_on: nn(r[4]), status: r[5], sort: i,
+      }));
+    case "gov_calendar":
+      return reconcile("gov_calendar", orgId, D.governance.calendar, (r, i) => ({
+        item: r[0], category: r[1], due_date: nn(r[2]), recurrence: nn(r[3]), responsible: nn(r[4]), status: r[5], sort: i,
+      }));
 
     case "actions":
       return reconcile("actions", orgId, D.actions, (r) => ({

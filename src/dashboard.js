@@ -25,8 +25,10 @@ const CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 
 const STATUS_TONE = {
   "Completed": "good", "Verified": "good", "Active": "good", "On Track": "good", "Complete": "good", "Valid": "good", "Paid": "good",
+  "Implemented": "good", "Adopted": "good", "Closed": "good", "Quorate": "good", "Managed": "good", "Recused": "good", "Done": "good",
   "In Progress": "warning", "Pending": "warning", "Pending Verification": "warning", "Expiring Soon": "warning", "At Risk": "warning", "Under Renewal": "warning",
-  "Overdue": "critical", "Disputed": "critical", "Delayed": "critical", "Vacant": "critical",
+  "Open": "warning", "Draft": "warning", "Forming": "warning", "Upcoming": "warning", "Declared": "warning", "Scheduled": "warning",
+  "Overdue": "critical", "Disputed": "critical", "Delayed": "critical", "Vacant": "critical", "Inquorate": "critical", "Outstanding": "critical", "Expired": "critical",
   "Not Started": "neutral",
 };
 const MATURITY = [
@@ -486,6 +488,47 @@ function listEditor(cfg) {
   build();
 }
 
+/* ============ sub-tabs + generic register panel ============ */
+const SUBTAB = {};
+function subtabStrip(section, tabs) {
+  const cur = SUBTAB[section] || tabs[0].id;
+  return `<div class="subtabs">${tabs.map((t) =>
+    `<button type="button" data-subtab="${section}:${t.id}" class="${t.id === cur ? "active" : ""}">${esc(t.label)}</button>`).join("")}</div>`;
+}
+function wireSubtabs(host) {
+  host.querySelectorAll("[data-subtab]").forEach((b) => (b.onclick = () => {
+    const [section, tab] = b.dataset.subtab.split(":");
+    SUBTAB[section] = tab;
+    renderCurrent();
+  }));
+}
+
+/* A read table + Import/Manage buttons wired to an editor. cfg:
+   { title, hint, columns:[{label,cls}], rows:()=>arr, cell:(row)=>[htmlCell,…],
+     manage:()=>void, importKey?, stats?:()=>[htmlTile,…] } */
+function mountRegister(host, cfg) {
+  const rows = cfg.rows();
+  const tools = [];
+  if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV</button>`);
+  if (CAN_EDIT) tools.push(`<button class="btn" data-reg-manage type="button">Manage</button>`);
+  host.innerHTML = `
+    ${cfg.stats ? `<div class="grid grid-4">${cfg.stats().join("")}</div>` : ""}
+    <div class="card-head" style="margin:${cfg.stats ? "18px" : "2px"} 0 10px;">
+      <div><h3 style="font-size:13px;">${esc(cfg.title)}</h3>${cfg.hint ? `<span class="hint">${esc(cfg.hint)}</span>` : ""}</div>
+      <span style="display:flex;gap:6px;">${tools.join("")}</span>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr>${cfg.columns.map((c) => `<th class="${c.cls || ""}">${esc(c.label)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.length
+        ? rows.map((r) => `<tr>${cfg.cell(r).map((cell, i) => `<td class="${cfg.columns[i].cls || ""}">${cell}</td>`).join("")}</tr>`).join("")
+        : emptyRow(cfg.columns.length, cfg.empty || "Nothing recorded yet.")}</tbody>
+    </table></div>`;
+  const mb = host.querySelector("[data-reg-manage]");
+  if (mb) mb.onclick = cfg.manage;
+  const ib = host.querySelector("[data-reg-import]");
+  if (ib) ib.onclick = () => importModal(IMPORT[cfg.importKey]);
+}
+
 /* ============ section editors ============ */
 function nextActionRef() {
   const yr = new Date().getFullYear();
@@ -538,15 +581,16 @@ function editIdentity() {
 }
 function editCommittee() {
   listEditor({
-    title: "Management committee", arr: DATA.committee, section: "committee",
-    rowLabel: (r) => `${r[1] || "—"} · ${r[0]}`,
-    blank: () => ["Additional Member", "", new Date().getFullYear() + " – present"],
+    title: "EXCO & office bearers", arr: DATA.committee, section: "committee",
+    rowLabel: (r) => `${r[1] || "—"} · ${r[0]} (${r[3] || "EXCO"})`,
+    blank: () => ["Additional Member", "", new Date().getFullYear() + " – present", "EXCO"],
     fields: (r) => [
+      { key: "body", label: "Body", type: "select", options: ["EXCO", "Office Bearer", "Sub-committee"], value: r[3] || "EXCO" },
       { key: "role", label: "Role / portfolio", type: "text", value: r[0], required: true },
       { key: "name", label: "Name", type: "text", value: r[1], required: true },
       { key: "term", label: "Term", type: "text", value: r[2] },
     ],
-    write: (r, o) => { r[0] = o.role; r[1] = o.name; r[2] = o.term; },
+    write: (r, o) => { r[0] = o.role; r[1] = o.name; r[2] = o.term; r[3] = o.body || "EXCO"; },
   });
 }
 function editMasterFile() {
@@ -743,17 +787,33 @@ function statTile(label, value, sub, tone) {
   return `<div class="stat-tile"><div class="label">${esc(label)}</div><div class="value num">${esc(value)}</div>${sub ? `<div class="sub ${tone || ""}">${esc(sub)}</div>` : ""}</div>`;
 }
 
+const GOV_TABS = [
+  { id: "identity", label: "Identity" },
+  { id: "exco", label: "EXCO & Office Bearers" },
+  { id: "committees", label: "Committees" },
+  { id: "resolutions", label: "Resolutions" },
+  { id: "meetings", label: "Meetings" },
+  { id: "agm", label: "AGM / SGM" },
+  { id: "coi", label: "Conflict of Interest" },
+  { id: "calendar", label: "Governance Calendar" },
+];
+const GOV_PANELS = {
+  identity: renderGovIdentity, exco: renderGovExco, committees: renderGovCommittees,
+  resolutions: renderGovResolutions, meetings: renderGovMeetings, agm: renderGovAgm,
+  coi: renderGovCoi, calendar: renderGovCalendar,
+};
 function renderProfile() {
+  const strip = $("governance-subtabs");
+  strip.innerHTML = subtabStrip("governance", GOV_TABS);
+  wireSubtabs(strip);
+  const cur = SUBTAB.governance || "identity";
+  (GOV_PANELS[cur] || renderGovIdentity)($("governance-body"));
+}
+
+function renderGovIdentity(host) {
   const c = DATA.cpa;
   const total = scoreTotal();
   const gCur = DATA.gates.find((g) => g.state === "current") || DATA.gates[DATA.gates.length - 1] || { n: "–", name: "—" };
-  $("profile-stats").innerHTML = [
-    statTile("Institutional Score", total + " / 100", maturityBand(total).name + " band", ""),
-    statTile("Journey Stage", `${gCur.n} of 7`, `${gCur.name}`, "warning"),
-    statTile("Verified Members", (+c.members || 0).toLocaleString(), "Master Beneficiary Register", ""),
-    statTile("Land Extent", (+c.landExtent || 0).toLocaleString() + " ha", c.portions + " registered portions", ""),
-  ].join("");
-
   const now = new Date();
   const overdue = DATA.actions.filter((a) => a[5] === "Overdue");
   const dueSoon = DATA.actions.filter((a) => {
@@ -761,40 +821,151 @@ function renderProfile() {
     const days = (new Date(a[4]) - now) / 86400000;
     return days >= 0 && days <= 45;
   });
-  const renewals = DATA.assets.land.filter((l) => l[4] === "Under Renewal");
+  const govDom = DATA.score.domains.find((d) => d.name === "Governance") || { achieved: 0, weight: 1 };
+  const yrs = new Date().getFullYear() - (+c.established || new Date().getFullYear());
+  const overdueGovCal = (DATA.governance.calendar || []).filter((r) => r[2] && new Date(r[2]) < now && r[5] !== "Done").length;
+
   const parts = [];
   if (overdue.length) parts.push(`<strong>${overdue.length} action${overdue.length > 1 ? "s" : ""} overdue</strong>`);
   if (dueSoon.length) parts.push(`${dueSoon.length} due within 45 days`);
-  if (renewals.length) parts.push(`${renewals.length} lease${renewals.length > 1 ? "s" : ""} under renewal (${esc(renewals.map((r) => r[0]).join(", "))})`);
-  $("profile-alerts").innerHTML = parts.length ? `
-    <div class="callout" style="margin-top:14px;">
+  if (overdueGovCal) parts.push(`${overdueGovCal} governance-calendar item${overdueGovCal > 1 ? "s" : ""} past due`);
+
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Governance Score", `${domainScore(govDom)} / ${govDom.weight}`, "Institutional Performance domain", "")}
+      ${statTile("Journey Stage", `${gCur.n} of 7`, `${gCur.name}`, "warning")}
+      ${statTile("EXCO & Office Bearers", DATA.committee.length, "Elected members on record", "")}
+      ${statTile("Sub-committees", (DATA.governance.committees || []).length, "Standing committees", "")}
+    </div>
+    ${parts.length ? `<div class="callout" style="margin-top:14px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3.5 22 20H2z"/><path d="M12 10v4M12 17.2v.1"/></svg>
-      <div>Attention needed — ${parts.join(" · ")}. Open the <a href="#/v/actions" style="font-weight:600;text-decoration:underline;">Action Tracker</a>.</div>
-    </div>` : "";
+      <div>Attention needed — ${parts.join(" · ")}. Open the <a href="#/v/actions" style="font-weight:600;text-decoration:underline;">Action Tracker</a>.</div></div>` : ""}
+    <div class="grid grid-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-head"><h3>Institutional Identity</h3>${CAN_EDIT ? `<button class="btn" id="gov-edit-identity" type="button">Edit</button>` : ""}</div>
+        <dl class="kv">
+          <dt>Legal name</dt><dd>${esc(c.name)}</dd>
+          <dt>Registration no.</dt><dd class="mono">${esc(c.reg)}</dd>
+          <dt>Region</dt><dd>${esc(c.region)}</dd>
+          <dt>Established</dt><dd>${esc(c.established)}${c.established ? ` (${yrs} year${yrs === 1 ? "" : "s"} operating)` : ""}</dd>
+          <dt>Land extent</dt><dd>${(+c.landExtent || 0).toLocaleString()} ha across ${esc(c.portions)} portions</dd>
+          <dt>Verified members</dt><dd>${(+c.members || 0).toLocaleString()}</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Office Bearers</h3><span class="hint">${DATA.committee.filter((r) => r[3] === "Office Bearer").length || DATA.committee.length} on record</span></div>
+        ${DATA.committee.length ? `<table><tbody>${DATA.committee.map(([role, name, term]) =>
+          `<tr><td style="color:var(--ink-2);font-size:12px;">${esc(role)}</td><td style="font-weight:600;">${esc(name)}</td><td style="color:var(--ink-muted);font-size:11.5px;">${esc(term)}</td></tr>`).join("")}</tbody></table>`
+          : `<p class="muted">No members recorded — see the EXCO tab.</p>`}
+      </div>
+    </div>`;
+  const eb = host.querySelector("#gov-edit-identity");
+  if (eb) eb.onclick = editIdentity;
+}
 
-  const yrs = new Date().getFullYear() - (+c.established || new Date().getFullYear());
-  $("profile-identity").innerHTML = `
-    <dt>Legal name</dt><dd>${esc(c.name)}</dd>
-    <dt>Registration no.</dt><dd class="mono">${esc(c.reg)}</dd>
-    <dt>Region</dt><dd>${esc(c.region)}</dd>
-    <dt>Established</dt><dd>${esc(c.established)}${c.established ? ` (${yrs} year${yrs === 1 ? "" : "s"} operating)` : ""}</dd>
-    <dt>Land extent</dt><dd>${(+c.landExtent || 0).toLocaleString()} ha across ${esc(c.portions)} portions</dd>
-    <dt>Verified members</dt><dd>${(+c.members || 0).toLocaleString()}</dd>`;
-
-  $("committee-hint").textContent = `${DATA.committee.length} elected office-bearers`;
-  $("profile-committee").innerHTML = DATA.committee.length
-    ? `<table><tbody>${DATA.committee.map(([role, name, term]) =>
-        `<tr><td style="color:var(--ink-2);font-size:12px;">${esc(role)}</td><td style="font-weight:600;">${esc(name)}</td><td style="color:var(--ink-muted);font-size:11.5px;">${esc(term)}</td></tr>`).join("")}</tbody></table>`
-    : `<p class="muted">No committee members recorded.</p>`;
-
-  const gm = $("governance-more");
-  if (gm) gm.innerHTML = comingSoon("Governance Centre registers", [
-    "Sub-committees and their mandates",
-    "Resolutions register (with the Action Tracker link)",
-    "Meetings and AGM / SGM records",
-    "Conflict-of-interest declarations",
-    "The governance calendar of statutory deadlines",
-  ], "Committee, meetings and resolutions all feed the Governance domain of your score.");
+const COMMITTEE_BODIES = ["EXCO", "Office Bearer", "Sub-committee"];
+function renderGovExco(host) {
+  mountRegister(host, {
+    title: "EXCO & Office Bearers", importKey: "committee",
+    hint: "The elected Executive Committee and the CPA's office bearers.",
+    columns: [{ label: "Body" }, { label: "Role / Portfolio" }, { label: "Name" }, { label: "Term" }],
+    rows: () => DATA.committee,
+    cell: (r) => [`<span class="pill ${r[3] === "Office Bearer" ? "brand" : "neutral"}">${esc(r[3] || "EXCO")}</span>`,
+      esc(r[0]), `<span style="font-weight:600;">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`],
+    manage: editCommittee,
+  });
+}
+function renderGovCommittees(host) {
+  mountRegister(host, {
+    title: "Standing Committees", importKey: "gov_committees",
+    columns: [{ label: "Committee" }, { label: "Mandate" }, { label: "Chair" }, { label: "Members", cls: "num" }, { label: "Cadence" }, { label: "Status" }],
+    rows: () => DATA.governance.committees,
+    empty: "No sub-committees recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span style="color:var(--ink-2);">${esc(r[1])}</span>`,
+      esc(r[2]), `<span class="mono">${esc(r[3])}</span>`, esc(r[4]), statusPill(r[5])],
+    manage: () => listEditor(GOV_EDITORS.committees()),
+  });
+}
+function renderGovResolutions(host) {
+  const open = DATA.governance.resolutions.filter((r) => !["Implemented", "Adopted", "Closed"].includes(r[6])).length;
+  mountRegister(host, {
+    title: "Resolutions Register", importKey: "gov_resolutions",
+    hint: "Decisions of the EXCO and general meetings — with their implementation status.",
+    stats: () => [
+      statTile("Resolutions", DATA.governance.resolutions.length, "On record", ""),
+      statTile("Still Open", open, "Not yet implemented", open ? "warning" : "good"),
+      statTile("Implemented", DATA.governance.resolutions.length - open, "Closed out", "good"),
+      statTile("Linked to Actions", DATA.governance.resolutions.filter((r) => /RES/.test(r[0])).length, "Tracked in the Action Tracker", ""),
+    ],
+    columns: [{ label: "Ref." }, { label: "Date" }, { label: "Meeting" }, { label: "Decision" }, { label: "Responsible" }, { label: "Due" }, { label: "Status" }],
+    rows: () => DATA.governance.resolutions,
+    empty: "No resolutions recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`,
+      esc(r[2]), `<span style="min-width:220px;display:inline-block;">${esc(r[3])}</span>`, esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
+    manage: () => listEditor(GOV_EDITORS.resolutions()),
+  });
+}
+function renderGovMeetings(host) { renderGovMeetingList(host, null); }
+function renderGovAgm(host) { renderGovMeetingList(host, ["AGM", "SGM"]); }
+function renderGovMeetingList(host, kinds) {
+  const all = DATA.governance.meetings;
+  const rows = kinds ? all.filter((r) => kinds.includes(r[0])) : all;
+  const nextAgm = (DATA.governance.calendar || []).find((r) => /general meeting/i.test(r[0]));
+  mountRegister(host, {
+    title: kinds ? "AGM / SGM Records" : "Meetings Register", importKey: "gov_meetings",
+    hint: kinds && nextAgm ? `Next AGM due ${nextAgm[2] || "—"}.` : (kinds ? "Annual and special general meetings." : "All governance meetings and their minute status."),
+    columns: [{ label: "Type" }, { label: "Date" }, { label: "Venue" }, { label: "Quorum" }, { label: "Attendance", cls: "num" }, { label: "Minutes" }, { label: "Notes" }],
+    rows: () => rows,
+    empty: kinds ? "No general meetings recorded." : "No meetings recorded.",
+    cell: (r) => [`<span class="pill brand">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`, esc(r[2]),
+      statusPill(r[3] || "Pending"), `<span class="mono">${esc(r[4] || "")}</span>`, statusPill(r[5]), `<span style="color:var(--ink-2);">${esc(r[6])}</span>`],
+    manage: () => listEditor(GOV_EDITORS.meetings()),
+  });
+}
+function renderGovCoi(host) {
+  const outstanding = DATA.governance.coi.filter((r) => r[5] === "Outstanding" || r[5] === "Declared").length;
+  mountRegister(host, {
+    title: "Conflict-of-Interest Register", importKey: "gov_coi",
+    hint: "Interests declared by EXCO and committee members, and how each is managed.",
+    stats: () => [
+      statTile("Declarations", DATA.governance.coi.length, "On record", ""),
+      statTile("Open / Declared", outstanding, "Awaiting a management decision", outstanding ? "warning" : "good"),
+      statTile("Managed / Recused", DATA.governance.coi.filter((r) => ["Managed", "Recused"].includes(r[5])).length, "Mitigation in place", "good"),
+      statTile("Members Covered", new Set(DATA.governance.coi.map((r) => r[0])).size, "Distinct declarants", ""),
+    ],
+    columns: [{ label: "Member" }, { label: "Position" }, { label: "Interest" }, { label: "Nature" }, { label: "Declared" }, { label: "Status" }],
+    rows: () => DATA.governance.coi,
+    empty: "No declarations recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), esc(r[2]),
+      `<span style="color:var(--ink-2);">${esc(r[3])}</span>`, `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
+    manage: () => listEditor(GOV_EDITORS.coi()),
+  });
+}
+function renderGovCalendar(host) {
+  const now = new Date();
+  const rows = [...DATA.governance.calendar].sort((a, b) => String(a[2]).localeCompare(String(b[2])));
+  const overdue = rows.filter((r) => r[2] && new Date(r[2]) < now && r[5] !== "Done").length;
+  const in60 = rows.filter((r) => { if (!r[2]) return false; const d = (new Date(r[2]) - now) / 86400000; return d >= 0 && d <= 60; }).length;
+  mountRegister(host, {
+    title: "Governance Calendar", importKey: "gov_calendar",
+    hint: "Statutory returns, reporting deadlines and recurring governance events.",
+    stats: () => [
+      statTile("Calendar Items", rows.length, "Tracked deadlines", ""),
+      statTile("Overdue", overdue, "Past the due date", overdue ? "critical" : "good"),
+      statTile("Due in 60 days", in60, "Coming up", in60 ? "warning" : "good"),
+      statTile("Statutory", rows.filter((r) => r[1] === "Statutory").length, "CIPC / SARS / DALRRD", ""),
+    ],
+    columns: [{ label: "Item" }, { label: "Category" }, { label: "Due" }, { label: "Recurrence" }, { label: "Responsible" }, { label: "Status" }],
+    rows: () => rows,
+    empty: "No calendar items recorded.",
+    cell: (r) => {
+      const late = r[2] && new Date(r[2]) < now && r[5] !== "Done";
+      return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[2])}</span>`,
+        esc(r[3]), esc(r[4]), statusPill(r[5])];
+    },
+    manage: () => listEditor(GOV_EDITORS.calendar()),
+  });
 }
 
 function renderActions() {
@@ -1266,9 +1437,41 @@ const IMPORT = {
     },
   },
   committee: {
-    title: "committee members", section: "committee", arr: () => DATA.committee,
-    targets: [{ k: "role", label: "Role", required: true }, { k: "name", label: "Name", required: true }, { k: "term", label: "Term" }],
-    make: (v) => [v.role, v.name, v.term || ""],
+    title: "EXCO & office bearers", section: "committee", arr: () => DATA.committee,
+    targets: [{ k: "body", label: "Body (EXCO / Office Bearer)" }, { k: "role", label: "Role", required: true },
+      { k: "name", label: "Name", required: true }, { k: "term", label: "Term" }],
+    make: (v) => [v.role, v.name, v.term || "", v.body || "EXCO"],
+  },
+  gov_committees: {
+    title: "sub-committees", section: "gov_committees", arr: () => DATA.governance.committees,
+    targets: [{ k: "name", label: "Committee", required: true }, { k: "mandate", label: "Mandate" }, { k: "chair", label: "Chair" },
+      { k: "members", label: "Members" }, { k: "cadence", label: "Cadence" }, { k: "status", label: "Status" }],
+    make: (v) => [v.name, v.mandate || "", v.chair || "", parseFloat(v.members) || 0, v.cadence || "", v.status || "Active"],
+  },
+  gov_resolutions: {
+    title: "resolutions", section: "gov_resolutions", arr: () => DATA.governance.resolutions,
+    targets: [{ k: "ref", label: "Ref" }, { k: "date", label: "Date" }, { k: "meeting", label: "Meeting" },
+      { k: "decision", label: "Decision", required: true }, { k: "responsible", label: "Responsible" },
+      { k: "due", label: "Due date" }, { k: "status", label: "Status" }],
+    make: (v) => [v.ref || "", v.date || "", v.meeting || "", v.decision, v.responsible || "", v.due || "", v.status || "Open"],
+  },
+  gov_meetings: {
+    title: "meetings", section: "gov_meetings", arr: () => DATA.governance.meetings,
+    targets: [{ k: "kind", label: "Type (EXCO / AGM / SGM)" }, { k: "date", label: "Date", required: true }, { k: "venue", label: "Venue" },
+      { k: "quorum", label: "Quorum" }, { k: "attendance", label: "Attendance" }, { k: "minutes", label: "Minutes status" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.kind || "EXCO", v.date || "", v.venue || "", v.quorum || "", parseFloat(v.attendance) || 0, v.minutes || "Pending", v.notes || ""],
+  },
+  gov_coi: {
+    title: "conflict-of-interest declarations", section: "gov_coi", arr: () => DATA.governance.coi,
+    targets: [{ k: "member", label: "Member", required: true }, { k: "position", label: "Position" }, { k: "interest", label: "Interest" },
+      { k: "nature", label: "Nature" }, { k: "declared", label: "Declared on" }, { k: "status", label: "Status" }],
+    make: (v) => [v.member, v.position || "", v.interest || "", v.nature || "", v.declared || "", v.status || "Declared"],
+  },
+  gov_calendar: {
+    title: "governance calendar", section: "gov_calendar", arr: () => DATA.governance.calendar,
+    targets: [{ k: "item", label: "Item", required: true }, { k: "category", label: "Category" }, { k: "due", label: "Due date" },
+      { k: "recurrence", label: "Recurrence" }, { k: "responsible", label: "Responsible" }, { k: "status", label: "Status" }],
+    make: (v) => [v.item, v.category || "Statutory", v.due || "", v.recurrence || "", v.responsible || "", v.status || "Upcoming"],
   },
   masterfile: {
     title: "master-file sections", section: "masterfile", arr: () => DATA.masterFile,
@@ -1320,6 +1523,82 @@ const IMPORT = {
       parseFloat((v.spent || "").replace(/[^\d.-]/g, "")) || 0,
       Math.max(0, Math.min(100, parseFloat(v.pct) || 0)), v.status || "Not Started"],
   },
+};
+
+/* listEditor configs for the Governance Centre registers */
+const GOV_EDITORS = {
+  committees: () => ({
+    title: "Standing committees", arr: DATA.governance.committees, section: "gov_committees",
+    rowLabel: (r) => `${r[0] || "—"} — ${r[5]}`,
+    blank: () => ["", "", "", 0, "Monthly", "Active"],
+    fields: (r) => [
+      { key: "name", label: "Committee name", type: "text", value: r[0], required: true },
+      { key: "mandate", label: "Mandate", type: "textarea", value: r[1] },
+      { key: "chair", label: "Chair", type: "text", value: r[2] },
+      { key: "members", label: "Member count", type: "number", value: r[3], min: 0 },
+      { key: "cadence", label: "Meeting cadence", type: "text", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: ["Active", "Forming", "Dormant", "Disbanded"], value: r[5] },
+    ],
+    write: (r, o) => { r[0] = o.name; r[1] = o.mandate; r[2] = o.chair; r[3] = parseFloat(o.members) || 0; r[4] = o.cadence; r[5] = o.status; },
+  }),
+  resolutions: () => ({
+    title: "Resolutions", arr: DATA.governance.resolutions, section: "gov_resolutions",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${(r[3] || "").slice(0, 50)}`,
+    blank: () => ["", new Date().toISOString().slice(0, 10), "", "", "", "", "Open"],
+    fields: (r) => [
+      { key: "ref", label: "Reference", type: "text", value: r[0] },
+      { key: "date", label: "Date", type: "date", value: r[1] },
+      { key: "meeting", label: "Meeting", type: "text", value: r[2] },
+      { key: "decision", label: "Decision", type: "textarea", value: r[3], required: true },
+      { key: "responsible", label: "Responsible", type: "text", value: r[4] },
+      { key: "due", label: "Due date", type: "date", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: ["Open", "In Progress", "Adopted", "Implemented", "Closed", "Lapsed"], value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.ref; r[1] = o.date; r[2] = o.meeting; r[3] = o.decision; r[4] = o.responsible; r[5] = o.due; r[6] = o.status; },
+  }),
+  meetings: () => ({
+    title: "Meetings", arr: DATA.governance.meetings, section: "gov_meetings",
+    rowLabel: (r) => `${r[0]} — ${r[1] || "?"}`,
+    blank: () => ["EXCO", new Date().toISOString().slice(0, 10), "", "Quorate", 0, "Pending", ""],
+    fields: (r) => [
+      { key: "kind", label: "Type", type: "select", options: ["EXCO", "Committee", "AGM", "SGM", "Special"], value: r[0] },
+      { key: "date", label: "Date", type: "date", value: r[1] },
+      { key: "venue", label: "Venue", type: "text", value: r[2] },
+      { key: "quorum", label: "Quorum", type: "select", options: ["Quorate", "Inquorate", "N/A"], value: r[3] || "Quorate" },
+      { key: "attendance", label: "Attendance", type: "number", value: r[4], min: 0 },
+      { key: "minutes", label: "Minutes status", type: "select", options: ["Pending", "Draft", "Adopted"], value: r[5] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.kind; r[1] = o.date; r[2] = o.venue; r[3] = o.quorum; r[4] = parseFloat(o.attendance) || 0; r[5] = o.minutes; r[6] = o.notes; },
+  }),
+  coi: () => ({
+    title: "Conflict-of-interest declarations", arr: DATA.governance.coi, section: "gov_coi",
+    rowLabel: (r) => `${r[0] || "—"} — ${r[5]}`,
+    blank: () => ["", "", "", "", new Date().toISOString().slice(0, 10), "Declared"],
+    fields: (r) => [
+      { key: "member", label: "Member", type: "text", value: r[0], required: true },
+      { key: "position", label: "Position", type: "text", value: r[1] },
+      { key: "interest", label: "Interest / entity", type: "text", value: r[2] },
+      { key: "nature", label: "Nature of the interest", type: "textarea", value: r[3] },
+      { key: "declared", label: "Declared on", type: "date", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: ["Declared", "Managed", "Recused", "Outstanding", "Closed"], value: r[5] },
+    ],
+    write: (r, o) => { r[0] = o.member; r[1] = o.position; r[2] = o.interest; r[3] = o.nature; r[4] = o.declared; r[5] = o.status; },
+  }),
+  calendar: () => ({
+    title: "Governance calendar", arr: DATA.governance.calendar, section: "gov_calendar",
+    rowLabel: (r) => `${r[0] || "—"} — ${r[2] || "no date"}`,
+    blank: () => ["", "Statutory", "", "Annual", "", "Upcoming"],
+    fields: (r) => [
+      { key: "item", label: "Item", type: "text", value: r[0], required: true },
+      { key: "category", label: "Category", type: "select", options: ["Statutory", "Reporting", "Meeting", "Internal"], value: r[1] },
+      { key: "due", label: "Due date", type: "date", value: r[2] },
+      { key: "recurrence", label: "Recurrence", type: "text", value: r[3] },
+      { key: "responsible", label: "Responsible", type: "text", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: ["Upcoming", "In Progress", "Done", "Overdue"], value: r[5] },
+    ],
+    write: (r, o) => { r[0] = o.item; r[1] = o.category; r[2] = o.due; r[3] = o.recurrence; r[4] = o.responsible; r[5] = o.status; },
+  }),
 };
 
 const BUTTONS = {
@@ -1485,25 +1764,8 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-profile">
-    <div class="grid grid-4" id="profile-stats"></div>
-    <div id="profile-alerts"></div>
-    <div class="grid grid-2" style="margin-top:16px;">
-      <div class="card">
-        <div class="card-head"><h3>Institutional Identity</h3><button class="btn" id="edit-identity-btn" type="button">Edit</button></div>
-        <dl class="kv" id="profile-identity"></dl>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>EXCO &amp; Office Bearers</h3>
-          <span style="display:flex;gap:6px;">
-            <button class="btn" id="import-committee-btn" type="button">Import</button>
-            <button class="btn" id="edit-committee-btn" type="button">Manage</button>
-          </span></div>
-        <div class="hint" id="committee-hint" style="margin:-4px 0 8px;">elected office-bearers</div>
-        <div id="profile-committee"></div>
-      </div>
-    </div>
-    <div id="governance-more" style="margin-top:16px;"></div>
-  </section>
+    <div id="governance-subtabs"></div>
+    <div id="governance-body"></div>
   </section>
 
   <section class="view hidden" id="view-score">
