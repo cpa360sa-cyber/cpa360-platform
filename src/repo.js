@@ -60,6 +60,11 @@ export async function loadOrg(orgId) {
     sel("land_allocations", "sort"),
     sel("movable_assets", "sort"),
     sel("permits", "sort"),
+    sel("infrastructure", "sort"),
+    sel("asset_maintenance", "sort"),
+    sel("prod_enterprises", "sort"),
+    sel("prod_water", "sort"),
+    sel("prod_records", "sort"),
     supabase.from("finance_figures").select("*").eq("org_id", orgId).maybeSingle(),
     sel("budget_categories", "sort"),
     sel("fin_transactions", "sort"),
@@ -76,7 +81,8 @@ export async function loadOrg(orgId) {
   const [org, gates, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
          govCal, actions, mf, bene, beneReg, households, succession, beneDisputes,
          land, leases,
-         allocations, movable, permits, fin, cats, finTxn, procSup, procReq, procPo,
+         allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
+         fin, cats, finTxn, procSup, procReq, procPo,
          finPay, projects, impact, docs] =
     results.map((r) => r.data);
 
@@ -147,6 +153,18 @@ export async function loadOrg(orgId) {
         [r.beneficiary, r.portion || "", r.purpose || "", num(r.area_ha), r.allocated_on || "", r.agreement_ref || "", r.status], r)),
       movable: (movable || []).map((r) => tagArr([r.asset_class, num(r.item_count), r.condition || ""], r)),
       permits: (permits || []).map((r) => tagArr([r.name, r.valid_until || "", r.status], r)),
+      infrastructure: (infra || []).map((r) => tagArr(
+        [r.name, r.itype, r.location || "", num(r.install_year), num(r.value), r.condition, r.status, r.notes || ""], r)),
+      maintenance: (maint || []).map((r) => tagArr(
+        [r.asset, r.asset_kind, r.task, r.scheduled_date || "", r.completed_date || "", num(r.cost), r.responsible || "", r.status, r.notes || ""], r)),
+    },
+    productivity: {
+      enterprises: (prodEnt || []).map((r) => tagArr(
+        [r.etype, r.name, r.portion || "", num(r.area_ha), r.units || "", r.manager || "", r.status, r.notes || ""], r)),
+      water: (prodWater || []).map((r) => tagArr(
+        [r.name, r.source, num(r.allocation_m3), num(r.usage_m3), r.licence_ref || "", r.status, r.notes || ""], r)),
+      records: (prodRec || []).map((r) => tagArr(
+        [r.rtype, r.enterprise || "", r.period || "", r.description, num(r.quantity), r.unit || "", num(r.amount)], r)),
     },
     finance: {
       annualBudget: num(f.annual_budget), ytdIncomeBudget: num(f.ytd_income_budget),
@@ -393,6 +411,28 @@ export async function saveSection(orgId, section, D) {
     case "permits":
       return reconcile("permits", orgId, D.assets.permits, (r, i) => ({
         name: r[0], valid_until: nn(r[1]), status: r[2], sort: i,
+      }));
+    case "infrastructure":
+      return reconcile("infrastructure", orgId, D.assets.infrastructure, (r, i) => ({
+        name: r[0], itype: r[1], location: nn(r[2]), install_year: num(r[3]) || null, value: num(r[4]),
+        condition: r[5], status: r[6], notes: nn(r[7]), sort: i,
+      }));
+    case "asset_maintenance":
+      return reconcile("asset_maintenance", orgId, D.assets.maintenance, (r, i) => ({
+        asset: r[0], asset_kind: r[1], task: r[2], scheduled_date: nn(r[3]), completed_date: nn(r[4]),
+        cost: num(r[5]), responsible: nn(r[6]), status: r[7], notes: nn(r[8]), sort: i,
+      }));
+    case "prod_enterprises":
+      return reconcile("prod_enterprises", orgId, D.productivity.enterprises, (r, i) => ({
+        etype: r[0], name: r[1], portion: nn(r[2]), area_ha: num(r[3]), units: nn(r[4]), manager: nn(r[5]), status: r[6], notes: nn(r[7]), sort: i,
+      }));
+    case "prod_water":
+      return reconcile("prod_water", orgId, D.productivity.water, (r, i) => ({
+        name: r[0], source: r[1], allocation_m3: num(r[2]), usage_m3: num(r[3]), licence_ref: nn(r[4]), status: r[5], notes: nn(r[6]), sort: i,
+      }));
+    case "prod_records":
+      return reconcile("prod_records", orgId, D.productivity.records, (r, i) => ({
+        rtype: r[0], enterprise: nn(r[1]), period: nn(r[2]), description: r[3], quantity: num(r[4]), unit: nn(r[5]), amount: num(r[6]), sort: i,
       }));
 
     case "finance":

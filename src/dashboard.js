@@ -1301,31 +1301,164 @@ function renderBeneEvidence(host) {
     "Certified IDs, proof of residence, verification meeting minutes and the signed beneficiary list.");
 }
 
+const ASSET_TABS = [
+  { id: "parcels", label: "Land Parcels" },
+  { id: "allocations", label: "Allocations" },
+  { id: "leases", label: "Leases" },
+  { id: "permits", label: "Permits" },
+  { id: "infrastructure", label: "Infrastructure" },
+  { id: "register", label: "Asset Register" },
+  { id: "maintenance", label: "Maintenance" },
+];
+const ASSET_PANELS = {
+  parcels: renderAssetParcels, allocations: renderAssetAllocations, leases: renderAssetLeases,
+  permits: renderAssetPermits, infrastructure: renderAssetInfra, register: renderAssetRegister, maintenance: renderAssetMaint,
+};
 function renderAssets() {
+  const strip = $("assets-subtabs");
+  strip.innerHTML = subtabStrip("assets", ASSET_TABS);
+  wireSubtabs(strip);
+  const cur = SUBTAB.assets || "parcels";
+  (ASSET_PANELS[cur] || renderAssetParcels)($("assets-body"));
+}
+function renderAssetParcels(host) {
   const a = DATA.assets;
   const active = a.land.filter((r) => r[4] === "Active").length;
-  const leases = a.leases || [];
-  const alloc = a.allocations || [];
-  const leaseAlert = leases.filter((r) => ["Expiring Soon", "Expired", "Under Negotiation"].includes(r[7])).length;
-  const allocHa = alloc.reduce((s, r) => s + (+r[3] || 0), 0);
-  $("assets-stats").innerHTML = [
-    statTile("Land Portions", a.land.length, (+DATA.cpa.landExtent || 0).toLocaleString() + " ha total", ""),
-    statTile("Portions Actively Used", active + " / " + a.land.length, "", "good"),
-    statTile("Active Leases", leases.filter((r) => r[7] === "Active").length + " / " + leases.length, leaseAlert ? leaseAlert + " need attention" : "All current", leaseAlert ? "warning" : "good"),
-    statTile("Land Allocated to Beneficiaries", allocHa.toLocaleString() + " ha", alloc.length + " allocation" + (alloc.length === 1 ? "" : "s"), ""),
-  ].join("");
-  $("assets-land").innerHTML = a.land.length ? a.land.map(([p, use, ha, lease, status]) =>
-    `<tr><td style="font-weight:600;">${esc(p)}</td><td>${esc(use)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td style="color:var(--ink-2);">${esc(lease)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(5, "No land portions recorded.");
-  $("assets-movable").innerHTML = a.movable.length ? a.movable.map(([cls, count, cond]) =>
-    `<tr><td>${esc(cls)}</td><td class="num mono">${esc(count)}</td><td style="color:var(--ink-2);">${esc(cond)}</td></tr>`).join("") : emptyRow(3, "No movable assets recorded.");
-  $("assets-permits").innerHTML = a.permits.length ? a.permits.map(([name, valid, status]) =>
-    `<tr><td>${esc(name)}</td><td class="mono">${esc(valid)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(3, "No permits recorded.");
-
-  $("assets-leases").innerHTML = leases.length ? leases.map(([party, portion, use, ha, start, end, rental, status]) =>
-    `<tr><td style="font-weight:600;">${esc(party)}</td><td>${esc(portion)}</td><td style="color:var(--ink-2);">${esc(use)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td class="mono">${esc(start)} – ${esc(end)}</td><td class="num mono">${(+rental || 0).toLocaleString()}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(7, "No land leases recorded.");
-
-  $("assets-allocations").innerHTML = alloc.length ? alloc.map(([bene, portion, purpose, ha, date, ref, status]) =>
-    `<tr><td style="font-weight:600;">${esc(bene)}</td><td>${esc(portion)}</td><td style="color:var(--ink-2);">${esc(purpose)}</td><td class="num mono">${(+ha || 0).toLocaleString()}</td><td class="mono">${esc(date)}</td><td class="mono">${esc(ref)}</td><td>${statusPill(status)}</td></tr>`).join("") : emptyRow(7, "No beneficiary land allocations recorded.");
+  mountRegister(host, {
+    title: "Land Parcels", importKey: "land",
+    hint: "The registered portions that make up the CPA's land holding.",
+    stats: () => [
+      statTile("Parcels", a.land.length, (+DATA.cpa.landExtent || 0).toLocaleString() + " ha total", ""),
+      statTile("Actively used", active + " / " + a.land.length, "", "good"),
+      statTile("Under renewal", a.land.filter((r) => r[4] === "Under Renewal").length, "See Leases / Action Tracker", "warning"),
+      statTile("Vacant / disputed", a.land.filter((r) => ["Vacant", "Disputed"].includes(r[4])).length, "", ""),
+    ],
+    columns: [{ label: "Portion" }, { label: "Primary use" }, { label: "Extent (ha)", cls: "num" }, { label: "Lease / tenure" }, { label: "Status" }],
+    rows: () => a.land,
+    empty: "No land parcels recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`,
+      `<span style="color:var(--ink-2);">${esc(r[3])}</span>`, statusPill(r[4])],
+    manage: editLand,
+  });
+}
+function renderAssetAllocations(host) {
+  const alloc = DATA.assets.allocations || [];
+  mountRegister(host, {
+    title: "Land Allocated to Beneficiaries", importKey: "allocations",
+    hint: "Residential, cropping and grazing allocations to members and groups.",
+    stats: () => [
+      statTile("Allocations", alloc.length, "On record", ""),
+      statTile("Area allocated", alloc.reduce((s, r) => s + (+r[3] || 0), 0).toLocaleString() + " ha", "", ""),
+      statTile("Active", alloc.filter((r) => r[6] === "Active").length, "", "good"),
+      statTile("Pending / disputed", alloc.filter((r) => ["Pending", "Under Dispute"].includes(r[6])).length, "", alloc.filter((r) => ["Pending", "Under Dispute"].includes(r[6])).length ? "warning" : "good"),
+    ],
+    columns: [{ label: "Beneficiary / household" }, { label: "Portion" }, { label: "Purpose" }, { label: "Area (ha)", cls: "num" }, { label: "Allocated on" }, { label: "Agreement ref." }, { label: "Status" }],
+    rows: () => alloc,
+    empty: "No allocations recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), `<span style="color:var(--ink-2);">${esc(r[2])}</span>`,
+      `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`, `<span class="mono">${esc(r[4])}</span>`, `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
+    manage: editAllocations,
+  });
+}
+function renderAssetLeases(host) {
+  const leases = DATA.assets.leases || [];
+  const alert = leases.filter((r) => ["Expiring Soon", "Expired", "Under Negotiation"].includes(r[7])).length;
+  mountRegister(host, {
+    title: "Land Leases", importKey: "leases",
+    hint: "Third parties leasing CPA land, the term and the annual rental due.",
+    stats: () => [
+      statTile("Leases", leases.length, "On record", ""),
+      statTile("Active", leases.filter((r) => r[7] === "Active").length, "", "good"),
+      statTile("Need attention", alert, "Expiring / expired / negotiating", alert ? "warning" : "good"),
+      statTile("Annual rental", fmtR(leases.filter((r) => r[7] === "Active").reduce((s, r) => s + (+r[6] || 0), 0)), "From active leases", ""),
+    ],
+    columns: [{ label: "Lessee / party" }, { label: "Portion" }, { label: "Land use" }, { label: "Area (ha)", cls: "num" }, { label: "Term" }, { label: "Annual rental", cls: "num" }, { label: "Status" }],
+    rows: () => leases,
+    empty: "No leases recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), `<span style="color:var(--ink-2);">${esc(r[2])}</span>`,
+      `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`, `<span class="mono">${esc(r[4])} – ${esc(r[5])}</span>`,
+      `<span class="mono">${(+r[6] || 0).toLocaleString()}</span>`, statusPill(r[7])],
+    manage: editLeases,
+  });
+}
+function renderAssetPermits(host) {
+  const p = DATA.assets.permits;
+  mountRegister(host, {
+    title: "Permits & Licences", importKey: "permits",
+    hint: "Water use, grazing, environmental and other regulatory authorisations.",
+    columns: [{ label: "Permit / licence" }, { label: "Valid until" }, { label: "Status" }],
+    rows: () => p,
+    empty: "No permits recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`, statusPill(r[2])],
+    manage: editPermits,
+  });
+}
+const INFRA_TYPES = ["Water", "Roads", "Buildings", "Fencing", "Energy", "Other"];
+const CONDITIONS = ["Good", "Fair", "Poor", "Non-functional"];
+function renderAssetInfra(host) {
+  const inf = DATA.assets.infrastructure || [];
+  const poor = inf.filter((r) => ["Poor", "Non-functional"].includes(r[5])).length;
+  mountRegister(host, {
+    title: "Infrastructure", importKey: "infrastructure",
+    hint: "Fixed improvements on the land — water, roads, buildings, fencing, energy.",
+    stats: () => [
+      statTile("Assets", inf.length, "Fixed improvements", ""),
+      statTile("Replacement value", fmtR(inf.reduce((s, r) => s + (+r[4] || 0), 0)), "Total on record", ""),
+      statTile("Poor / non-functional", poor, "Needs capital attention", poor ? "critical" : "good"),
+      statTile("Water infrastructure", inf.filter((r) => r[1] === "Water").length, "Boreholes, tanks, reticulation", ""),
+    ],
+    columns: [{ label: "Asset" }, { label: "Type" }, { label: "Location" }, { label: "Installed", cls: "num" }, { label: "Value", cls: "num" }, { label: "Condition" }, { label: "Status" }],
+    rows: () => inf,
+    empty: "No infrastructure recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`, esc(r[2]),
+      `<span class="mono">${esc(r[3] || "")}</span>`, `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, statusPill(r[5]), `<span style="color:var(--ink-2);">${esc(r[6])}</span>`],
+    manage: () => listEditor(ASSET_EDITORS.infrastructure()),
+  });
+}
+function renderAssetRegister(host) {
+  const m = DATA.assets.movable;
+  mountRegister(host, {
+    title: "Movable Asset Register", importKey: "movable",
+    hint: "Vehicles, plant, equipment and other movable items.",
+    stats: () => [
+      statTile("Asset classes", m.length, "Grouped lines", ""),
+      statTile("Items logged", m.reduce((s, r) => s + (+r[1] || 0), 0), "Total count", ""),
+      statTile("Infrastructure value", fmtR((DATA.assets.infrastructure || []).reduce((s, r) => s + (+r[4] || 0), 0)), "See Infrastructure tab", ""),
+      statTile("Maintenance open", (DATA.assets.maintenance || []).filter((r) => r[7] !== "Completed").length, "Tasks outstanding", ""),
+    ],
+    columns: [{ label: "Asset class" }, { label: "Count", cls: "num" }, { label: "Condition" }],
+    rows: () => m,
+    empty: "No movable assets recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`, `<span style="color:var(--ink-2);">${esc(r[2])}</span>`],
+    manage: editMovable,
+  });
+}
+const MAINT_STATUSES = ["Scheduled", "In Progress", "Completed", "Overdue"];
+function renderAssetMaint(host) {
+  const mx = DATA.assets.maintenance || [];
+  const now = new Date();
+  const overdue = mx.filter((r) => r[7] !== "Completed" && r[3] && new Date(r[3]) < now).length;
+  mountRegister(host, {
+    title: "Maintenance Plan", importKey: "asset_maintenance",
+    hint: "Planned and completed maintenance across infrastructure and movable assets.",
+    stats: () => [
+      statTile("Tasks", mx.length, "This cycle", ""),
+      statTile("Completed", mx.filter((r) => r[7] === "Completed").length, "Closed out", "good"),
+      statTile("Overdue", overdue, "Past the scheduled date", overdue ? "critical" : "good"),
+      statTile("Planned spend", fmtR(mx.filter((r) => r[7] !== "Completed").reduce((s, r) => s + (+r[5] || 0), 0)), "Outstanding tasks", ""),
+    ],
+    columns: [{ label: "Asset" }, { label: "Kind" }, { label: "Task" }, { label: "Scheduled" }, { label: "Completed" }, { label: "Cost", cls: "num" }, { label: "Responsible" }, { label: "Status" }],
+    rows: () => mx,
+    empty: "No maintenance tasks recorded.",
+    cell: (r) => {
+      const late = r[7] !== "Completed" && r[3] && new Date(r[3]) < now;
+      return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+        `<span style="min-width:180px;display:inline-block;">${esc(r[2])}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[3])}</span>`,
+        `<span class="mono">${esc(r[4])}</span>`, `<span class="mono">${(+r[5] || 0).toLocaleString()}</span>`, esc(r[6]), statusPill(r[7])];
+    },
+    manage: () => listEditor(ASSET_EDITORS.maintenance()),
+  });
 }
 
 const FIN_TABS = [
@@ -1850,13 +1983,134 @@ function editDomain(name) {
 }
 
 /* ============ Productivity Centre (scaffold) ============ */
+const PROD_TABS = [
+  { id: "crops", label: "Crops" }, { id: "orchards", label: "Orchards" }, { id: "timber", label: "Timber" },
+  { id: "livestock", label: "Livestock" }, { id: "water", label: "Water" }, { id: "labour", label: "Labour" },
+  { id: "inputs", label: "Inputs" }, { id: "harvest", label: "Harvest" }, { id: "sales", label: "Sales" },
+  { id: "cop", label: "Cost of Production" },
+];
+const ETYPE_BY_TAB = { crops: "Crop", orchards: "Orchard", timber: "Timber", livestock: "Livestock" };
+const RTYPE_BY_TAB = { labour: "Labour", inputs: "Inputs", harvest: "Harvest", sales: "Sales" };
+const ENTERPRISE_STATUSES = ["Planned", "Active", "Fallow", "Closed"];
+const WATER_SOURCES = ["Borehole", "River", "Dam", "Municipal", "Rainwater"];
+
 function renderProductivity() {
-  $("productivity-body").innerHTML = comingSoon("Productivity Centre", [
-    "Enterprises — crops, orchards, timber, livestock",
-    "Water — sources, allocation and usage",
-    "Labour, inputs and harvest records",
-    "Sales and cost of production per enterprise",
-  ], "Productivity ties directly into the Productivity domain of your institutional score.");
+  const strip = $("productivity-subtabs");
+  strip.innerHTML = subtabStrip("productivity", PROD_TABS);
+  wireSubtabs(strip);
+  const cur = SUBTAB.productivity || "crops";
+  const host = $("productivity-body");
+  if (ETYPE_BY_TAB[cur]) renderProdEnterprise(host, ETYPE_BY_TAB[cur]);
+  else if (RTYPE_BY_TAB[cur]) renderProdRecords(host, RTYPE_BY_TAB[cur]);
+  else if (cur === "water") renderProdWater(host);
+  else renderProdCOP(host);
+}
+function renderProdEnterprise(host, etype) {
+  const all = DATA.productivity.enterprises || [];
+  const rows = all.filter((r) => r[0] === etype);
+  const label = { Crop: "Crop", Orchard: "Orchard", Timber: "Timber", Livestock: "Livestock" }[etype];
+  mountRegister(host, {
+    title: label + " Enterprises", importKey: "prod_enterprises",
+    hint: `${label} production units — area, scale and who runs each.`,
+    stats: () => [
+      statTile(label + " units", rows.length, "On record", ""),
+      statTile("Active", rows.filter((r) => r[6] === "Active").length, "Currently producing", "good"),
+      statTile("Area", rows.reduce((s, r) => s + (+r[3] || 0), 0).toLocaleString() + " ha", "Under this enterprise type", ""),
+      statTile("Planned", rows.filter((r) => r[6] === "Planned").length, "Not yet started", rows.filter((r) => r[6] === "Planned").length ? "warning" : "good"),
+    ],
+    columns: [{ label: "Name" }, { label: "Portion" }, { label: "Area (ha)", cls: "num" }, { label: "Scale" }, { label: "Manager / operator" }, { label: "Status" }],
+    rows: () => rows,
+    empty: `No ${label.toLowerCase()} enterprises recorded.`,
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]), `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`,
+      esc(r[4]), esc(r[5]), statusPill(r[6])],
+    manage: () => listEditor(PROD_EDITORS.enterprises(etype)),
+  });
+}
+function renderProdWater(host) {
+  const w = DATA.productivity.water || [];
+  const over = w.filter((r) => (+r[2] || 0) > 0 && (+r[3] || 0) > (+r[2] || 0)).length;
+  const nearLimit = w.filter((r) => (+r[2] || 0) > 0 && (+r[3] || 0) / (+r[2] || 1) >= 0.9 && (+r[3] || 0) <= (+r[2] || 0)).length;
+  mountRegister(host, {
+    title: "Water Sources", importKey: "prod_water",
+    hint: "Boreholes, river abstraction and storage — licensed allocation vs actual use.",
+    stats: () => [
+      statTile("Sources", w.length, "On record", ""),
+      statTile("Licensed allocation", w.reduce((s, r) => s + (+r[2] || 0), 0).toLocaleString() + " m³", "Total per year", ""),
+      statTile("Recorded use", w.reduce((s, r) => s + (+r[3] || 0), 0).toLocaleString() + " m³", "Against allocation", ""),
+      statTile("Over / near limit", (over + nearLimit), over ? "Over-abstraction risk" : "Monitor in summer", over ? "critical" : nearLimit ? "warning" : "good"),
+    ],
+    columns: [{ label: "Source" }, { label: "Type" }, { label: "Allocation (m³/yr)", cls: "num" }, { label: "Used (m³)", cls: "num" }, { label: "Used %", cls: "num" }, { label: "Licence ref." }, { label: "Status" }],
+    rows: () => w,
+    empty: "No water sources recorded.",
+    cell: (r) => {
+      const pct = (+r[2] || 0) ? Math.round((+r[3] || 0) / (+r[2] || 1) * 100) : 0;
+      return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
+        `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`,
+        `<span class="mono" style="${pct > 100 ? "color:var(--status-critical);font-weight:700;" : pct >= 90 ? "color:var(--status-warning);" : ""}">${(+r[2] || 0) ? pct + "%" : "—"}</span>`,
+        `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])];
+    },
+    manage: () => listEditor(PROD_EDITORS.water()),
+  });
+}
+function renderProdRecords(host, rtype) {
+  const all = DATA.productivity.records || [];
+  const rows = all.filter((r) => r[0] === rtype);
+  const total = rows.reduce((s, r) => s + (+r[6] || 0), 0);
+  const label = { Labour: "Labour", Inputs: "Input", Harvest: "Harvest", Sales: "Sales" }[rtype];
+  mountRegister(host, {
+    title: label + " Records", importKey: "prod_records",
+    hint: {
+      Labour: "Wages and stipends paid on production activities.",
+      Inputs: "Seed, fertiliser, feed, chemicals and other production inputs.",
+      Harvest: "Recorded output by enterprise and period.",
+      Sales: "Revenue from produce, livestock and timber.",
+    }[rtype],
+    stats: () => [
+      statTile("Entries", rows.length, `${label} records`, ""),
+      statTile(rtype === "Sales" ? "Revenue" : rtype === "Harvest" ? "Records" : "Cost", rtype === "Harvest" ? rows.length : fmtR(total), "This period set", rtype === "Sales" ? "good" : ""),
+      statTile("Enterprises covered", new Set(rows.map((r) => r[1]).filter(Boolean)).size, "Distinct", ""),
+      statTile("Latest period", rows.length ? esc(rows[rows.length - 1][2] || "—") : "—", "Most recent entry", ""),
+    ],
+    columns: [{ label: "Enterprise" }, { label: "Period" }, { label: "Description" }, { label: "Quantity", cls: "num" }, { label: "Unit" }, { label: rtype === "Sales" ? "Revenue" : "Amount", cls: "num" }],
+    rows: () => rows,
+    empty: `No ${label.toLowerCase()} records recorded.`,
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`,
+      `<span style="color:var(--ink-2);">${esc(r[3])}</span>`, `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, esc(r[5]),
+      `<span class="mono">${(+r[6] || 0) ? (+r[6]).toLocaleString() : "—"}</span>`],
+    manage: () => listEditor(PROD_EDITORS.records(rtype)),
+  });
+}
+function renderProdCOP(host) {
+  const ent = DATA.productivity.enterprises || [];
+  const rec = DATA.productivity.records || [];
+  const names = [...new Set([...ent.map((e) => e[1]), ...rec.map((r) => r[1])].filter(Boolean))];
+  const sum = (name, type) => rec.filter((r) => r[1] === name && r[0] === type).reduce((s, r) => s + (+r[6] || 0), 0);
+  const rows = names.map((name) => {
+    const inputs = sum(name, "Inputs"), labour = sum(name, "Labour"), sales = sum(name, "Sales");
+    const cost = inputs + labour;
+    return { name, inputs, labour, cost, sales, margin: sales - cost };
+  });
+  const tCost = rows.reduce((s, r) => s + r.cost, 0), tSales = rows.reduce((s, r) => s + r.sales, 0);
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Enterprises", rows.length, "With cost or sales data", "")}
+      ${statTile("Cost of production", fmtR(tCost), "Inputs + labour recorded", "")}
+      ${statTile("Enterprise revenue", fmtR(tSales), "Sales recorded", "good")}
+      ${statTile("Gross margin", fmtR(tSales - tCost), tSales - tCost >= 0 ? "surplus" : "deficit", tSales - tCost >= 0 ? "good" : "critical")}
+    </div>
+    <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Cost of production by enterprise</h3>
+      <span class="hint">Computed from the Inputs, Labour and Sales records.</span></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Enterprise</th><th class="num">Inputs</th><th class="num">Labour</th><th class="num">Total cost</th><th class="num">Sales</th><th class="num">Margin</th></tr></thead>
+      <tbody>${rows.length ? rows.map((r) => `<tr>
+        <td style="font-weight:600;">${esc(r.name)}</td>
+        <td class="num mono">${r.inputs.toLocaleString()}</td>
+        <td class="num mono">${r.labour.toLocaleString()}</td>
+        <td class="num mono">${r.cost.toLocaleString()}</td>
+        <td class="num mono">${r.sales.toLocaleString()}</td>
+        <td class="num mono" style="${r.margin < 0 ? "color:var(--status-critical);font-weight:700;" : "color:var(--status-good);"}">${r.margin.toLocaleString()}</td>
+      </tr>`).join("") : emptyRow(6, "No production records yet — capture Inputs, Labour and Sales.")}</tbody>
+    </table></div>`;
 }
 function comingSoon(title, items, foot) {
   return `<div class="card coming-soon">
@@ -1984,6 +2238,41 @@ const IMPORT = {
     targets: [{ k: "date", label: "Date" }, { k: "payee", label: "Payee", required: true }, { k: "desc", label: "Description" },
       { k: "amount", label: "Amount" }, { k: "method", label: "Method" }, { k: "po", label: "PO ref" }, { k: "bankref", label: "Bank ref" }, { k: "status", label: "Status" }],
     make: (v) => [v.date || "", v.payee, v.desc || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, v.method || "EFT", v.po || "", v.bankref || "", v.status || "Pending"],
+  },
+  infrastructure: {
+    title: "infrastructure", section: "infrastructure", arr: () => DATA.assets.infrastructure,
+    targets: [{ k: "name", label: "Asset", required: true }, { k: "itype", label: "Type" }, { k: "loc", label: "Location" },
+      { k: "year", label: "Year installed" }, { k: "value", label: "Value" }, { k: "cond", label: "Condition" }, { k: "status", label: "Status" }],
+    make: (v) => [v.name, INFRA_TYPES.includes(v.itype) ? v.itype : "Other", v.loc || "", parseFloat(v.year) || 0,
+      parseFloat((v.value || "").replace(/[^\d.-]/g, "")) || 0, CONDITIONS.includes(v.cond) ? v.cond : "Fair", v.status || "In use", ""],
+  },
+  asset_maintenance: {
+    title: "maintenance tasks", section: "asset_maintenance", arr: () => DATA.assets.maintenance,
+    targets: [{ k: "asset", label: "Asset", required: true }, { k: "kind", label: "Kind" }, { k: "task", label: "Task", required: true },
+      { k: "sched", label: "Scheduled date" }, { k: "done", label: "Completed date" }, { k: "cost", label: "Cost" }, { k: "resp", label: "Responsible" }, { k: "status", label: "Status" }],
+    make: (v) => [v.asset, v.kind || "Infrastructure", v.task, v.sched || "", v.done || "",
+      parseFloat((v.cost || "").replace(/[^\d.-]/g, "")) || 0, v.resp || "", MAINT_STATUSES.includes(v.status) ? v.status : "Scheduled", ""],
+  },
+  prod_enterprises: {
+    title: "production enterprises", section: "prod_enterprises", arr: () => DATA.productivity.enterprises,
+    targets: [{ k: "etype", label: "Type (Crop/Orchard/Timber/Livestock)" }, { k: "name", label: "Name", required: true }, { k: "portion", label: "Portion" },
+      { k: "area", label: "Area (ha)" }, { k: "units", label: "Scale" }, { k: "manager", label: "Manager" }, { k: "status", label: "Status" }],
+    make: (v) => [["Crop", "Orchard", "Timber", "Livestock", "Other"].includes(v.etype) ? v.etype : "Crop", v.name, v.portion || "",
+      parseFloat(v.area) || 0, v.units || "", v.manager || "", ENTERPRISE_STATUSES.includes(v.status) ? v.status : "Active", ""],
+  },
+  prod_water: {
+    title: "water sources", section: "prod_water", arr: () => DATA.productivity.water,
+    targets: [{ k: "name", label: "Source", required: true }, { k: "source", label: "Type" }, { k: "alloc", label: "Allocation (m³/yr)" },
+      { k: "usage", label: "Used (m³)" }, { k: "lic", label: "Licence ref" }, { k: "status", label: "Status" }],
+    make: (v) => [v.name, WATER_SOURCES.includes(v.source) ? v.source : "Borehole", parseFloat((v.alloc || "").replace(/[^\d.-]/g, "")) || 0,
+      parseFloat((v.usage || "").replace(/[^\d.-]/g, "")) || 0, v.lic || "", v.status || "Active", ""],
+  },
+  prod_records: {
+    title: "production records", section: "prod_records", arr: () => DATA.productivity.records,
+    targets: [{ k: "rtype", label: "Type (Labour/Inputs/Harvest/Sales)" }, { k: "ent", label: "Enterprise" }, { k: "period", label: "Period" },
+      { k: "desc", label: "Description", required: true }, { k: "qty", label: "Quantity" }, { k: "unit", label: "Unit" }, { k: "amount", label: "Amount" }],
+    make: (v) => [["Labour", "Inputs", "Harvest", "Sales"].includes(v.rtype) ? v.rtype : "Inputs", v.ent || "", v.period || "", v.desc,
+      parseFloat(v.qty) || 0, v.unit || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0],
   },
   masterfile: {
     title: "master-file sections", section: "masterfile", arr: () => DATA.masterFile,
@@ -2264,6 +2553,91 @@ const FIN_EDITORS = {
   }),
 };
 
+/* listEditor configs — Land & Assets (infra + maintenance) and Productivity */
+const ASSET_EDITORS = {
+  infrastructure: () => ({
+    title: "Infrastructure", arr: DATA.assets.infrastructure, section: "infrastructure",
+    rowLabel: (r) => `${r[0]} — ${r[5]}`,
+    blank: () => ["", "Water", "", new Date().getFullYear(), 0, "Fair", "In use", ""],
+    fields: (r) => [
+      { key: "name", label: "Asset name", type: "text", value: r[0], required: true },
+      { key: "itype", label: "Type", type: "select", options: INFRA_TYPES, value: r[1] },
+      { key: "loc", label: "Location", type: "text", value: r[2] },
+      { key: "year", label: "Year installed", type: "number", value: r[3] },
+      { key: "value", label: "Replacement value (R)", type: "number", value: r[4], min: 0 },
+      { key: "cond", label: "Condition", type: "select", options: CONDITIONS, value: r[5] },
+      { key: "status", label: "Status", type: "text", value: r[6] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.name; r[1] = o.itype; r[2] = o.loc; r[3] = parseFloat(o.year) || 0; r[4] = parseFloat(o.value) || 0; r[5] = o.cond; r[6] = o.status; r[7] = o.notes; },
+  }),
+  maintenance: () => ({
+    title: "Maintenance tasks", arr: DATA.assets.maintenance, section: "asset_maintenance",
+    rowLabel: (r) => `${r[0]} — ${r[2]} (${r[7]})`,
+    blank: () => ["", "Infrastructure", "", new Date().toISOString().slice(0, 10), "", 0, "", "Scheduled", ""],
+    fields: (r) => [
+      { key: "asset", label: "Asset", type: "text", value: r[0], required: true },
+      { key: "kind", label: "Kind", type: "select", options: ["Infrastructure", "Movable", "Land"], value: r[1] },
+      { key: "task", label: "Task", type: "text", value: r[2], required: true },
+      { key: "sched", label: "Scheduled date", type: "date", value: r[3] },
+      { key: "done", label: "Completed date", type: "date", value: r[4] },
+      { key: "cost", label: "Cost (R)", type: "number", value: r[5], min: 0 },
+      { key: "resp", label: "Responsible", type: "text", value: r[6] },
+      { key: "status", label: "Status", type: "select", options: MAINT_STATUSES, value: r[7] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[8] },
+    ],
+    write: (r, o) => { r[0] = o.asset; r[1] = o.kind; r[2] = o.task; r[3] = o.sched; r[4] = o.done; r[5] = parseFloat(o.cost) || 0; r[6] = o.resp; r[7] = o.status; r[8] = o.notes; },
+  }),
+};
+const PROD_EDITORS = {
+  enterprises: (etype) => ({
+    title: "Production enterprises", arr: DATA.productivity.enterprises, section: "prod_enterprises",
+    rowLabel: (r) => `${r[1]} (${r[0]}) — ${r[6]}`,
+    blank: () => [etype || "Crop", "", "", 0, "", "", "Active", ""],
+    fields: (r) => [
+      { key: "etype", label: "Type", type: "select", options: ["Crop", "Orchard", "Timber", "Livestock", "Other"], value: r[0] || "Crop" },
+      { key: "name", label: "Enterprise name", type: "text", value: r[1], required: true },
+      { key: "portion", label: "Portion / location", type: "text", value: r[2] },
+      { key: "area", label: "Area (ha)", type: "number", value: r[3], min: 0 },
+      { key: "units", label: "Scale (e.g. “420 head”, “4 400 trees”)", type: "text", value: r[4] },
+      { key: "manager", label: "Manager / operator", type: "text", value: r[5] },
+      { key: "status", label: "Status", type: "select", options: ENTERPRISE_STATUSES, value: r[6] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[7] },
+    ],
+    write: (r, o) => { r[0] = o.etype; r[1] = o.name; r[2] = o.portion; r[3] = parseFloat(o.area) || 0; r[4] = o.units; r[5] = o.manager; r[6] = o.status; r[7] = o.notes; },
+  }),
+  water: () => ({
+    title: "Water sources", arr: DATA.productivity.water, section: "prod_water",
+    rowLabel: (r) => `${r[0]} (${r[1]})`,
+    blank: () => ["", "Borehole", 0, 0, "", "Active", ""],
+    fields: (r) => [
+      { key: "name", label: "Source name", type: "text", value: r[0], required: true },
+      { key: "source", label: "Type", type: "select", options: WATER_SOURCES, value: r[1] },
+      { key: "alloc", label: "Licensed allocation (m³/yr)", type: "number", value: r[2], min: 0 },
+      { key: "usage", label: "Recorded use (m³)", type: "number", value: r[3], min: 0 },
+      { key: "lic", label: "Licence reference", type: "text", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: ["Active", "Dormant", "Decommissioned"], value: r[5] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.name; r[1] = o.source; r[2] = parseFloat(o.alloc) || 0; r[3] = parseFloat(o.usage) || 0; r[4] = o.lic; r[5] = o.status; r[6] = o.notes; },
+  }),
+  records: (rtype) => ({
+    title: (rtype || "Production") + " records", arr: DATA.productivity.records, section: "prod_records",
+    rowLabel: (r) => `${r[0]} · ${r[1] || "—"} — ${r[3]}`,
+    blank: () => [rtype || "Inputs", "", "", "", 0, "", 0],
+    fields: (r) => [
+      { key: "rtype", label: "Record type", type: "select", options: ["Labour", "Inputs", "Harvest", "Sales"], value: r[0] || "Inputs" },
+      { key: "ent", label: "Enterprise", type: "select", options: ["", ...DATA.productivity.enterprises.map((e) => e[1])], value: r[1] },
+      { key: "period", label: "Period (e.g. “2026 Q1”)", type: "text", value: r[2] },
+      { key: "desc", label: "Description", type: "text", value: r[3], required: true },
+      { key: "qty", label: "Quantity", type: "number", value: r[4], min: 0 },
+      { key: "unit", label: "Unit (kg, tonne, head…)", type: "text", value: r[5] },
+      { key: "amount", label: "Amount / value (R)", type: "number", value: r[6], min: 0 },
+    ],
+    write: (r, o) => { r[0] = o.rtype; r[1] = o.ent; r[2] = o.period; r[3] = o.desc; r[4] = parseFloat(o.qty) || 0; r[5] = o.unit; r[6] = parseFloat(o.amount) || 0; },
+  }),
+};
+
 const BUTTONS = {
   "edit-identity-btn": editIdentity, "edit-journey-btn": editJourney,
   "edit-committee-btn": editCommittee, "add-action-btn": () => editAction(null), "edit-masterfile-btn": editMasterFile,
@@ -2423,6 +2797,7 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-productivity">
+    <div id="productivity-subtabs"></div>
     <div id="productivity-body"></div>
   </section>
 
@@ -2484,61 +2859,8 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-assets">
-    <div class="grid grid-4" id="assets-stats"></div>
-    <div class="card-head" style="margin:22px 0 10px;"><h3 style="font-size:13px;">Land Portions</h3>
-      <span style="display:flex;gap:6px;">
-        <button class="btn" id="import-land-btn" type="button">Import CSV</button>
-        <button class="btn" id="edit-land-btn" type="button">Manage</button>
-      </span></div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Portion</th><th>Primary Use</th><th class="num">Extent (ha)</th><th>Lease / Tenure</th><th>Status</th></tr></thead>
-      <tbody id="assets-land"></tbody>
-    </table></div>
-
-    <div class="card-head" style="margin:22px 0 10px;"><h3 style="font-size:13px;">Land Leases</h3>
-      <span style="display:flex;gap:6px;">
-        <button class="btn" id="import-leases-btn" type="button">Import CSV</button>
-        <button class="btn" id="edit-leases-btn" type="button">Manage</button>
-      </span></div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Lessee / Party</th><th>Land / Portion</th><th>Land Use</th><th class="num">Area (ha)</th><th>Term</th><th class="num">Annual Rental (R)</th><th>Status</th></tr></thead>
-      <tbody id="assets-leases"></tbody>
-    </table></div>
-
-    <div class="card-head" style="margin:22px 0 10px;"><h3 style="font-size:13px;">Land Allocated to Beneficiaries</h3>
-      <span style="display:flex;gap:6px;">
-        <button class="btn" id="import-allocations-btn" type="button">Import CSV</button>
-        <button class="btn" id="edit-allocations-btn" type="button">Manage</button>
-      </span></div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Beneficiary / Household</th><th>Land / Portion</th><th>Purpose</th><th class="num">Area (ha)</th><th>Allocated On</th><th>Agreement Ref.</th><th>Status</th></tr></thead>
-      <tbody id="assets-allocations"></tbody>
-    </table></div>
-
-    <div class="grid grid-2" style="margin-top:20px;">
-      <div>
-        <div class="card-head" style="margin-bottom:8px;"><h3 style="font-size:13px;">Movable Assets</h3>
-          <span style="display:flex;gap:6px;">
-            <button class="btn" id="import-movable-btn" type="button">Import</button>
-            <button class="btn" id="edit-movable-btn" type="button">Manage</button>
-          </span></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Asset Class</th><th class="num">Count</th><th>Condition</th></tr></thead>
-          <tbody id="assets-movable"></tbody>
-        </table></div>
-      </div>
-      <div>
-        <div class="card-head" style="margin-bottom:8px;"><h3 style="font-size:13px;">Permits &amp; Licenses</h3>
-          <span style="display:flex;gap:6px;">
-            <button class="btn" id="import-permits-btn" type="button">Import</button>
-            <button class="btn" id="edit-permits-btn" type="button">Manage</button>
-          </span></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Permit / License</th><th>Valid Until</th><th>Status</th></tr></thead>
-          <tbody id="assets-permits"></tbody>
-        </table></div>
-      </div>
-    </div>
+    <div id="assets-subtabs"></div>
+    <div id="assets-body"></div>
   </section>
 
   <section class="view hidden" id="view-finance">
