@@ -49,6 +49,11 @@ body.lp{ background:var(--surface); color:var(--ink); font-family:var(--font-bod
 .lp-hero{ position:relative; background:var(--brand-strong); color:#fff; overflow:hidden; padding:64px 0 76px; }
 .lp-hero-bg{ position:absolute; inset:0; z-index:0; }
 .lp-hero-bg svg{ width:100%; height:100%; }
+/* land-contour texture over the hero gradient — quiet nod to the land, zero image weight */
+.lp-hero-bg::after{ content:""; position:absolute; inset:0; pointer-events:none;
+  background:
+    repeating-linear-gradient(116deg, rgba(255,255,255,.05) 0 1px, transparent 1px 27px),
+    radial-gradient(48% 62% at 85% 4%, rgba(185,138,46,.17), transparent 70%); }
 .lp-hero-grid{ position:relative; z-index:1; display:grid; grid-template-columns:1.05fr .95fr; gap:52px; align-items:center; }
 .lp-hero-copy h1{ color:#fff; }
 .lp-hero-eyebrow{ color:#a9c0e6; }

@@ -148,9 +148,13 @@ button{font-family:inherit;}
 /* ---------- auth screen (premium split) ---------- */
 .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 20px;}
 .auth-split{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr;}
-.auth-hero{background:var(--brand-strong);color:#fff;padding:56px 52px;display:flex;flex-direction:column;position:relative;overflow:hidden;}
-.auth-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:180px;
-  background:radial-gradient(120% 100% at 20% 100%, rgba(47,125,79,.35), transparent 70%);}
+.auth-hero{background-color:var(--brand-strong);color:#fff;padding:56px 52px;display:flex;flex-direction:column;position:relative;overflow:hidden;
+  background-image:
+    linear-gradient(118deg, rgba(15,27,51,.94) 3%, rgba(17,34,64,.66) 44%, rgba(21,44,42,.50) 80%, rgba(26,54,44,.42)),
+    url("assets/bg-login.jpg");
+  background-size:cover;background-position:center;}
+.auth-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:220px;
+  background:radial-gradient(120% 100% at 18% 100%, rgba(47,125,79,.40), transparent 72%);}
 .auth-hero .ah-brand{display:flex;align-items:center;gap:11px;}
 .auth-hero .ah-mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(150deg,#2a4c86,#2f7d4f);
   display:grid;place-items:center;font-family:var(--font-display);font-weight:800;color:#fff;flex:none;}
