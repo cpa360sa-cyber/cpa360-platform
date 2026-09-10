@@ -188,6 +188,20 @@ body.lp{ background:var(--surface); color:var(--ink); font-family:var(--font-bod
 .lp-faq details[open] summary::after{ content:"–"; }
 .lp-faq p{ padding:0 20px 18px; font-size:13px; color:var(--ink-2); line-height:1.6; }
 
+/* ---------- photographic band ---------- */
+.lp-band{
+  padding:96px 0;
+  color:#fff;
+  background-color:var(--brand-strong);
+  background-image:
+    linear-gradient(180deg, rgba(15,27,51,.78), rgba(17,34,64,.66) 45%, rgba(15,27,51,.82)),
+    url("assets/bg-band.jpg");
+  background-size:cover;
+  background-position:center 58%;
+}
+.lp-band .eyebrow{ color:#9fd8b6; }
+.lp-band h2{ color:#fff; max-width:22ch; margin-left:auto; margin-right:auto; text-wrap:balance; }
+
 /* ---------- CTA bands ---------- */
 .lp-cta-band{ background:var(--paper); }
 .lp-cta-band .btn{ margin-top:22px; }
@@ -252,6 +266,7 @@ body.lp{ background:var(--surface); color:var(--ink); font-family:var(--font-bod
   .lp-nav,.lp-header-cta{ display:none; }
   .lp-burger{ display:block; }
   .lp-section{ padding:52px 0; }
+  .lp-band{ padding:64px 0; }
   .lp-journey{ grid-template-columns:1fr; }
   .lp-score-domains li{ grid-template-columns:110px 1fr 30px; }
   .lp-choices{ grid-template-columns:1fr; }
