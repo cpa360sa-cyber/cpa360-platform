@@ -301,6 +301,40 @@
 .cpa-dash .coming-soon ul{ margin:8px 0 0; padding-left:18px; font-size:12.5px; color:var(--ink-2); }
 .cpa-dash .coming-soon li{ margin:3px 0; }
 
+/* ---- mobile pass (Phase 8) ---- */
+@media (max-width:760px){
+  /* sub-tab strips scroll horizontally instead of wrapping to 4 rows */
+  .cpa-dash .subtabs{ flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; margin-bottom:16px; }
+  .cpa-dash .subtabs::-webkit-scrollbar{ display:none; }
+  .cpa-dash .subtabs button{ flex:none; white-space:nowrap; }
+  .cpa-dash .card{ padding:14px 15px; }
+  .cpa-dash .card-head{ margin-bottom:10px; }
+  .cpa-dash .bar-row{ grid-template-columns:44% 1fr 56px; gap:8px; }
+  .cpa-dash .bar-row .lbl{ font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cpa-dash .crit-list li{ grid-template-columns:1fr 64px 42px; }
+  .cpa-dash .dom-row{ grid-template-columns:1fr 90px 42px; gap:8px; }
+  .cpa-dash .ex-next{ align-items:flex-start; }
+  .cpa-dash .ex-next .btn{ width:100%; }
+  .cpa-dash-toast{ left:12px; right:12px; transform:none; max-width:none; text-align:center; }
+}
+@media (max-width:560px){
+  .cpa-dash .grid-4, .cpa-dash .grid-3{ grid-template-columns:1fr; }
+  .cpa-dash .split-score, .cpa-dash .split-bene, .cpa-dash .split-finance, .cpa-dash .split-impact{ grid-template-columns:1fr; }
+  .cpa-dash .exec-top{ grid-template-columns:1fr; }
+  .cpa-dash .ex-cards{ grid-template-columns:1fr; }
+
+  /* Priority-actions table → stacked cards (uses data-label on each <td>) */
+  .cpa-dash .exec-priority table thead{ display:none; }
+  .cpa-dash .exec-priority table, .cpa-dash .exec-priority tbody, .cpa-dash .exec-priority tr, .cpa-dash .exec-priority td{ display:block; width:auto; }
+  .cpa-dash .exec-priority tr{ border:1px solid var(--border); border-radius:10px; margin:10px; padding:6px 4px; }
+  .cpa-dash .exec-priority tr:hover{ background:var(--surface); }
+  .cpa-dash .exec-priority td{ border:0; padding:5px 12px; font-size:12.5px; }
+  .cpa-dash .exec-priority td::before{ content:attr(data-label); display:block; font-size:9.5px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); margin-bottom:1px; }
+  .cpa-dash .exec-priority td[data-label="Action"]::before{ display:none; }
+  .cpa-dash .exec-priority td[data-label="Action"]{ font-size:13.5px; padding-top:8px; }
+}
+
 /* ---- print (board pack) ---- */
 .print-only{ display:none; }
 @media print{

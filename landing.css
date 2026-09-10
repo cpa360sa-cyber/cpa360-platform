@@ -248,9 +248,16 @@ body.lp{ background:var(--surface); color:var(--ink); font-family:var(--font-bod
   .lp-burger{ display:block; }
   .lp-section{ padding:52px 0; }
   .lp-journey{ grid-template-columns:1fr; }
-  .lp-score-domains li{ grid-template-columns:120px 1fr 30px; }
+  .lp-score-domains li{ grid-template-columns:110px 1fr 30px; }
   .lp-choices{ grid-template-columns:1fr; }
   .lp-footer-row{ flex-direction:column; }
+  .lp-mock-journey{ flex-wrap:wrap; }
+  .lp-form-foot{ flex-wrap:wrap; }
+  .lp-hero{ padding-top:96px; }
+}
+@media (max-width:380px){
+  .lp-mock-body{ grid-template-columns:1fr; justify-items:center; gap:14px; }
+  .lp-mock-bars{ width:100%; }
 }
 @media (prefers-reduced-motion:no-preference){
   .lp-nav a,.lp-mod,.lp-faq summary::after{ transition:all .15s ease; }

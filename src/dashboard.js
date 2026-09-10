@@ -2335,11 +2335,11 @@ function renderExec() {
     const over = a[5] === "Overdue" || (a[4] && days < 0);
     const p = PRIORITY(days, a[5]);
     return `<tr>
-      <td style="min-width:220px;font-weight:600;">${esc(a[2])}</td>
-      <td>${esc(a[3]) || "—"}</td>
-      <td class="mono ${over ? "pa-over" : ""}" style="white-space:nowrap;">${esc(a[4] || "—")}</td>
-      <td><span class="pa-pri ${p}">${p}</span></td>
-      <td>${statusPill(a[5])}</td>
+      <td data-label="Action" style="min-width:200px;font-weight:600;">${esc(a[2])}</td>
+      <td data-label="Owner">${esc(a[3]) || "—"}</td>
+      <td data-label="Due" class="mono ${over ? "pa-over" : ""}" style="white-space:nowrap;">${esc(a[4] || "—")}</td>
+      <td data-label="Priority"><span class="pa-pri ${p}">${p}</span></td>
+      <td data-label="Status">${statusPill(a[5])}</td>
     </tr>`;
   }).join("") : emptyRow(5, "No open actions — every item is closed.");
 
