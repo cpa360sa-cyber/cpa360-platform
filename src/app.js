@@ -9,6 +9,7 @@ import {
 } from "./members.js";
 import * as dash from "./dashboard.js";
 import { renderToolsLibrary } from "./tools-library.js";
+import { renderIntegrations } from "./integrations.js";
 
 const root = document.getElementById("root");
 const ENV = window.__CPA360_ENV || {};
@@ -48,6 +49,7 @@ const IC = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   kit: '<path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16"/>',
   spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/>',
+  plug: '<path d="M9 3v6M15 3v6M7 9h10v3a5 5 0 0 1-10 0zM12 17v4"/>',
 };
 const svg = (name, cls) =>
   `<svg class="ic ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -90,6 +92,7 @@ const NAV = [
   ]},
   { group: "Manage", items: [
     { id: "members", label: "Members", icon: "team", app: true, admin: true },
+    { id: "integrations", label: "Integrations", icon: "plug", app: true },
     { id: "settings", label: "Settings", icon: "cog", app: true },
   ]},
 ];
@@ -497,6 +500,7 @@ function route() {
   if (h.startsWith("#/settings")) return { name: "settings" };
   if (h.startsWith("#/reports")) return { name: "reports" };
   if (h.startsWith("#/tools")) return { name: "tools" };
+  if (h.startsWith("#/integrations")) return { name: "integrations" };
   if (h.startsWith("#/new")) return { name: "new" };
   if (h.startsWith("#/v/")) {
     const parts = h.slice(4).split("/");
@@ -547,6 +551,14 @@ async function renderView() {
     setHeader("Manage", "Settings"); markActiveNav("settings");
     refreshChrome("settings");
     return renderSettings(view);
+  }
+  if (r.name === "integrations") {
+    setHeader("Manage", "Integrations — " + state.active.name); markActiveNav("integrations");
+    refreshChrome("integrations");
+    return renderIntegrations(view, {
+      orgId: state.active.id, orgName: state.active.name, role: state.active.role,
+      userId: state.session?.user?.id || null,
+    });
   }
   if (r.name === "reports") {
     setHeader("Insight", "Reports"); markActiveNav("reports");

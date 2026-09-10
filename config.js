@@ -11,4 +11,9 @@ window.__CPA360_ENV = {
   // In-app AI Assistant (navigation + attention). The `cpa-assistant` Edge
   // Function is deployed; add its key:  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
   ASSISTANT_ENABLED: true,
+  // Integrations → which OAuth providers are set up. Add a provider here AFTER
+  // you've put its OAUTH_<PROVIDER>_ID / _SECRET into the oauth-connect function
+  // secrets. "webhook" needs no setup and always works.
+  //   ids: google · microsoft · slack · xero · quickbooks · dropbox · docusign
+  INTEGRATIONS: { webhook: true },
 };

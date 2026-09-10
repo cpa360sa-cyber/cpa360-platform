@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connecting… · CPA360</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    body{display:grid;place-items:center;min-height:100vh;margin:0;background:var(--paper,#f5f6f3);}
+    .cb{max-width:360px;text-align:center;padding:32px 28px;background:var(--surface,#fff);
+      border:1px solid var(--border,#e2e4ea);border-radius:16px;box-shadow:var(--shadow,0 1px 3px rgba(0,0,0,.08));}
+    .cb h1{font-family:var(--font-display,system-ui);font-size:17px;margin:0 0 6px;color:var(--ink,#12203d);}
+    .cb p{font-size:13px;color:var(--ink-2,#4d5871);margin:0;}
+    .cb .mark{width:44px;height:44px;border-radius:50%;margin:0 auto 14px;display:grid;place-items:center;
+      font-size:22px;background:var(--brand-2-tint,#e5f1ea);color:var(--brand-2,#2f7d4f);}
+    .cb.err .mark{background:#fdecec;color:#c0392b;}
+    .cb button{margin-top:16px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;
+      border:1px solid var(--border,#e2e4ea);background:var(--surface,#fff);color:var(--ink,#12203d);
+      border-radius:9px;padding:8px 16px;}
+  </style>
+</head>
+<body>
+  <div class="cb" id="cb">
+    <div class="mark" id="mark">&#8635;</div>
+    <h1 id="title">Connecting…</h1>
+    <p id="msg">Finishing the link with your app. This window will close on its own.</p>
+  </div>
+
+  <script src="./config.js"></script>
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
+
+    const env = window.__CPA360_ENV || {};
+    const q = Object.fromEntries(new URLSearchParams(location.search).entries());
+    const cb = document.getElementById("cb");
+    const setState = (ok, title, msg) => {
+      cb.classList.toggle("err", !ok);
+      document.getElementById("mark").innerHTML = ok ? "&#10003;" : "&#33;";
+      document.getElementById("title").textContent = title;
+      document.getElementById("msg").textContent = msg;
+    };
+    const tell = (payload) => {
+      try { window.opener && window.opener.postMessage({ source: "cpa360-oauth", ...payload }, location.origin); } catch {}
+    };
+    const finish = (payload, title, msg, autoclose) => {
+      tell(payload);
+      setState(!!payload.ok, title, msg);
+      if (autoclose) setTimeout(() => window.close(), 1200);
+      else {
+        const b = document.createElement("button");
+        b.textContent = "Close window";
+        b.onclick = () => window.close();
+        cb.appendChild(b);
+      }
+    };
+
+    (async () => {
+      if (q.error) {
+        return finish({ ok: false, error: q.error }, "Not connected", "You cancelled, or the provider declined the request. You can close this window.");
+      }
+      if (!q.code || !q.state) {
+        return finish({ ok: false, error: "bad_callback" }, "Something's missing", "This link is incomplete. Close this window and try connecting again.");
+      }
+      if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+        return finish({ ok: false, error: "config" }, "Not configured", "The app isn't set up. Close this window.");
+      }
+      try {
+        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+          auth: { persistSession: true, autoRefreshToken: true },
+        });
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          return finish({ ok: false, error: "no_session" }, "Please sign in first", "Your session expired. Close this window, sign in to CPA360, and connect again.");
+        }
+        const { data, error } = await supabase.functions.invoke("oauth-connect", {
+          body: { action: "exchange", params: q },
+        });
+        if (error || data?.error) {
+          return finish(
+            { ok: false, error: (data && data.error) || "exchange_failed" },
+            "Couldn't finish connecting",
+            "The provider linked, but the app couldn't complete it. Close this window and try again.",
+          );
+        }
+        finish(
+          { ok: true, provider: data.provider, label: data.label },
+          "Connected",
+          `${data.label || data.provider} is now linked to CPA360. This window will close.`,
+          true,
+        );
+      } catch (e) {
+        finish({ ok: false, error: "network" }, "Couldn't finish connecting", "Check your connection and try again. Close this window.");
+      }
+    })();
+  </script>
+</body>
+</html>
