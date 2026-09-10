@@ -11,10 +11,14 @@ import * as dash from "./dashboard.js";
 import { renderToolsLibrary } from "./tools-library.js";
 
 const root = document.getElementById("root");
+const ENV = window.__CPA360_ENV || {};
+const IS_PREVIEW = new URLSearchParams(location.search).has("preview");
+const ASSISTANT_ON = !!ENV.ASSISTANT_ENABLED && (!IS_PREVIEW || location.search.includes("asst"));
 const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
-const state = { session: null, orgs: [], active: null, dashOrgId: null };
+const state = { session: null, orgs: [], active: null, dashOrgId: null,
+  asst: { open: false, busy: false, greeted: false, history: [] } };
 
 /* ============ icons (path innards only) ============ */
 const IC = {
@@ -43,6 +47,7 @@ const IC = {
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   kit: '<path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16"/>',
+  spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/>',
 };
 const svg = (name, cls) =>
   `<svg class="ic ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -186,6 +191,7 @@ function renderShell() {
               </button>
               <div class="tb-pop" id="notif-pop" hidden><div class="tb-pop-head">Needs attention</div><div id="notif-body"></div></div>
             </div>
+            ${ASSISTANT_ON ? `<button class="tb-icon" id="tb-assistant" type="button" aria-label="Assistant">${svg("spark")}<span class="tb-dot" id="asst-dot" hidden></span></button>` : ""}
             <a class="tb-icon" id="tb-help" href="./index.html#lp-faq" target="_blank" rel="noopener" aria-label="Help">${svg("help")}</a>
             <div class="tb-icon-wrap">
               <button class="tb-icon tb-avatar" id="tb-profile" type="button" aria-label="Account">${esc(avatar)}</button>
@@ -203,6 +209,7 @@ function renderShell() {
         <div class="journey-strip" id="journey-strip" hidden></div>
         <div class="viewport" id="view" tabindex="-1"></div>
       </main>
+      ${ASSISTANT_ON ? assistantPanelHtml() : ""}
     </div>`;
 
   wireShell();
@@ -287,10 +294,161 @@ function wireShell() {
     sp.hidden = false;
   });
   si.addEventListener("blur", () => setTimeout(() => (sp.hidden = true), 150));
+
+  if (ASSISTANT_ON) wireAssistant();
 }
 function closePops() {
   root.querySelectorAll(".tb-pop").forEach((p) => (p.hidden = true));
   root.querySelectorAll('.tb-icon[aria-expanded="true"]').forEach((b) => b.setAttribute("aria-expanded", "false"));
+}
+
+/* ==================== assistant (navigation + attention) ==================== */
+function assistantPanelHtml() {
+  const chips = [
+    "What needs my attention?",
+    "Take me to overdue actions",
+    "Where do I record a new lease?",
+    "Explain my institutional score",
+  ];
+  return `
+    <aside class="asst" id="asst" hidden aria-label="CPA360 Assistant">
+      <div class="asst-head">
+        <div><b>CPA360 Assistant</b><span>Navigation &amp; what needs attention</span></div>
+        <button class="asst-x" id="asst-close" type="button" aria-label="Close assistant">&times;</button>
+      </div>
+      <div class="asst-log" id="asst-log" tabindex="0"></div>
+      <div class="asst-chips" id="asst-chips">
+        ${chips.map((c) => `<button type="button" class="asst-chip">${esc(c)}</button>`).join("")}
+      </div>
+      <form class="asst-bar" id="asst-form">
+        <input id="asst-input" type="text" autocomplete="off" placeholder="Ask, or say where you want to go…" aria-label="Message the assistant" />
+        <button class="btn primary" id="asst-send" type="submit" aria-label="Send">${svg("spark")}</button>
+      </form>
+    </aside>`;
+}
+function wireAssistant() {
+  const panel = root.querySelector("#asst");
+  if (!panel) return;
+  const btn = root.querySelector("#tb-assistant");
+  const log = root.querySelector("#asst-log");
+  const input = root.querySelector("#asst-input");
+
+  btn.addEventListener("click", () => asstToggle(!state.asst.open));
+  root.querySelector("#asst-close").addEventListener("click", () => asstToggle(false));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.asst.open) { asstToggle(false); btn.focus(); }
+  });
+  root.querySelectorAll(".asst-chip").forEach((c) =>
+    c.addEventListener("click", () => asstSend(c.textContent)));
+  root.querySelector("#asst-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const t = input.value.trim();
+    if (t) asstSend(t);
+  });
+  void log;
+}
+function asstToggle(open) {
+  const panel = root.querySelector("#asst");
+  const btn = root.querySelector("#tb-assistant");
+  if (!panel) return;
+  state.asst.open = open;
+  panel.hidden = !open;
+  root.querySelector(".app").classList.toggle("asst-open", open);
+  if (btn) btn.setAttribute("aria-expanded", String(open));
+  if (open) {
+    if (!state.asst.greeted) asstGreet();
+    setTimeout(() => root.querySelector("#asst-input")?.focus(), 30);
+  }
+}
+function asstGreet() {
+  state.asst.greeted = true;
+  const s = dash.dashSummary && dash.dashSummary();
+  const n = s && s.alerts ? s.alerts.length : 0;
+  const line = n
+    ? `Hello. ${n} thing${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} attention on this CPA. Ask me “what needs my attention?” or tell me where you want to go.`
+    : `Hello. Nothing is flagged right now. Tell me where you want to go, or ask what a screen is for.`;
+  asstBubble("assistant", line);
+}
+function asstBubble(role, text, opts = {}) {
+  const log = root.querySelector("#asst-log");
+  if (!log) return null;
+  const el = document.createElement("div");
+  el.className = "asst-msg asst-" + role + (opts.pending ? " pending" : "");
+  el.textContent = text;
+  if (opts.nav) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "asst-go";
+    b.textContent = `Open ${opts.nav.label} →`;
+    b.addEventListener("click", () => { location.hash = opts.nav.route; });
+    el.appendChild(b);
+  }
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+function asstContext() {
+  const s = (dash.dashSummary && dash.dashSummary()) || {};
+  const r = route();
+  return {
+    cpaName: state.active?.name || s.cpaName || "",
+    role: state.active?.role || "member",
+    currentView: r.name === "dash" ? (r.tab ? r.view + "/" + r.tab : r.view) : r.name,
+    score: s.score, band: s.band, stageN: s.stageN, stageName: s.stageName,
+    isDemo: /kwezi valley/i.test(state.active?.name || ""),
+    alerts: (s.alerts || []).map((a) => ({ text: a.text, goto: a.goto })),
+  };
+}
+async function asstSend(text) {
+  if (state.asst.busy) return;
+  const chips = root.querySelector("#asst-chips");
+  if (chips) chips.hidden = true;
+  const input = root.querySelector("#asst-input");
+  if (input) input.value = "";
+  if (!state.asst.greeted) state.asst.greeted = true;
+
+  asstBubble("user", text);
+  state.asst.history.push({ role: "user", text });
+  state.asst.busy = true;
+  const pending = asstBubble("assistant", "…", { pending: true });
+
+  try {
+    const { data, error } = await supabase.functions.invoke("cpa-assistant", {
+      body: {
+        message: text,
+        history: state.asst.history.slice(-10),
+        context: asstContext(),
+      },
+    });
+    pending?.remove();
+    if (error) throw error;
+
+    if (data?.error === "not_configured") {
+      asstBubble("assistant",
+        "The assistant isn’t switched on yet. An ANTHROPIC_API_KEY needs to be added to the cpa-assistant function in Supabase.");
+      return;
+    }
+    const reply = data?.reply || "I didn’t catch that — try again.";
+    const nav = data?.navigate && /^#\//.test(data.navigate.route) ? data.navigate : null;
+    asstBubble("assistant", reply, nav ? { nav } : {});
+    state.asst.history.push({ role: "assistant", text: reply });
+    if (nav) {
+      location.hash = nav.route;
+      asstBubble("assistant", `→ Opened ${nav.label}.`);
+    }
+  } catch (e) {
+    pending?.remove();
+    asstBubble("assistant", "I couldn’t reach the assistant just now. Please check your connection and try again.");
+  } finally {
+    state.asst.busy = false;
+    root.querySelector("#asst-input")?.focus();
+  }
+}
+function asstDot() {
+  const d = root.querySelector("#asst-dot");
+  if (!d) return;
+  const s = dash.dashSummary && dash.dashSummary();
+  d.hidden = !(s && s.alerts && s.alerts.length) || state.asst.open;
 }
 
 function toggleTheme() {
@@ -320,6 +478,7 @@ function refreshChrome(routeView) {
   }
 
   if (dot) dot.hidden = !s.alerts.length;
+  asstDot();
   if (nb) {
     nb.innerHTML = s.alerts.length
       ? s.alerts.map((a) => `<button class="notif-item tone-${a.tone}" data-route="${a.goto}" type="button">
