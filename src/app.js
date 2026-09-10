@@ -615,6 +615,7 @@ async function renderMembers(view) {
 
 /* ---- dev: preview the shell chrome without signing in (?preview) ---- */
 function previewShell() {
+  root.className = "";
   state.session = { user: { email: "chairperson@kwezivalley.org.za" } };
   state.orgs = [{ id: "kv", name: "Kwezi Valley CPA", role: "admin" },
     { id: "mb", name: "Mashobotho CPA", role: "member" }];
