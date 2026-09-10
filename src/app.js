@@ -145,6 +145,7 @@ function renderShell() {
 
   root.innerHTML = `
     <div class="app" data-nav-open="false">
+      <button class="skip-link" id="skip-link" type="button">Skip to main content</button>
       <div class="nav-scrim" id="nav-scrim"></div>
       <aside class="sidebar">
         <div class="sb-brand">
@@ -159,7 +160,7 @@ function renderShell() {
 
       <main>
         <header class="topbar">
-          <button class="tb-menu" id="tb-menu" type="button" aria-label="Open menu">${svg("menu")}</button>
+          <button class="tb-menu" id="tb-menu" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav">${svg("menu")}</button>
           <div class="tb-title">
             <span class="eyebrow" id="v-eyebrow"></span>
             <h1 id="v-title">CPA360</h1>
@@ -197,7 +198,7 @@ function renderShell() {
         </header>
 
         <div class="journey-strip" id="journey-strip" hidden></div>
-        <div class="viewport" id="view"></div>
+        <div class="viewport" id="view" tabindex="-1"></div>
       </main>
     </div>`;
 
@@ -206,9 +207,24 @@ function renderShell() {
 
 function wireShell() {
   const app = root.querySelector(".app");
-  const setNav = (open) => app.dataset.navOpen = String(open);
-  root.querySelector("#tb-menu").onclick = () => setNav(app.dataset.navOpen !== "true");
+  const menuBtn = root.querySelector("#tb-menu");
+  const setNav = (open) => {
+    app.dataset.navOpen = String(open);
+    menuBtn.setAttribute("aria-expanded", String(open));
+    menuBtn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    if (open) { const f = root.querySelector("#nav .sb-link"); if (f) f.focus(); }
+  };
+  menuBtn.onclick = () => setNav(app.dataset.navOpen !== "true");
   root.querySelector("#nav-scrim").onclick = () => setNav(false);
+  root.querySelector("#skip-link").onclick = () => {
+    const v = root.querySelector("#view");
+    if (v) { v.focus(); v.scrollIntoView(); }
+  };
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (app.dataset.navOpen === "true") { setNav(false); menuBtn.focus(); }
+    closePops();
+  });
 
   root.querySelectorAll("[data-route]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = b.dataset.route; setNav(false); closePops(); });
@@ -236,11 +252,14 @@ function wireShell() {
   const pops = [["#tb-notif", "#notif-pop"], ["#tb-profile", "#profile-pop"]];
   pops.forEach(([btnSel, popSel]) => {
     const btn = root.querySelector(btnSel), pop = root.querySelector(popSel);
+    btn.setAttribute("aria-haspopup", "true");
+    btn.setAttribute("aria-expanded", "false");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const open = pop.hidden;
       closePops();
       pop.hidden = !open;
+      btn.setAttribute("aria-expanded", String(open));
     });
     pop.addEventListener("click", (e) => e.stopPropagation());
   });
@@ -268,6 +287,7 @@ function wireShell() {
 }
 function closePops() {
   root.querySelectorAll(".tb-pop").forEach((p) => (p.hidden = true));
+  root.querySelectorAll('.tb-icon[aria-expanded="true"]').forEach((b) => b.setAttribute("aria-expanded", "false"));
 }
 
 function toggleTheme() {
@@ -329,8 +349,12 @@ function setHeader(eyebrow, title) {
   document.title = "CPA360 · " + (title || "");
 }
 function markActiveNav(id) {
-  root.querySelectorAll("#nav .sb-link").forEach((b) =>
-    b.classList.toggle("active", b.dataset.navid === id));
+  root.querySelectorAll("#nav .sb-link").forEach((b) => {
+    const on = b.dataset.navid === id;
+    b.classList.toggle("active", on);
+    if (on) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
 }
 
 async function renderView() {

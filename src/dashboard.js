@@ -128,7 +128,7 @@ function scoreGauge(value, max, size = 168) {
   const dash = circ * Math.max(0, Math.min(1, value / max));
   const gid = "sg" + Math.round(size) + "_" + value;
   const num = size >= 150 ? 34 : Math.round(size * 0.22);
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Score ${value} out of ${max}">
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="var(--brand)"/><stop offset="1" stop-color="var(--brand-2)"/></linearGradient></defs>
     <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="13"/>
@@ -148,7 +148,7 @@ function donut(slices, size = 160) {
     offset += dash;
     return el;
   }).join("");
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${total.toLocaleString()} members">
     <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="18"/>${circles}
     <text x="${c}" y="${c - 2}" text-anchor="middle" font-family="Libre Franklin, sans-serif" font-weight="800" font-size="22" fill="var(--ink)">${total.toLocaleString()}</text>
     <text x="${c}" y="${c + 16}" text-anchor="middle" font-family="Public Sans, sans-serif" font-size="10.5" fill="var(--ink-muted)">members</text></svg>`;
@@ -552,8 +552,10 @@ function listEditor(cfg) {
 const SUBTAB = {};
 function subtabStrip(section, tabs) {
   const cur = SUBTAB[section] || tabs[0].id;
-  return `<div class="subtabs">${tabs.map((t) =>
-    `<button type="button" data-subtab="${section}:${t.id}" class="${t.id === cur ? "active" : ""}">${esc(t.label)}</button>`).join("")}</div>`;
+  return `<div class="subtabs" role="tablist" aria-label="Sections">${tabs.map((t) => {
+    const on = t.id === cur;
+    return `<button type="button" role="tab" aria-selected="${on}" data-subtab="${section}:${t.id}" class="${on ? "active" : ""}">${esc(t.label)}</button>`;
+  }).join("")}</div>`;
 }
 function wireSubtabs(host) {
   host.querySelectorAll("[data-subtab]").forEach((b) => (b.onclick = () => {
@@ -2285,9 +2287,6 @@ function renderExec() {
   const now = new Date();
   const alerts = computeAlerts();
 
-  $("exec-illus").innerHTML = isDemoOrg()
-    ? `<div class="illus-banner">Illustrative CPA360 assessment — this workspace is the Kwezi Valley demo dataset.</div>` : "";
-
   const ns = nextStep();
   $("exec-next").innerHTML = `
     <div class="en-txt"><div class="en-eyebrow">What must happen next</div><div class="en-line">${esc(ns.line)}</div></div>
@@ -3428,6 +3427,19 @@ const BUTTONS = {
 function renderCurrent() {
   try { RENDERERS[currentView](); } catch (e) { console.error(e); }
   applyRoleGate();
+  a11yFixup();
+}
+/* keep dynamically-rendered content screen-reader friendly */
+function a11yFixup() {
+  if (!container) return;
+  container.querySelectorAll("svg:not([aria-label]):not([aria-hidden])").forEach((s) => {
+    s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false");
+  });
+  container.querySelectorAll("thead th:not([scope])").forEach((th) => th.setAttribute("scope", "col"));
+  container.querySelectorAll(".table-wrap.scroll:not([tabindex])").forEach((w) => {
+    w.setAttribute("tabindex", "0"); w.setAttribute("role", "region");
+    w.setAttribute("aria-label", "Scrollable table");
+  });
 }
 function applyRoleGate() {
   if (CAN_EDIT || !container) return;
@@ -3478,6 +3490,15 @@ export function mountView(el, viewId) {
   container = el;
   el.classList.add("cpa-dash");
   el.innerHTML = VIEW_HTML;
+  // one persistent "this is demo data" note above every view (brief: never
+  // present example data as a real client assessment)
+  if (isDemoOrg()) {
+    const b = document.createElement("div");
+    b.className = "illus-banner";
+    b.setAttribute("role", "note");
+    b.textContent = "Illustrative CPA360 assessment — this workspace is the Kwezi Valley demo dataset, not a real CPA.";
+    el.insertBefore(b, el.firstChild);
+  }
   currentView = NAV.some((n) => n.id === viewId) ? viewId : "exec";
   if (!CAN_EDIT) {
     // viewers keep read-only affordances (.view-ok = open the document viewer);
@@ -3494,6 +3515,7 @@ export function mountView(el, viewId) {
     if (g && el.contains(g)) location.hash = g.dataset.goto;
   });
   el.querySelectorAll("svg:not([aria-label])").forEach((s) => { s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false"); });
+  el.querySelectorAll("thead th:not([scope])").forEach((th) => th.setAttribute("scope", "col"));
   rendered.clear();
   showView(currentView);
 }
@@ -3593,7 +3615,6 @@ const VIEW_HTML = `
   <div class="print-only" id="print-header"></div>
 
   <section class="view" id="view-exec">
-    <div id="exec-illus"></div>
     <div class="ex-next" id="exec-next"></div>
     <div class="exec-top" id="exec-top"></div>
 
