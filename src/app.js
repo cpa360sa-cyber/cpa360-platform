@@ -8,6 +8,7 @@ import {
   listMembers, addMember, setMemberRole, removeMember,
 } from "./members.js";
 import * as dash from "./dashboard.js";
+import { renderToolsLibrary } from "./tools-library.js";
 
 const root = document.getElementById("root");
 const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
@@ -41,6 +42,7 @@ const IC = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 .3c0 1.7-2.5 2-2.5 3.7M12 17h.01"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  kit: '<path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16"/>',
 };
 const svg = (name, cls) =>
   `<svg class="ic ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -79,6 +81,7 @@ const NAV = [
     { id: "masterfile", label: "Master File", icon: "folder" },
     { id: "actions", label: "Action Tracker", icon: "check" },
     { id: "impact", label: "Impact & M&E", icon: "pulse" },
+    { id: "tools", label: "Tools Library", icon: "kit", app: true },
   ]},
   { group: "Manage", items: [
     { id: "members", label: "Members", icon: "team", app: true, admin: true },
@@ -334,6 +337,7 @@ function route() {
   if (h.startsWith("#/members")) return { name: "members" };
   if (h.startsWith("#/settings")) return { name: "settings" };
   if (h.startsWith("#/reports")) return { name: "reports" };
+  if (h.startsWith("#/tools")) return { name: "tools" };
   if (h.startsWith("#/new")) return { name: "new" };
   if (h.startsWith("#/v/")) {
     const parts = h.slice(4).split("/");
@@ -364,6 +368,14 @@ async function renderView() {
   closePops();
 
   if (r.name === "new") return renderNewOrg(view);
+
+  if (r.name === "tools") {
+    // the library is the same for every CPA — available even before one is chosen
+    setHeader("Records", "Tools Library"); markActiveNav("tools");
+    if (state.active) refreshChrome("tools");
+    return renderToolsLibrary(view);
+  }
+
   if (!state.active) return renderWelcome(view);
 
   if (r.name === "members") {
