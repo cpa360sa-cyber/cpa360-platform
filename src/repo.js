@@ -167,7 +167,7 @@ export async function loadOrg(orgId) {
         [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
          r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || ""], r)),
       households: (households || []).map((r) => tagArr(
-        [r.ref || "", r.head_name, num(r.members_count), r.village || "", r.portion || "", r.contact || "", r.status], r)),
+        [r.ref || "", r.head_name, num(r.members_count), r.village || "", r.portion || "", r.contact || "", r.status, r.resident !== false], r)),
       succession: (succession || []).map((r) => tagArr(
         [r.deceased_ref || "", r.deceased_name, r.date_of_death || "", r.successor_name || "", r.relationship || "",
          r.lodged_on || "", r.status, r.notes || ""], r)),
@@ -443,7 +443,8 @@ export async function saveSection(orgId, section, D) {
       }));
     case "households":
       return reconcile("households", orgId, D.beneficiaryCentre.households, (r, i) => ({
-        ref: nn(r[0]), head_name: r[1], members_count: num(r[2]), village: nn(r[3]), portion: nn(r[4]), contact: nn(r[5]), status: r[6], sort: i,
+        ref: nn(r[0]), head_name: r[1], members_count: num(r[2]), village: nn(r[3]), portion: nn(r[4]), contact: nn(r[5]), status: r[6],
+        resident: r[7] !== false, sort: i,
       }));
     case "succession_cases":
       return reconcile("succession_cases", orgId, D.beneficiaryCentre.succession, (r, i) => ({

@@ -1408,13 +1408,13 @@ function renderBeneHouseholds(host) {
     title: "Household Records", importKey: "households",
     hint: "Each household and its head; members are linked from the register by household ref.",
     columns: [{ label: "Ref." }, { label: "Head of household" }, { label: "Members", cls: "num" }, { label: "On register", cls: "num" },
-      { label: "Village" }, { label: "Portion" }, { label: "Contact" }, { label: "Status" }],
+      { label: "Village" }, { label: "Portion" }, { label: "Contact" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
       `<span style="font-weight:600;">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`,
       `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
-      esc(r[3]), esc(r[4]), esc(r[5]), statusPill(r[6])],
+      esc(r[3]), esc(r[4]), esc(r[5]), pill(r[7] ? "Resident" : "Not resident", r[7] ? "good" : "neutral"), statusPill(r[6])],
     manage: () => listEditor(BENE_EDITORS.households()),
   });
 }
@@ -2881,8 +2881,10 @@ const IMPORT = {
   households: {
     title: "households", section: "households", arr: () => DATA.beneficiaryCentre.households,
     targets: [{ k: "ref", label: "Household ref" }, { k: "head", label: "Head of household", required: true }, { k: "members", label: "Members" },
-      { k: "village", label: "Village" }, { k: "portion", label: "Portion" }, { k: "contact", label: "Contact" }, { k: "status", label: "Status" }],
-    make: (v) => [v.ref || "", v.head, parseFloat(v.members) || 0, v.village || "", v.portion || "", v.contact || "", v.status || "Active"],
+      { k: "village", label: "Village" }, { k: "portion", label: "Portion" }, { k: "contact", label: "Contact" }, { k: "status", label: "Status" },
+      { k: "resident", label: "Dwells on the farm / in the community (Yes/No)" }],
+    make: (v) => [v.ref || "", v.head, parseFloat(v.members) || 0, v.village || "", v.portion || "", v.contact || "", v.status || "Active",
+      !/^(no|n|false|0)$/i.test((v.resident || "").trim())],
   },
   succession_cases: {
     title: "succession cases", section: "succession_cases", arr: () => DATA.beneficiaryCentre.succession,
@@ -3183,7 +3185,7 @@ const BENE_EDITORS = {
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
     rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]}`,
-    blank: () => ["", "", 0, "", "Portion 1", "", "Active"],
+    blank: () => ["", "", 0, "", "Portion 1", "", "Active", true],
     fields: (r) => [
       { key: "ref", label: "Household ref.", type: "text", value: r[0] },
       { key: "head", label: "Head of household", type: "text", value: r[1], required: true },
@@ -3191,9 +3193,10 @@ const BENE_EDITORS = {
       { key: "village", label: "Village / area", type: "text", value: r[3] },
       { key: "portion", label: "Portion", type: "text", value: r[4] },
       { key: "contact", label: "Contact", type: "text", value: r[5] },
+      { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[7] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[6] },
     ],
-    write: (r, o) => { r[0] = o.ref; r[1] = o.head; r[2] = parseFloat(o.members) || 0; r[3] = o.village; r[4] = o.portion; r[5] = o.contact; r[6] = o.status; },
+    write: (r, o) => { r[0] = o.ref; r[1] = o.head; r[2] = parseFloat(o.members) || 0; r[3] = o.village; r[4] = o.portion; r[5] = o.contact; r[6] = o.status; r[7] = o.resident !== "No"; },
   }),
   succession: () => ({
     title: "Succession cases", arr: DATA.beneficiaryCentre.succession, section: "succession_cases",
