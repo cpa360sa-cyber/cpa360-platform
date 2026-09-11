@@ -422,6 +422,122 @@ function parseCSV(text) {
   return rows.filter((r) => r.some((v) => v.trim() !== ""));
 }
 
+/* ============ spreadsheet (XLSX) import — no library: a minimal in-browser
+   .xlsx reader. An .xlsx is a zip of XML parts; this walks the zip's central
+   directory, inflates just the two parts needed (styles + the first
+   worksheet's shared strings + cells) with the browser's built-in
+   DecompressionStream, and returns the same row-array shape parseCSV() does
+   so the rest of the import flow (column mapping, etc.) is untouched. */
+function zipEntries(buf) {
+  const dv = new DataView(buf), bytes = new Uint8Array(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Not a valid .xlsx file.");
+  const total = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const entries = {};
+  for (let n = 0; n < total; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const lhOff = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    entries[name] = { method, compSize, lhOff };
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return { dv, bytes, entries };
+}
+async function zipReadText(z, name) {
+  const e = z.entries[name];
+  if (!e) return null;
+  const nameLen = z.dv.getUint16(e.lhOff + 26, true);
+  const extraLen = z.dv.getUint16(e.lhOff + 28, true);
+  const start = e.lhOff + 30 + nameLen + extraLen;
+  const raw = z.bytes.subarray(start, start + e.compSize);
+  let out = raw;
+  if (e.method !== 0) {
+    const stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    out = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  return new TextDecoder("utf-8").decode(out);
+}
+const colToIndex = (ref) => {
+  const m = /^([A-Z]+)/.exec(ref || "");
+  if (!m) return 0;
+  let n = 0;
+  for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+};
+function excelSerialToISODate(n) {
+  const days = Math.floor(+n);
+  const ms = Math.round((+n - days) * 86400000);
+  return new Date(Date.UTC(1899, 11, 30) + days * 86400000 + ms).toISOString().slice(0, 10);
+}
+const BUILTIN_DATE_FMTS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
+async function xlsxDateStyles(z) {
+  const xml = await zipReadText(z, "xl/styles.xml");
+  if (!xml) return [];
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const custom = {};
+  doc.querySelectorAll("numFmts > numFmt").forEach((n) => { custom[n.getAttribute("numFmtId")] = n.getAttribute("formatCode") || ""; });
+  const isDateFmt = (id) => {
+    if (BUILTIN_DATE_FMTS.has(+id)) return true;
+    const code = custom[id];
+    return !!code && !/general/i.test(code) && /[ymdhs]/i.test(code.replace(/\[[^\]]*\]/g, ""));
+  };
+  return Array.from(doc.querySelectorAll("cellXfs > xf")).map((xf) => isDateFmt(xf.getAttribute("numFmtId") || "0"));
+}
+async function parseXLSX(buf) {
+  if (typeof DecompressionStream === "undefined")
+    throw new Error("This browser can't read Excel files — try Chrome, Edge or Safari 16.4+, or export as CSV.");
+  const z = zipEntries(buf);
+  const sstXml = await zipReadText(z, "xl/sharedStrings.xml");
+  const sst = [];
+  if (sstXml) {
+    new DOMParser().parseFromString(sstXml, "application/xml").querySelectorAll("si").forEach((si) => {
+      sst.push(Array.from(si.querySelectorAll("t")).map((t) => t.textContent).join(""));
+    });
+  }
+  const dateStyles = await xlsxDateStyles(z);
+  const sheetName = z.entries["xl/worksheets/sheet1.xml"]
+    ? "xl/worksheets/sheet1.xml"
+    : Object.keys(z.entries).find((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n));
+  const sheetXml = sheetName && await zipReadText(z, sheetName);
+  if (!sheetXml) throw new Error("No worksheet found in that file.");
+  const doc = new DOMParser().parseFromString(sheetXml, "application/xml");
+  const rows = [];
+  doc.querySelectorAll("row").forEach((rowEl) => {
+    const cells = [];
+    rowEl.querySelectorAll("c").forEach((c) => {
+      const idx = colToIndex(c.getAttribute("r"));
+      const type = c.getAttribute("t");
+      const styleIdx = c.getAttribute("s");
+      let val = "";
+      if (type === "inlineStr") {
+        val = Array.from(c.querySelectorAll("is t")).map((t) => t.textContent).join("");
+      } else {
+        const vEl = c.querySelector("v");
+        if (vEl) {
+          if (type === "s") val = sst[+vEl.textContent] || "";
+          else if (!type || type === "n") {
+            val = vEl.textContent;
+            if (styleIdx != null && dateStyles[+styleIdx] && val !== "") val = excelSerialToISODate(val);
+          } else val = vEl.textContent;
+        }
+      }
+      while (cells.length < idx) cells.push("");
+      cells[idx] = val;
+    });
+    rows.push(cells);
+  });
+  return rows.filter((r) => r.some((v) => (v || "").trim() !== ""));
+}
+
 /* cfg: { title, targets:[{k,label,required}], make:(obj)=>row, arr:()=>array, section } */
 function importModal(cfg) {
   const scrim = document.createElement("div");
@@ -430,8 +546,9 @@ function importModal(cfg) {
     <h3>Import ${esc(cfg.title)} from a spreadsheet</h3>
     <div class="modal-body" style="display:block;">
       <p style="margin:0 0 10px;font-size:12px;color:var(--ink-2);">
-        Upload a <strong>.csv</strong> (export any sheet as CSV). Match its columns to the fields below.</p>
-      <label class="btn" style="cursor:pointer;display:inline-flex;">Choose CSV<input type="file" id="imp-file" accept=".csv,text/csv" hidden></label>
+        Upload a <strong>.csv</strong> or <strong>.xlsx</strong> spreadsheet. Match its columns to the fields below.</p>
+      <label class="btn" style="cursor:pointer;display:inline-flex;">Choose file<input type="file" id="imp-file"
+        accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
       <span id="imp-name" style="font-size:11.5px;color:var(--ink-muted);margin-left:8px;"></span>
       <div id="imp-map" style="margin-top:14px;"></div>
       <label style="display:flex;gap:7px;align-items:center;margin-top:12px;font-size:12.5px;">
@@ -456,7 +573,14 @@ function importModal(cfg) {
     const f = e.target.files[0];
     if (!f) return;
     scrim.querySelector("#imp-name").textContent = f.name;
-    const rows = parseCSV(await f.text());
+    msg.textContent = "Reading…";
+    let rows;
+    try {
+      rows = /\.xlsx$/i.test(f.name) ? await parseXLSX(await f.arrayBuffer()) : parseCSV(await f.text());
+    } catch (err) {
+      msg.textContent = "Couldn't read that file — " + (err.message || err);
+      return;
+    }
     if (rows.length < 2) { msg.textContent = "That file has no data rows."; return; }
     headers = rows[0].map((h) => h.trim());
     dataRows = rows.slice(1);
@@ -572,7 +696,7 @@ function wireSubtabs(host) {
 function mountRegister(host, cfg) {
   const rows = cfg.rows();
   const tools = [];
-  if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV</button>`);
+  if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV / Excel</button>`);
   if (CAN_EDIT) tools.push(`<button class="btn" data-reg-manage type="button">Manage</button>`);
   host.innerHTML = `
     ${cfg.stats ? `<div class="grid grid-4">${cfg.stats().join("")}</div>` : ""}
@@ -2071,7 +2195,7 @@ function renderProjPipeline(host) {
       ${statTile("At risk", p.filter((r) => r[5] === "At Risk").length, "Needs Committee attention", p.filter((r) => r[5] === "At Risk").length ? "warning" : "good")}
     </div>
     <div id="projects-toolbar" style="display:flex;justify-content:flex-end;gap:6px;margin:16px 0 10px;">
-      ${CAN_EDIT ? `<button class="btn" id="proj-import" type="button">Import CSV</button><button class="btn primary" id="proj-add" type="button">+ Add project</button>` : ""}
+      ${CAN_EDIT ? `<button class="btn" id="proj-import" type="button">Import CSV / Excel</button><button class="btn primary" id="proj-add" type="button">+ Add project</button>` : ""}
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Project</th><th>Stage</th><th class="num">Budget</th><th class="num">Spent</th><th style="min-width:130px;">Progress</th><th>Status</th>${CAN_EDIT ? "<th></th>" : ""}</tr></thead>
@@ -3733,7 +3857,7 @@ const VIEW_HTML = `
     <div id="actions-toolbar" style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:18px; flex-wrap:wrap;">
       <div class="filter-row" id="actions-filters"></div>
       <span style="display:flex;gap:6px;">
-        <button class="btn" id="import-actions-btn" type="button">Import CSV</button>
+        <button class="btn" id="import-actions-btn" type="button">Import CSV / Excel</button>
         <button class="btn primary" id="add-action-btn" type="button">+ Add action</button>
       </span>
     </div>
