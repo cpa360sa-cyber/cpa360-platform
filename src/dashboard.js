@@ -22,6 +22,7 @@ const ICONS = {
 const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L20 8l-4-4L4 16z"/></svg>';
 const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>';
 const CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8.5 12.5 17a4 4 0 0 1-5.7-5.7l8-8a2.7 2.7 0 0 1 3.8 3.8l-8 8a1.4 1.4 0 0 1-2-2l7.3-7.3"/></svg>';
+const ATTENDEES = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17.5" cy="9" r="2.3"/><path d="M15.6 13c2.7.5 4.9 2.5 4.9 6"/></svg>';
 
 const STATUS_TONE = {
   "Completed": "good", "Verified": "good", "Active": "good", "On Track": "good", "Complete": "good", "Valid": "good", "Paid": "good",
@@ -961,13 +962,12 @@ function renderGovCommittees(host) {
 function resDocCellHtml(refId) {
   const doc = docCount("resolution", refId);
   const att = docCount("resolution-attendance", refId);
-  const chip = (kind, n, label) => `<button type="button" class="doc-chip${n ? "" : " missing"}"
-      data-res-${kind}="${esc(refId)}" title="${n ? `${n} file${n > 1 ? "s" : ""} attached` : `No ${label.toLowerCase()} attached`}">
-      ${CLIP}<span>${label}${n ? ` (${n})` : ""}</span>${n ? "" : '<span class="doc-chip-flag">Missing</span>'}
-    </button>`;
+  const chip = (kind, icon, n, label) => `<button type="button" class="doc-chip${n ? "" : " missing"}"
+      data-res-${kind}="${esc(refId)}" title="${label}${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
+      aria-label="${label}${n ? "" : ", missing"}">${icon}${n ? `<span>${n}</span>` : ""}</button>`;
   return `<div class="row-actions doc-chips">
-    ${chip("doc", doc, "Signed resolution")}
-    ${chip("att", att, "Attendance register")}
+    ${chip("doc", CLIP, doc, "Signed resolution")}
+    ${chip("att", ATTENDEES, att, "Attendance register")}
   </div>`;
 }
 function renderGovResolutions(host) {
