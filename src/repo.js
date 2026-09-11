@@ -114,7 +114,7 @@ export async function loadOrg(orgId) {
       established: org.established || "", landExtent: num(org.land_extent_ha),
       portions: num(org.portions), members: num(org.members_count),
     },
-    gates: (gates || []).map((g) => tagObj({ n: g.n, name: g.name, state: g.state }, g)),
+    gates: (gates || []).map((g) => tagObj({ n: g.n, name: g.name, state: g.state, updated_at: g.updated_at }, g)),
     score: {
       domains: (domains || []).map((d) => tagObj(
         { name: d.name, weight: num(d.weight), achieved: num(d.achieved), detailed: !!d.detailed }, d)),

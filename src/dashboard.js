@@ -3555,6 +3555,12 @@ function computeAlerts() {
   if (noReqPO) a.push({ tone: "critical", text: `${noReqPO} purchase order${noReqPO > 1 ? "s" : ""} with no requisition`, goto: "#/v/finance/pos" });
   const maintOver = (DATA.assets.maintenance || []).filter((r) => r[7] !== "Completed" && r[3] && new Date(r[3]) < now).length;
   if (maintOver) a.push({ tone: "warning", text: `${maintOver} maintenance task${maintOver > 1 ? "s" : ""} overdue`, goto: "#/v/assets/maintenance" });
+  const curGate = DATA.gates.find((g) => g.state === "current");
+  if (curGate && curGate.updated_at) {
+    const stalledDays = Math.floor((now - new Date(curGate.updated_at)) / 86400000);
+    if (stalledDays >= 90)
+      a.push({ tone: "warning", text: `No progress on Stage ${curGate.n} (${curGate.name}) in ${stalledDays} days`, goto: "#/v/journey" });
+  }
   return a;
 }
 
