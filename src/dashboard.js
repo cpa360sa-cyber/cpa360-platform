@@ -603,10 +603,10 @@ function importModal(cfg) {
     mapEl.querySelectorAll("select[data-t]").forEach((s) => { pick[s.dataset.t] = s.value === "" ? null : +s.value; });
     const missing = cfg.targets.filter((t) => t.required && pick[t.k] == null);
     if (missing.length) { msg.textContent = "Map the required field(s): " + missing.map((m) => m.label).join(", "); return; }
-    const built = dataRows.map((r) => {
+    const built = dataRows.map((r, idx) => {
       const obj = {};
       cfg.targets.forEach((t) => { obj[t.k] = pick[t.k] == null ? "" : (r[pick[t.k]] || "").trim(); });
-      return cfg.make(obj);
+      return cfg.make(obj, idx);
     }).filter(Boolean);
     const arr = cfg.arr();
     if (scrim.querySelector("#imp-replace").checked) arr.length = 0;
@@ -723,6 +723,10 @@ function nextActionRef() {
   const nums = DATA.actions.map((a) => { const m = /(\d+)\s*$/.exec(a[0] || ""); return m ? +m[1] : 0; });
   return `CPA360-ACT-${yr}-${String(Math.max(0, ...nums) + 1).padStart(3, "0")}`;
 }
+function householdMaxSeq() {
+  return Math.max(0, ...DATA.beneficiaryCentre.households.map((h) => { const m = /(\d+)\s*$/.exec(h[0] || ""); return m ? +m[1] : 0; }));
+}
+function nextHouseholdRef() { return `MCPA-${String(householdMaxSeq() + 1).padStart(3, "0")}`; }
 function editAction(ref) {
   const a = ref ? DATA.actions.find((x) => x[0] === ref) : null;
   openModal(a ? "Edit action" : "Add action", [
@@ -1405,15 +1409,20 @@ function renderBeneHouseholds(host) {
   const reg = DATA.beneficiaryCentre.register || [];
   mountRegister(host, {
     title: "Household Records", importKey: "households",
-    hint: "Each household and its head; members are linked from the register by household ref.",
-    columns: [{ label: "Ref." }, { label: "Head of household" }, { label: "Members", cls: "num" }, { label: "On register", cls: "num" },
-      { label: "Village" }, { label: "Portion" }, { label: "Contact" }, { label: "Resident?" }, { label: "Status" }],
+    hint: "Households are classified by their ODI, with up to 4 descendants recorded here. This isn't the beneficiary "
+      + "register — create individual beneficiaries separately and link them to their household by ref.",
+    columns: [{ label: "Ref." }, { label: "ODI" }, { label: "ID no. of ODI" }, { label: "Family Representative" },
+      { label: "Descendants", cls: "num" }, { label: "Linked in Register", cls: "num" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
-    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
-      `<span style="font-weight:600;">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`,
-      `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
-      esc(r[3]), esc(r[4]), esc(r[5]), pill(r[7] ? "Resident" : "Not resident", r[7] ? "good" : "neutral"), statusPill(r[6])],
+    cell: (r) => {
+      const descendants = [r[4], r[6], r[8], r[10]].filter((n) => (n || "").trim() !== "").length;
+      return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
+        `<span style="font-weight:600;">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3])}</span>`,
+        esc(r[1]), `<span class="mono">${descendants}</span>`,
+        `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
+        pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
+    },
     manage: () => listEditor(BENE_EDITORS.households()),
   });
 }
@@ -2412,7 +2421,7 @@ function renderImpact() {
   /* "Dwelling on the Land" is aggregated live from the Household Records
      register's per-household "resident" flag, not a manually-typed figure —
      see the Households tab in the Beneficiary Centre. */
-  const residentHH = DATA.beneficiaryCentre.households.filter((h) => h[7]).length;
+  const residentHH = DATA.beneficiaryCentre.households.filter((h) => h[13]).length;
   $("impact-stats").innerHTML = [
     statTile(`Jobs Created (FTE) — ${yr}`, i.jobsThisYear, i.jobsCumulative + " cumulative since Gate 2", "good"),
     statTile("Households Benefiting", i.householdsBenefit, fmtPct(i.householdsBenefit / (i.householdsTotal || 1) * 100) + " of represented households", ""),
@@ -2883,11 +2892,23 @@ const IMPORT = {
   },
   households: {
     title: "households", section: "households", arr: () => DATA.beneficiaryCentre.households,
-    targets: [{ k: "ref", label: "Household ref" }, { k: "head", label: "Head of household", required: true }, { k: "members", label: "Members" },
-      { k: "village", label: "Village" }, { k: "portion", label: "Portion" }, { k: "contact", label: "Contact" }, { k: "status", label: "Status" },
-      { k: "resident", label: "Dwells on the farm / in the community (Yes/No)" }],
-    make: (v) => [v.ref || "", v.head, parseFloat(v.members) || 0, v.village || "", v.portion || "", v.contact || "", v.status || "Active",
-      !/^(no|n|false|0)$/i.test((v.resident || "").trim())],
+    targets: [
+      { k: "ref", label: "Household ref (blank = auto MCPA-###)" },
+      { k: "famrep", label: "Family Representative" },
+      { k: "odi", label: "ODI", required: true },
+      { k: "odiId", label: "ID no. of ODI" },
+      { k: "d1", label: "1st Descendant" }, { k: "d1id", label: "ID: 1st Descendant" },
+      { k: "d2", label: "2nd Descendant" }, { k: "d2id", label: "ID 2nd Descendant" },
+      { k: "d3", label: "3rd Descendants" }, { k: "d3id", label: "ID 3rd Descendant" },
+      { k: "d4", label: "4th Descendants" }, { k: "d4id", label: "ID 4th Descendants" },
+      { k: "status", label: "Status" }, { k: "resident", label: "Dwells on the farm / in the community (Yes/No)" },
+    ],
+    make: (v, idx) => [
+      (v.ref || "").trim() || `MCPA-${String(householdMaxSeq() + 1 + idx).padStart(3, "0")}`,
+      v.famrep || "", v.odi, v.odiId || "",
+      v.d1 || "", v.d1id || "", v.d2 || "", v.d2id || "", v.d3 || "", v.d3id || "", v.d4 || "", v.d4id || "",
+      v.status || "Active", !/^(no|n|false|0)$/i.test((v.resident || "").trim()),
+    ],
   },
   succession_cases: {
     title: "succession cases", section: "succession_cases", arr: () => DATA.beneficiaryCentre.succession,
@@ -3187,19 +3208,29 @@ const BENE_EDITORS = {
   }),
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
-    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]}`,
-    blank: () => ["", "", 0, "", "Portion 1", "", "Active", true],
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || r[1] || "Household"}`,
+    blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true],
     fields: (r) => [
-      { key: "ref", label: "Household ref.", type: "text", value: r[0] },
-      { key: "head", label: "Head of household", type: "text", value: r[1], required: true },
-      { key: "members", label: "Members in household", type: "number", value: r[2], min: 0 },
-      { key: "village", label: "Village / area", type: "text", value: r[3] },
-      { key: "portion", label: "Portion", type: "text", value: r[4] },
-      { key: "contact", label: "Contact", type: "text", value: r[5] },
-      { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[7] === false ? "No" : "Yes" },
-      { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[6] },
+      { key: "famrep", label: "Family Representative", type: "text", value: r[1] },
+      { key: "odi", label: "ODI", type: "text", value: r[2], required: true },
+      { key: "odiId", label: "ID no. of ODI", type: "text", value: r[3] },
+      { key: "d1", label: "1st Descendant", type: "text", value: r[4] },
+      { key: "d1id", label: "ID: 1st Descendant", type: "text", value: r[5] },
+      { key: "d2", label: "2nd Descendant", type: "text", value: r[6] },
+      { key: "d2id", label: "ID 2nd Descendant", type: "text", value: r[7] },
+      { key: "d3", label: "3rd Descendants", type: "text", value: r[8] },
+      { key: "d3id", label: "ID 3rd Descendant", type: "text", value: r[9] },
+      { key: "d4", label: "4th Descendants", type: "text", value: r[10] },
+      { key: "d4id", label: "ID 4th Descendants", type: "text", value: r[11] },
+      { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
+      { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
     ],
-    write: (r, o) => { r[0] = o.ref; r[1] = o.head; r[2] = parseFloat(o.members) || 0; r[3] = o.village; r[4] = o.portion; r[5] = o.contact; r[6] = o.status; r[7] = o.resident !== "No"; },
+    write: (r, o) => {
+      r[1] = o.famrep; r[2] = o.odi; r[3] = o.odiId;
+      r[4] = o.d1; r[5] = o.d1id; r[6] = o.d2; r[7] = o.d2id;
+      r[8] = o.d3; r[9] = o.d3id; r[10] = o.d4; r[11] = o.d4id;
+      r[12] = o.status; r[13] = o.resident !== "No";
+    },
   }),
   succession: () => ({
     title: "Succession cases", arr: DATA.beneficiaryCentre.succession, section: "succession_cases",

@@ -167,7 +167,10 @@ export async function loadOrg(orgId) {
         [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
          r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || ""], r)),
       households: (households || []).map((r) => tagArr(
-        [r.ref || "", r.head_name, num(r.members_count), r.village || "", r.portion || "", r.contact || "", r.status, r.resident !== false], r)),
+        [r.ref || "", r.family_representative || "", r.odi_name || "", r.odi_id || "",
+         r.descendant1_name || "", r.descendant1_id || "", r.descendant2_name || "", r.descendant2_id || "",
+         r.descendant3_name || "", r.descendant3_id || "", r.descendant4_name || "", r.descendant4_id || "",
+         r.status, r.resident !== false], r)),
       succession: (succession || []).map((r) => tagArr(
         [r.deceased_ref || "", r.deceased_name, r.date_of_death || "", r.successor_name || "", r.relationship || "",
          r.lodged_on || "", r.status, r.notes || ""], r)),
@@ -442,8 +445,10 @@ export async function saveSection(orgId, section, D) {
       }));
     case "households":
       return reconcile("households", orgId, D.beneficiaryCentre.households, (r, i) => ({
-        ref: nn(r[0]), head_name: r[1], members_count: num(r[2]), village: nn(r[3]), portion: nn(r[4]), contact: nn(r[5]), status: r[6],
-        resident: r[7] !== false, sort: i,
+        ref: nn(r[0]), family_representative: nn(r[1]), odi_name: nn(r[2]), odi_id: nn(r[3]),
+        descendant1_name: nn(r[4]), descendant1_id: nn(r[5]), descendant2_name: nn(r[6]), descendant2_id: nn(r[7]),
+        descendant3_name: nn(r[8]), descendant3_id: nn(r[9]), descendant4_name: nn(r[10]), descendant4_id: nn(r[11]),
+        status: r[12], resident: r[13] !== false, sort: i,
       }));
     case "succession_cases":
       return reconcile("succession_cases", orgId, D.beneficiaryCentre.succession, (r, i) => ({
