@@ -10,6 +10,7 @@ import {
 import * as dash from "./dashboard.js";
 import { renderToolsLibrary } from "./tools-library.js";
 import { renderIntegrations } from "./integrations.js";
+import { renderLeadsAdmin } from "./leads-admin.js";
 
 const root = document.getElementById("root");
 const ENV = window.__CPA360_ENV || {};
@@ -50,6 +51,7 @@ const IC = {
   kit: '<path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16"/>',
   spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/>',
   plug: '<path d="M9 3v6M15 3v6M7 9h10v3a5 5 0 0 1-10 0zM12 17v4"/>',
+  inbox: '<path d="M3 12h4l2 4h6l2-4h4"/><path d="M5 12 3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2l-2 7"/><path d="M3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6"/>',
 };
 const svg = (name, cls) =>
   `<svg class="ic ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -93,6 +95,7 @@ const NAV = [
   { group: "Manage", items: [
     { id: "members", label: "Members", icon: "team", app: true, admin: true },
     { id: "integrations", label: "Integrations", icon: "plug", app: true },
+    { id: "leads", label: "Leads Inbox", icon: "inbox", app: true, platformAdmin: true },
     { id: "settings", label: "Settings", icon: "cog", app: true },
   ]},
 ];
@@ -125,7 +128,12 @@ async function enterApp() {
   root.className = "";
   root.innerHTML = `<div class="booting">Loading your workspaces…</div>`;
   try {
-    state.orgs = await myOrgs();
+    const [orgs, isAdmin] = await Promise.all([
+      myOrgs(),
+      supabase.rpc("is_platform_admin").then((r) => !!r.data).catch(() => false),
+    ]);
+    state.orgs = orgs;
+    state.isPlatformAdmin = isAdmin;
   } catch (e) {
     root.innerHTML = `<div class="auth-wrap"><div class="auth-card"><h1>Couldn't load</h1>
       <p class="sub">${esc(e.message)}</p>
@@ -140,7 +148,7 @@ async function enterApp() {
 function navGroupsHtml() {
   const canManage = state.active && atLeast(state.active.role, "admin");
   return NAV.map((g) => {
-    const items = g.items.filter((it) => !(it.admin && !canManage));
+    const items = g.items.filter((it) => !(it.admin && !canManage) && !(it.platformAdmin && !state.isPlatformAdmin));
     if (!items.length) return "";
     return `<div class="sb-group">${esc(g.group)}</div>` + items.map((it) => {
       const route = it.app ? "#/" + it.id : "#/v/" + it.id;
@@ -501,6 +509,7 @@ function route() {
   if (h.startsWith("#/reports")) return { name: "reports" };
   if (h.startsWith("#/tools")) return { name: "tools" };
   if (h.startsWith("#/integrations")) return { name: "integrations" };
+  if (h.startsWith("#/leads")) return { name: "leads" };
   if (h.startsWith("#/new")) return { name: "new" };
   if (h.startsWith("#/v/")) {
     const parts = h.slice(4).split("/");
@@ -537,6 +546,13 @@ async function renderView() {
     setHeader("Records", "Tools Library"); markActiveNav("tools");
     if (state.active) refreshChrome("tools");
     return renderToolsLibrary(view);
+  }
+
+  if (r.name === "leads") {
+    if (!state.isPlatformAdmin) { location.hash = state.active ? "#/v/exec" : "#/"; return; }
+    setHeader("Manage", "Leads Inbox"); markActiveNav("leads");
+    if (state.active) refreshChrome("leads");
+    return renderLeadsAdmin(view);
   }
 
   if (!state.active) return renderWelcome(view);
@@ -827,6 +843,7 @@ function previewShell() {
   state.orgs = [{ id: "kv", name: "Kwezi Valley CPA", role: "admin" },
     { id: "mb", name: "Mashobotho CPA", role: "member" }];
   state.active = state.orgs[0];
+  state.isPlatformAdmin = true;
   renderShell();
   setHeader("Overview", "CPA Executive Dashboard");
   markActiveNav("exec");
