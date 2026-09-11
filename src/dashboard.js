@@ -589,6 +589,7 @@ function mountRegister(host, cfg) {
   if (mb) mb.onclick = cfg.manage;
   const ib = host.querySelector("[data-reg-import]");
   if (ib) ib.onclick = () => importModal(IMPORT[cfg.importKey]);
+  if (cfg.afterRender) cfg.afterRender(host);
 }
 
 /* ============ section editors ============ */
@@ -954,23 +955,51 @@ function renderGovCommittees(host) {
     manage: () => listEditor(GOV_EDITORS.committees()),
   });
 }
+/* A resolution can always be saved with no attachments — these are two
+   optional, independently-tracked evidence slots layered on top of the row
+   via the generic documents store (section "resolution" / "resolution-attendance"). */
+function resDocCellHtml(refId) {
+  const doc = docCount("resolution", refId);
+  const att = docCount("resolution-attendance", refId);
+  const chip = (kind, n, label) => `<button type="button" class="doc-chip${n ? "" : " missing"}"
+      data-res-${kind}="${esc(refId)}" title="${n ? `${n} file${n > 1 ? "s" : ""} attached` : `No ${label.toLowerCase()} attached`}">
+      ${CLIP}<span>${label}${n ? ` (${n})` : ""}</span>${n ? "" : '<span class="doc-chip-flag">Missing</span>'}
+    </button>`;
+  return `<div class="row-actions doc-chips">
+    ${chip("doc", doc, "Signed resolution")}
+    ${chip("att", att, "Attendance register")}
+  </div>`;
+}
 function renderGovResolutions(host) {
-  const open = DATA.governance.resolutions.filter((r) => !["Implemented", "Adopted", "Closed"].includes(r[6])).length;
+  const rows = DATA.governance.resolutions;
+  const open = rows.filter((r) => !["Implemented", "Adopted", "Closed"].includes(r[6])).length;
+  const missingDoc = rows.filter((r) => docCount("resolution", r._id) === 0).length;
   mountRegister(host, {
     title: "Resolutions Register", importKey: "gov_resolutions",
-    hint: "Decisions of the EXCO and general meetings — with their implementation status.",
+    hint: "Decisions of the EXCO and general meetings — with their implementation status. Attach the signed resolution and the meeting's attendance register once they're available; a resolution can be recorded before either is ready.",
     stats: () => [
-      statTile("Resolutions", DATA.governance.resolutions.length, "On record", ""),
+      statTile("Resolutions", rows.length, "On record", ""),
       statTile("Still Open", open, "Not yet implemented", open ? "warning" : "good"),
-      statTile("Implemented", DATA.governance.resolutions.length - open, "Closed out", "good"),
-      statTile("Linked to Actions", DATA.governance.resolutions.filter((r) => /RES/.test(r[0])).length, "Tracked in the Action Tracker", ""),
+      statTile("Implemented", rows.length - open, "Closed out", "good"),
+      statTile("Missing Signed Copy", missingDoc, "No resolution document attached", missingDoc ? "warning" : "good"),
     ],
-    columns: [{ label: "Ref." }, { label: "Date" }, { label: "Meeting" }, { label: "Decision" }, { label: "Responsible" }, { label: "Due" }, { label: "Status" }],
-    rows: () => DATA.governance.resolutions,
+    columns: [{ label: "Ref." }, { label: "Date" }, { label: "Meeting" }, { label: "Decision" }, { label: "Responsible" }, { label: "Due" }, { label: "Status" }, { label: "Documents" }],
+    rows: () => rows,
     empty: "No resolutions recorded.",
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`,
-      esc(r[2]), `<span style="min-width:220px;display:inline-block;">${esc(r[3])}</span>`, esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
+      esc(r[2]), `<span style="min-width:220px;display:inline-block;">${esc(r[3])}</span>`, esc(r[4]), `<span class="mono">${esc(r[5])}</span>`,
+      statusPill(r[6]), resDocCellHtml(r._id)],
     manage: () => listEditor(GOV_EDITORS.resolutions()),
+    afterRender: (h) => {
+      h.querySelectorAll("[data-res-doc]").forEach((b) => (b.onclick = () => {
+        const r = rows.find((x) => String(x._id) === b.dataset.resDoc);
+        attachmentsModal("resolution", r._id, "Signed resolution — " + (r[0] || r[3].slice(0, 40)));
+      }));
+      h.querySelectorAll("[data-res-att]").forEach((b) => (b.onclick = () => {
+        const r = rows.find((x) => String(x._id) === b.dataset.resAtt);
+        attachmentsModal("resolution-attendance", r._id, "Attendance register — " + (r[0] || r[3].slice(0, 40)));
+      }));
+    },
   });
 }
 function renderGovMeetings(host) { renderGovMeetingList(host, null); }

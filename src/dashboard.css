@@ -169,6 +169,12 @@
 .cpa-dash .row-actions svg{ width:15px; height:15px; }
 .cpa-dash .inline-select{ font:inherit; font-size:11.5px; padding:3px 6px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--ink); max-width:150px; }
 .cpa-dash .inline-select[disabled]{ opacity:.7; }
+.cpa-dash .row-actions.doc-chips{ gap:6px; flex-wrap:wrap; }
+.cpa-dash .doc-chip{ all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:5px; width:auto; height:auto; padding:4px 9px; border-radius:999px; border:1px solid var(--border); font-size:11px; font-weight:600; color:var(--ink-2); background:var(--surface); white-space:nowrap; }
+.cpa-dash .doc-chip:hover{ border-color:var(--brand-2); color:var(--ink); }
+.cpa-dash .doc-chip svg{ width:13px; height:13px; flex:none; }
+.cpa-dash .doc-chip.missing{ border-color:color-mix(in oklab,var(--status-warning) 45%,transparent); color:var(--status-warning); background:var(--status-warning-tint); }
+.cpa-dash .doc-chip-flag{ font-size:9.5px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
 
 /* ---- modal (scrim is appended to <body> but carries .cpa-dash) ---- */
 .cpa-dash.modal-scrim{ position:fixed; inset:0; background:rgba(12,20,45,.55); backdrop-filter:blur(2px); z-index:120; display:flex; align-items:flex-start; justify-content:center; padding:6vh 16px; overflow-y:auto; }
