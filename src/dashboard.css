@@ -24,6 +24,7 @@
 /* ---- layout ---- */
 .cpa-dash .grid{ display:grid; gap:14px; min-width:0; }
 .cpa-dash .grid > *{ min-width:0; }
+.cpa-dash .grid-5{ grid-template-columns:repeat(5,1fr); }
 .cpa-dash .grid-4{ grid-template-columns:repeat(4,1fr); }
 .cpa-dash .grid-3{ grid-template-columns:repeat(3,1fr); }
 .cpa-dash .grid-2{ grid-template-columns:repeat(2,1fr); }
@@ -34,7 +35,7 @@
 .cpa-dash .split-finance{ grid-template-columns:1.4fr 1fr; }
 .cpa-dash .split-impact{ grid-template-columns:1.2fr 1fr; }
 @media (max-width:1000px){
-  .cpa-dash .grid-4, .cpa-dash .grid-3{ grid-template-columns:repeat(2,1fr); }
+  .cpa-dash .grid-5, .cpa-dash .grid-4, .cpa-dash .grid-3{ grid-template-columns:repeat(2,1fr); }
   .cpa-dash .split-score, .cpa-dash .split-bene, .cpa-dash .split-finance, .cpa-dash .split-impact{ grid-template-columns:1fr; }
 }
 @media (max-width:900px){ .cpa-dash .grid-2{ grid-template-columns:1fr; } }
@@ -325,7 +326,7 @@
   .cpa-dash-toast{ left:12px; right:12px; transform:none; max-width:none; text-align:center; }
 }
 @media (max-width:560px){
-  .cpa-dash .grid-4, .cpa-dash .grid-3{ grid-template-columns:1fr; }
+  .cpa-dash .grid-5, .cpa-dash .grid-4, .cpa-dash .grid-3{ grid-template-columns:1fr; }
   .cpa-dash .split-score, .cpa-dash .split-bene, .cpa-dash .split-finance, .cpa-dash .split-impact{ grid-template-columns:1fr; }
   .cpa-dash .exec-top{ grid-template-columns:1fr; }
   .cpa-dash .ex-cards{ grid-template-columns:1fr; }

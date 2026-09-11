@@ -958,6 +958,7 @@ function editImpactFigures() {
     { key: "hectaresTotal", label: "Total hectares", type: "number", min: 0 },
     { key: "householdsBenefit", label: "Households benefiting", type: "number", min: 0 },
     { key: "householdsTotal", label: "Households represented (total)", type: "number", min: 0 },
+    { key: "householdsResident", label: "Households dwelling on the farm / in the community", type: "number", min: 0 },
     { key: "revenue", label: "Enterprise revenue (R)", type: "number", min: 0 },
     { key: "training", label: "Training beneficiaries", type: "number", min: 0 },
   ], "impact");
@@ -2412,6 +2413,7 @@ function renderImpact() {
   $("impact-stats").innerHTML = [
     statTile(`Jobs Created (FTE) — ${yr}`, i.jobsThisYear, i.jobsCumulative + " cumulative since Gate 2", "good"),
     statTile("Households Benefiting", i.householdsBenefit, fmtPct(i.householdsBenefit / (i.householdsTotal || 1) * 100) + " of represented households", ""),
+    statTile("Households Dwelling on the Land", i.householdsResident, fmtPct(i.householdsResident / (i.householdsTotal || 1) * 100) + " of represented households live on the farm/in the community", ""),
     statTile("Enterprise Revenue", fmtR(i.revenue), "Annual, CPA-run enterprises", ""),
     statTile("Training Beneficiaries", i.training, "This year", ""),
   ].join("");
@@ -3909,7 +3911,7 @@ const VIEW_HTML = `
   </section>
 
   <section class="view hidden" id="view-impact">
-    <div class="grid grid-4" id="impact-stats"></div>
+    <div class="grid grid-5" id="impact-stats"></div>
     <div class="split split-impact" style="margin-top:14px;">
       <div class="card">
         <div class="card-head"><h3>Jobs Created (FTE) — by Year</h3><button class="btn" id="edit-jobs-btn" type="button">Manage</button></div>
