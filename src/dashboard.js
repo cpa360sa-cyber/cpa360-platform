@@ -727,6 +727,14 @@ function householdMaxSeq() {
   return Math.max(0, ...DATA.beneficiaryCentre.households.map((h) => { const m = /(\d+)\s*$/.exec(h[0] || ""); return m ? +m[1] : 0; }));
 }
 function nextHouseholdRef() { return `MCPA-${String(householdMaxSeq() + 1).padStart(3, "0")}`; }
+/* Enforced ID masking: keeps only the last 4 characters typed, replaces the
+   rest with *. Idempotent — re-saving an already-masked value (e.g. ****1234)
+   produces the same result, so it's safe to run on every save. */
+function maskId(raw) {
+  const s = (raw || "").trim();
+  if (s.length <= 4) return s;
+  return "*".repeat(s.length - 4) + s.slice(-4);
+}
 function editAction(ref) {
   const a = ref ? DATA.actions.find((x) => x[0] === ref) : null;
   openModal(a ? "Edit action" : "Add action", [
@@ -2888,7 +2896,7 @@ const IMPORT = {
     targets: [{ k: "ref", label: "Register no." }, { k: "name", label: "Full name", required: true }, { k: "gender", label: "Gender" },
       { k: "dob", label: "Date of birth" }, { k: "idm", label: "ID (masked)" }, { k: "hh", label: "Household ref" },
       { k: "contact", label: "Contact" }, { k: "joined", label: "Joined on" }, { k: "status", label: "Status" }, { k: "verif", label: "Verification" }],
-    make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || "", v.idm || "", v.hh || "", v.contact || "", v.joined || "",
+    make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || "", maskId(v.idm), v.hh || "", v.contact || "", v.joined || "",
       ["Active", "Deceased", "Removed", "Transferred"].includes(v.status) ? v.status : "Active",
       ["Verified", "Pending", "Disputed", "Rejected"].includes(v.verif) ? v.verif : "Pending", ""],
   },
@@ -2898,17 +2906,17 @@ const IMPORT = {
       { k: "ref", label: "Household ref (blank = auto MCPA-###)" },
       { k: "famrep", label: "Family Representative" },
       { k: "odi", label: "ODI", required: true },
-      { k: "odiId", label: "ID no. of ODI (masked)" },
-      { k: "d1", label: "1st Descendant" }, { k: "d1id", label: "ID: 1st Descendant (masked)" },
-      { k: "d2", label: "2nd Descendant" }, { k: "d2id", label: "ID 2nd Descendant (masked)" },
-      { k: "d3", label: "3rd Descendants" }, { k: "d3id", label: "ID 3rd Descendant (masked)" },
-      { k: "d4", label: "4th Descendants" }, { k: "d4id", label: "ID 4th Descendants (masked)" },
+      { k: "odiId", label: "ID no. of ODI (auto-masked)" },
+      { k: "d1", label: "1st Descendant" }, { k: "d1id", label: "ID: 1st Descendant (auto-masked)" },
+      { k: "d2", label: "2nd Descendant" }, { k: "d2id", label: "ID 2nd Descendant (auto-masked)" },
+      { k: "d3", label: "3rd Descendants" }, { k: "d3id", label: "ID 3rd Descendant (auto-masked)" },
+      { k: "d4", label: "4th Descendants" }, { k: "d4id", label: "ID 4th Descendants (auto-masked)" },
       { k: "status", label: "Status" }, { k: "resident", label: "Dwells on the farm / in the community (Yes/No)" },
     ],
     make: (v, idx) => [
       (v.ref || "").trim() || `MCPA-${String(householdMaxSeq() + 1 + idx).padStart(3, "0")}`,
-      v.famrep || "", v.odi, v.odiId || "",
-      v.d1 || "", v.d1id || "", v.d2 || "", v.d2id || "", v.d3 || "", v.d3id || "", v.d4 || "", v.d4id || "",
+      v.famrep || "", v.odi, maskId(v.odiId),
+      v.d1 || "", maskId(v.d1id), v.d2 || "", maskId(v.d2id), v.d3 || "", maskId(v.d3id), v.d4 || "", maskId(v.d4id),
       v.status || "Active", !/^(no|n|false|0)$/i.test((v.resident || "").trim()),
     ],
   },
@@ -3198,7 +3206,7 @@ const BENE_EDITORS = {
       { key: "name", label: "Full name", type: "text", value: r[1], required: true },
       { key: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other", "Unspecified"], value: r[2] || "Female" },
       { key: "dob", label: "Date of birth", type: "date", value: r[3] },
-      { key: "idm", label: "ID (masked, e.g. ****1234)", type: "text", value: r[4] },
+      { key: "idm", label: "ID (auto-masked — only the last 4 digits are kept)", type: "text", value: r[4] },
       { key: "hh", label: "Household ref.", type: "text", value: r[5] },
       { key: "contact", label: "Contact", type: "text", value: r[6] },
       { key: "joined", label: "Joined on", type: "date", value: r[7] },
@@ -3206,7 +3214,7 @@ const BENE_EDITORS = {
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
     ],
-    write: (r, o) => { r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = o.idm; r[5] = o.hh; r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes; },
+    write: (r, o) => { r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = maskId(o.idm); r[5] = o.hh; r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes; },
   }),
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
@@ -3215,22 +3223,22 @@ const BENE_EDITORS = {
     fields: (r) => [
       { key: "famrep", label: "Family Representative", type: "text", value: r[1] },
       { key: "odi", label: "ODI", type: "text", value: r[2], required: true },
-      { key: "odiId", label: "ID no. of ODI (masked, e.g. ****1234)", type: "text", value: r[3] },
+      { key: "odiId", label: "ID no. of ODI (auto-masked — only the last 4 digits are kept)", type: "text", value: r[3] },
       { key: "d1", label: "1st Descendant", type: "text", value: r[4] },
-      { key: "d1id", label: "ID: 1st Descendant (masked, e.g. ****1234)", type: "text", value: r[5] },
+      { key: "d1id", label: "ID: 1st Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[5] },
       { key: "d2", label: "2nd Descendant", type: "text", value: r[6] },
-      { key: "d2id", label: "ID 2nd Descendant (masked, e.g. ****1234)", type: "text", value: r[7] },
+      { key: "d2id", label: "ID 2nd Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[7] },
       { key: "d3", label: "3rd Descendants", type: "text", value: r[8] },
-      { key: "d3id", label: "ID 3rd Descendant (masked, e.g. ****1234)", type: "text", value: r[9] },
+      { key: "d3id", label: "ID 3rd Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[9] },
       { key: "d4", label: "4th Descendants", type: "text", value: r[10] },
-      { key: "d4id", label: "ID 4th Descendants (masked, e.g. ****1234)", type: "text", value: r[11] },
+      { key: "d4id", label: "ID 4th Descendants (auto-masked — only the last 4 digits are kept)", type: "text", value: r[11] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
     ],
     write: (r, o) => {
-      r[1] = o.famrep; r[2] = o.odi; r[3] = o.odiId;
-      r[4] = o.d1; r[5] = o.d1id; r[6] = o.d2; r[7] = o.d2id;
-      r[8] = o.d3; r[9] = o.d3id; r[10] = o.d4; r[11] = o.d4id;
+      r[1] = o.famrep; r[2] = o.odi; r[3] = maskId(o.odiId);
+      r[4] = o.d1; r[5] = maskId(o.d1id); r[6] = o.d2; r[7] = maskId(o.d2id);
+      r[8] = o.d3; r[9] = maskId(o.d3id); r[10] = o.d4; r[11] = maskId(o.d4id);
       r[12] = o.status; r[13] = o.resident !== "No";
     },
   }),
