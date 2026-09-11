@@ -731,6 +731,7 @@ function mountRegister(host, cfg) {
     tools.push(`<button class="btn${on ? " active" : ""}" data-reg-filter type="button">Filter${on ? ` · ${bulk.filter.size}/${distinctVals.length}` : ""}</button>`);
   }
   if (CAN_EDIT) tools.push(`<button class="btn" data-reg-manage type="button">Manage</button>`);
+  if (CAN_EDIT && cfg.extraTools) tools.push(...cfg.extraTools);
   if (canDelete) tools.push(`<button class="btn danger" data-reg-delsel type="button"${selectedCount ? "" : " disabled"}>Delete selected${selectedCount ? ` (${selectedCount})` : ""}</button>`);
 
   host.innerHTML = `
@@ -1496,12 +1497,57 @@ function renderBeneVerification(host) {
   if (ef) ef.onclick = editBeneficiary;
   host.querySelector("#bene-evidence-btn").onclick = () => attachmentsModal("beneficiary", null, "Beneficiary verification evidence");
 }
+/* Each household is a family tree rooted at its ODI: the ODI, the Family
+   Representative and up to 4 descendants can each become their own row in
+   the Master Beneficiary Register. Keyed by <household ref>-<slot>, so
+   running it again after editing a household updates the same beneficiary
+   rather than creating a duplicate; status/verification already set on an
+   existing extracted beneficiary is left alone. */
+function extractHouseholdsAsBeneficiaries(host) {
+  const bulk = bulkState("bene-households");
+  const households = DATA.beneficiaryCentre.households;
+  const chosen = households.filter((h) => bulk.selected.has(String(h._id)));
+  if (!chosen.length) { toast("Select one or more households first (the checkbox on the left of each row).", true); return; }
+
+  const reg = DATA.beneficiaryCentre.register;
+  let created = 0, updated = 0;
+  chosen.forEach((h) => {
+    const hhRef = h[0];
+    const slots = [
+      { suffix: "ODI", name: h[2], id: h[3], role: "ODI" },
+      { suffix: "REP", name: h[1], id: "", role: "Family Representative" },
+      { suffix: "D1", name: h[4], id: h[5], role: "Descendant" },
+      { suffix: "D2", name: h[6], id: h[7], role: "Descendant" },
+      { suffix: "D3", name: h[8], id: h[9], role: "Descendant" },
+      { suffix: "D4", name: h[10], id: h[11], role: "Descendant" },
+    ];
+    slots.forEach((s) => {
+      const name = (s.name || "").trim();
+      if (!name) return;
+      const ref = `${hhRef}-${s.suffix}`;
+      const note = `Extracted as ${s.role} of household ${hhRef}.`;
+      const existing = reg.find((r) => r[0] === ref);
+      if (existing) {
+        existing[1] = name; existing[4] = maskId(s.id); existing[5] = hhRef; existing[10] = note;
+        updated++;
+      } else {
+        reg.push([ref, name, "Unspecified", "", maskId(s.id), hhRef, "", "", "Active", "Pending", note]);
+        created++;
+      }
+    });
+  });
+  if (!created && !updated) { toast("Nothing to extract — the selected household(s) have no names filled in yet.", true); return; }
+  commit("beneficiaries");
+  toast(`Extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""}.`);
+}
 function renderBeneHouseholds(host) {
   const reg = DATA.beneficiaryCentre.register || [];
+  const bulk = bulkState("bene-households");
+  const selN = DATA.beneficiaryCentre.households.filter((h) => bulk.selected.has(String(h._id))).length;
   mountRegister(host, {
     title: "Household Records", importKey: "households",
-    hint: "Households are classified by their ODI, with up to 4 descendants recorded here. This isn't the beneficiary "
-      + "register — create individual beneficiaries separately and link them to their household by ref.",
+    hint: "Households are classified by their ODI — the root of the family tree. Select households below and use "
+      + "“Extract” to create or update a Master Register entry for the ODI, Family Representative and each descendant.",
     columns: [{ label: "Ref." }, { label: "ODI" }, { label: "Family Representative" },
       { label: "Descendants", cls: "num" }, { label: "Linked in Register", cls: "num" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
@@ -1519,6 +1565,11 @@ function renderBeneHouseholds(host) {
     manage: () => listEditor(BENE_EDITORS.households()),
     bulkKey: "bene-households", filterCol: 12, filterLabel: "Status", section: "households",
     rerender: () => renderBeneHouseholds(host),
+    extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} → Beneficiaries</button>`],
+    afterRender: (h) => {
+      const b = h.querySelector("[data-reg-extract]");
+      if (b) b.onclick = () => extractHouseholdsAsBeneficiaries(host);
+    },
   });
 }
 function renderBeneSuccession(host) {
