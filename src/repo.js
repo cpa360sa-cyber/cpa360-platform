@@ -229,7 +229,6 @@ export async function loadOrg(orgId) {
       jobsThisYear: num(i.jobs_this_year), jobsCumulative: num(i.jobs_cumulative),
       hectaresActive: num(i.hectares_active), hectaresTotal: num(i.hectares_total),
       householdsBenefit: num(i.households_benefit), householdsTotal: num(i.households_total),
-      householdsResident: num(i.households_resident),
       revenue: num(i.revenue), training: num(i.training),
       jobsByYear: i.jobs_by_year || [],
     },
@@ -571,7 +570,6 @@ export async function saveSection(orgId, section, D) {
         jobs_this_year: num(D.impact.jobsThisYear), jobs_cumulative: num(D.impact.jobsCumulative),
         hectares_active: num(D.impact.hectaresActive), hectares_total: num(D.impact.hectaresTotal),
         households_benefit: num(D.impact.householdsBenefit), households_total: num(D.impact.householdsTotal),
-        households_resident: num(D.impact.householdsResident),
         revenue: num(D.impact.revenue), training: num(D.impact.training),
         jobs_by_year: D.impact.jobsByYear || [],
       });

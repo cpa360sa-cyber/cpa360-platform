@@ -958,7 +958,6 @@ function editImpactFigures() {
     { key: "hectaresTotal", label: "Total hectares", type: "number", min: 0 },
     { key: "householdsBenefit", label: "Households benefiting", type: "number", min: 0 },
     { key: "householdsTotal", label: "Households represented (total)", type: "number", min: 0 },
-    { key: "householdsResident", label: "Households dwelling on the farm / in the community", type: "number", min: 0 },
     { key: "revenue", label: "Enterprise revenue (R)", type: "number", min: 0 },
     { key: "training", label: "Training beneficiaries", type: "number", min: 0 },
   ], "impact");
@@ -2410,10 +2409,14 @@ function renderImpact() {
   const i = DATA.impact;
   const hTotal = i.hectaresTotal || 1;
   const yr = new Date().getFullYear();
+  /* "Dwelling on the Land" is aggregated live from the Household Records
+     register's per-household "resident" flag, not a manually-typed figure —
+     see the Households tab in the Beneficiary Centre. */
+  const residentHH = DATA.beneficiaryCentre.households.filter((h) => h[7]).length;
   $("impact-stats").innerHTML = [
     statTile(`Jobs Created (FTE) — ${yr}`, i.jobsThisYear, i.jobsCumulative + " cumulative since Gate 2", "good"),
     statTile("Households Benefiting", i.householdsBenefit, fmtPct(i.householdsBenefit / (i.householdsTotal || 1) * 100) + " of represented households", ""),
-    statTile("Households Dwelling on the Land", i.householdsResident, fmtPct(i.householdsResident / (i.householdsTotal || 1) * 100) + " of represented households live on the farm/in the community", ""),
+    statTile("Households Dwelling on the Land", residentHH, fmtPct(residentHH / (i.householdsTotal || 1) * 100) + " of represented households live on the farm/in the community", ""),
     statTile("Enterprise Revenue", fmtR(i.revenue), "Annual, CPA-run enterprises", ""),
     statTile("Training Beneficiaries", i.training, "This year", ""),
   ].join("");
