@@ -693,27 +693,108 @@ function wireSubtabs(host) {
 /* A read table + Import/Manage buttons wired to an editor. cfg:
    { title, hint, columns:[{label,cls}], rows:()=>arr, cell:(row)=>[htmlCell,…],
      manage:()=>void, importKey?, stats?:()=>[htmlTile,…] } */
+/* Bulk filter + multi-select state, kept outside mountRegister so it survives
+   the full-innerHTML re-renders this app does after every change. Opt-in via
+   cfg.bulkKey — every existing mountRegister call that doesn't set it renders
+   exactly as before. */
+const BULK_STATE = {};
+function bulkState(key) { return (BULK_STATE[key] ||= { selected: new Set(), filter: null, filterSeen: new Set(), filterOpen: false }); }
+function filterPopoverHtml(values, activeSet, label) {
+  return `<div class="reg-filter-pop" data-reg-filterpop>
+    <div class="reg-filter-head">${esc(label)}<span><button type="button" data-fall>All</button> · <button type="button" data-fnone>None</button></span></div>
+    ${values.map((v) => `<label><input type="checkbox" data-fval="${esc(v)}" ${activeSet.has(v) ? "checked" : ""}> ${esc(v)}</label>`).join("")}
+  </div>`;
+}
+
 function mountRegister(host, cfg) {
-  const rows = cfg.rows();
+  const allRows = cfg.rows();
+  const bulk = cfg.bulkKey ? bulkState(cfg.bulkKey) : null;      // filtering — available to everyone
+  const canDelete = bulk && CAN_EDIT;                            // selecting + deleting — editors only
+  const rid = cfg.rowId || ((r) => r._id);
+
+  let rows = allRows;
+  let distinctVals = [];
+  if (bulk && cfg.filterCol != null) {
+    distinctVals = [...new Set(allRows.map((r) => r[cfg.filterCol]).filter((v) => v != null && v !== ""))];
+    distinctVals.forEach((v) => { if (!bulk.filterSeen.has(v)) { bulk.filterSeen.add(v); (bulk.filter ||= new Set()).add(v); } });
+    if (!bulk.filter) bulk.filter = new Set(distinctVals);
+    rows = allRows.filter((r) => bulk.filter.has(r[cfg.filterCol]));
+  }
+
+  const selectedCount = canDelete ? [...bulk.selected].filter((id) => rows.some((r) => String(rid(r)) === id)).length : 0;
+  const allChecked = canDelete && rows.length > 0 && rows.every((r) => bulk.selected.has(String(rid(r))));
+
   const tools = [];
   if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV / Excel</button>`);
+  if (bulk && distinctVals.length > 1) {
+    const on = bulk.filter.size < distinctVals.length;
+    tools.push(`<button class="btn${on ? " active" : ""}" data-reg-filter type="button">Filter${on ? ` · ${bulk.filter.size}/${distinctVals.length}` : ""}</button>`);
+  }
   if (CAN_EDIT) tools.push(`<button class="btn" data-reg-manage type="button">Manage</button>`);
+  if (canDelete) tools.push(`<button class="btn danger" data-reg-delsel type="button"${selectedCount ? "" : " disabled"}>Delete selected${selectedCount ? ` (${selectedCount})` : ""}</button>`);
+
   host.innerHTML = `
     ${cfg.stats ? `<div class="grid grid-4">${cfg.stats().join("")}</div>` : ""}
     <div class="card-head" style="margin:${cfg.stats ? "18px" : "2px"} 0 10px;">
       <div><h3 style="font-size:13px;">${esc(cfg.title)}</h3>${cfg.hint ? `<span class="hint">${esc(cfg.hint)}</span>` : ""}</div>
-      <span style="display:flex;gap:6px;">${tools.join("")}</span>
+      <span style="display:flex;gap:6px;position:relative;">${tools.join("")}
+        ${bulk && distinctVals.length > 1 && bulk.filterOpen ? filterPopoverHtml(distinctVals, bulk.filter, cfg.filterLabel || "Filter") : ""}
+      </span>
     </div>
     <div class="table-wrap${rows.length > 12 ? " scroll" : ""}"><table>
-      <thead><tr>${cfg.columns.map((c) => `<th class="${c.cls || ""}">${esc(c.label)}</th>`).join("")}</tr></thead>
+      <thead><tr>
+        ${canDelete ? `<th class="chk"><input type="checkbox" data-reg-selall ${allChecked ? "checked" : ""} aria-label="Select all"></th>` : ""}
+        ${cfg.columns.map((c) => `<th class="${c.cls || ""}">${esc(c.label)}</th>`).join("")}
+      </tr></thead>
       <tbody>${rows.length
-        ? rows.map((r) => `<tr>${cfg.cell(r).map((cell, i) => `<td class="${cfg.columns[i].cls || ""}">${cell}</td>`).join("")}</tr>`).join("")
-        : emptyRow(cfg.columns.length, cfg.empty || "Nothing recorded yet.")}</tbody>
+        ? rows.map((r) => {
+            const id = String(rid(r));
+            const chk = canDelete ? `<td class="chk"><input type="checkbox" data-reg-sel="${esc(id)}" ${bulk.selected.has(id) ? "checked" : ""} aria-label="Select row"></td>` : "";
+            return `<tr>${chk}${cfg.cell(r).map((cell, i) => `<td class="${cfg.columns[i].cls || ""}">${cell}</td>`).join("")}</tr>`;
+          }).join("")
+        : emptyRow(cfg.columns.length + (canDelete ? 1 : 0), cfg.empty || "Nothing recorded yet.")}</tbody>
     </table></div>`;
   const mb = host.querySelector("[data-reg-manage]");
   if (mb) mb.onclick = cfg.manage;
   const ib = host.querySelector("[data-reg-import]");
   if (ib) ib.onclick = () => importModal(IMPORT[cfg.importKey]);
+
+  if (canDelete) {
+    host.querySelectorAll("[data-reg-sel]").forEach((cb) => (cb.onclick = () => {
+      if (cb.checked) bulk.selected.add(cb.dataset.regSel); else bulk.selected.delete(cb.dataset.regSel);
+      cfg.rerender();
+    }));
+    const selAll = host.querySelector("[data-reg-selall]");
+    if (selAll) selAll.onclick = () => {
+      rows.forEach((r) => { const id = String(rid(r)); if (selAll.checked) bulk.selected.add(id); else bulk.selected.delete(id); });
+      cfg.rerender();
+    };
+    const delBtn = host.querySelector("[data-reg-delsel]");
+    if (delBtn) delBtn.onclick = () => {
+      const ids = new Set([...bulk.selected].filter((id) => rows.some((r) => String(rid(r)) === id)));
+      if (!ids.size) return;
+      confirmModal(`Delete ${ids.size} selected record${ids.size > 1 ? "s" : ""}? This can't be undone.`, () => {
+        const arr = cfg.rows();
+        for (let i = arr.length - 1; i >= 0; i--) { if (ids.has(String(rid(arr[i])))) arr.splice(i, 1); }
+        ids.forEach((id) => bulk.selected.delete(id));
+        commit(cfg.section);   // commit() re-renders internally once the save round-trips
+        toast(`Deleted ${ids.size} record${ids.size > 1 ? "s" : ""}.`);
+      });
+    };
+  }
+  if (bulk) {
+    const filterBtn = host.querySelector("[data-reg-filter]");
+    if (filterBtn) filterBtn.onclick = () => { bulk.filterOpen = !bulk.filterOpen; cfg.rerender(); };
+    const pop = host.querySelector("[data-reg-filterpop]");
+    if (pop) {
+      pop.querySelectorAll("[data-fval]").forEach((cb) => (cb.onchange = () => {
+        if (cb.checked) bulk.filter.add(cb.dataset.fval); else bulk.filter.delete(cb.dataset.fval);
+        cfg.rerender();
+      }));
+      pop.querySelector("[data-fall]").onclick = () => { bulk.filter = new Set(distinctVals); cfg.rerender(); };
+      pop.querySelector("[data-fnone]").onclick = () => { bulk.filter = new Set(); cfg.rerender(); };
+    }
+  }
   if (cfg.afterRender) cfg.afterRender(host);
 }
 
@@ -1374,6 +1455,8 @@ function renderBeneRegister(host) {
       `<span class="mono">${esc(r[5])}</span>`, esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
       statusPill(r[8]), statusPill(r[9])],
     manage: () => listEditor(BENE_EDITORS.register()),
+    bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
+    rerender: () => renderBeneRegister(host),
   });
 }
 function renderBeneVerification(host) {
@@ -1434,6 +1517,8 @@ function renderBeneHouseholds(host) {
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
     },
     manage: () => listEditor(BENE_EDITORS.households()),
+    bulkKey: "bene-households", filterCol: 12, filterLabel: "Status", section: "households",
+    rerender: () => renderBeneHouseholds(host),
   });
 }
 function renderBeneSuccession(host) {
@@ -1454,6 +1539,8 @@ function renderBeneSuccession(host) {
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
       `<span class="mono">${esc(r[2])}</span>`, esc(r[3]), esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
     manage: () => listEditor(BENE_EDITORS.succession()),
+    bulkKey: "bene-succession", filterCol: 6, filterLabel: "Status", section: "succession_cases",
+    rerender: () => renderBeneSuccession(host),
   });
 }
 function renderBeneDeceased(host) {
@@ -1501,6 +1588,8 @@ function renderBeneDisputes(host) {
       esc(r[2]), `<span style="color:var(--ink-2);min-width:220px;display:inline-block;">${esc(r[3])}</span>`,
       `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
     manage: () => listEditor(BENE_EDITORS.disputes()),
+    bulkKey: "bene-disputes", filterCol: 5, filterLabel: "Status", section: "beneficiary_disputes",
+    rerender: () => renderBeneDisputes(host),
   });
 }
 function renderBeneEvidence(host) {

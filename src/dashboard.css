@@ -163,7 +163,16 @@
 .cpa-dash .btn.primary{ background:var(--brand); border-color:var(--brand); color:#fff; }
 .cpa-dash .btn.primary:hover{ color:#fff; filter:brightness(1.08); }
 .cpa-dash .btn.danger{ background:var(--status-critical); border-color:var(--status-critical); color:#fff; }
+.cpa-dash .btn.active{ background:var(--brand-tint); border-color:var(--brand); color:var(--brand); }
 .cpa-dash .card-head .btn{ padding:4px 10px; font-size:11px; }
+.cpa-dash th.chk, .cpa-dash td.chk{ width:32px; text-align:center; padding-left:10px; padding-right:4px; }
+.cpa-dash th.chk input, .cpa-dash td.chk input{ width:15px; height:15px; accent-color:var(--brand-2); cursor:pointer; }
+.cpa-dash .reg-filter-pop{ position:absolute; top:100%; right:0; margin-top:6px; z-index:20; min-width:190px;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow-lift); padding:10px 12px; }
+.cpa-dash .reg-filter-head{ display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-muted); }
+.cpa-dash .reg-filter-head button{ all:unset; cursor:pointer; color:var(--brand); font-weight:600; font-size:11px; text-transform:none; letter-spacing:0; }
+.cpa-dash .reg-filter-pop label{ display:flex; align-items:center; gap:7px; font-size:12.5px; padding:3px 0; cursor:pointer; white-space:nowrap; }
 .cpa-dash .row-actions{ display:flex; gap:2px; }
 .cpa-dash .row-actions button{ all:unset; cursor:pointer; width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--ink-muted); }
 .cpa-dash .row-actions button:hover{ background:var(--surface-3); color:var(--ink); }
