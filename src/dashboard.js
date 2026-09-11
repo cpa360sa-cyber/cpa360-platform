@@ -1411,14 +1411,16 @@ function renderBeneHouseholds(host) {
     title: "Household Records", importKey: "households",
     hint: "Households are classified by their ODI, with up to 4 descendants recorded here. This isn't the beneficiary "
       + "register — create individual beneficiaries separately and link them to their household by ref.",
-    columns: [{ label: "Ref." }, { label: "ODI" }, { label: "ID no. of ODI" }, { label: "Family Representative" },
+    columns: [{ label: "Ref." }, { label: "ODI" }, { label: "Family Representative" },
       { label: "Descendants", cls: "num" }, { label: "Linked in Register", cls: "num" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
     cell: (r) => {
+      // ID numbers are masked-entry fields (see the Add/Edit form) and — same as the
+      // Master Beneficiary Register — never surfaced in the list view, only there.
       const descendants = [r[4], r[6], r[8], r[10]].filter((n) => (n || "").trim() !== "").length;
       return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
-        `<span style="font-weight:600;">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3])}</span>`,
+        `<span style="font-weight:600;">${esc(r[2])}</span>`,
         esc(r[1]), `<span class="mono">${descendants}</span>`,
         `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
@@ -2896,11 +2898,11 @@ const IMPORT = {
       { k: "ref", label: "Household ref (blank = auto MCPA-###)" },
       { k: "famrep", label: "Family Representative" },
       { k: "odi", label: "ODI", required: true },
-      { k: "odiId", label: "ID no. of ODI" },
-      { k: "d1", label: "1st Descendant" }, { k: "d1id", label: "ID: 1st Descendant" },
-      { k: "d2", label: "2nd Descendant" }, { k: "d2id", label: "ID 2nd Descendant" },
-      { k: "d3", label: "3rd Descendants" }, { k: "d3id", label: "ID 3rd Descendant" },
-      { k: "d4", label: "4th Descendants" }, { k: "d4id", label: "ID 4th Descendants" },
+      { k: "odiId", label: "ID no. of ODI (masked)" },
+      { k: "d1", label: "1st Descendant" }, { k: "d1id", label: "ID: 1st Descendant (masked)" },
+      { k: "d2", label: "2nd Descendant" }, { k: "d2id", label: "ID 2nd Descendant (masked)" },
+      { k: "d3", label: "3rd Descendants" }, { k: "d3id", label: "ID 3rd Descendant (masked)" },
+      { k: "d4", label: "4th Descendants" }, { k: "d4id", label: "ID 4th Descendants (masked)" },
       { k: "status", label: "Status" }, { k: "resident", label: "Dwells on the farm / in the community (Yes/No)" },
     ],
     make: (v, idx) => [
@@ -3213,15 +3215,15 @@ const BENE_EDITORS = {
     fields: (r) => [
       { key: "famrep", label: "Family Representative", type: "text", value: r[1] },
       { key: "odi", label: "ODI", type: "text", value: r[2], required: true },
-      { key: "odiId", label: "ID no. of ODI", type: "text", value: r[3] },
+      { key: "odiId", label: "ID no. of ODI (masked, e.g. ****1234)", type: "text", value: r[3] },
       { key: "d1", label: "1st Descendant", type: "text", value: r[4] },
-      { key: "d1id", label: "ID: 1st Descendant", type: "text", value: r[5] },
+      { key: "d1id", label: "ID: 1st Descendant (masked, e.g. ****1234)", type: "text", value: r[5] },
       { key: "d2", label: "2nd Descendant", type: "text", value: r[6] },
-      { key: "d2id", label: "ID 2nd Descendant", type: "text", value: r[7] },
+      { key: "d2id", label: "ID 2nd Descendant (masked, e.g. ****1234)", type: "text", value: r[7] },
       { key: "d3", label: "3rd Descendants", type: "text", value: r[8] },
-      { key: "d3id", label: "ID 3rd Descendant", type: "text", value: r[9] },
+      { key: "d3id", label: "ID 3rd Descendant (masked, e.g. ****1234)", type: "text", value: r[9] },
       { key: "d4", label: "4th Descendants", type: "text", value: r[10] },
-      { key: "d4id", label: "ID 4th Descendants", type: "text", value: r[11] },
+      { key: "d4id", label: "ID 4th Descendants (masked, e.g. ****1234)", type: "text", value: r[11] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
     ],
