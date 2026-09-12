@@ -165,7 +165,7 @@ export async function loadOrg(orgId) {
     beneficiaryCentre: {
       register: (beneReg || []).map((r) => tagArr(
         [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
-         r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || ""], r)),
+         r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || "", r.household_role || ""], r)),
       households: (households || []).map((r) => tagArr(
         [r.ref || "", r.family_representative || "", r.odi_name || "", r.odi_id || "",
          r.descendant1_name || "", r.descendant1_id || "", r.descendant2_name || "", r.descendant2_id || "",
@@ -441,7 +441,8 @@ export async function saveSection(orgId, section, D) {
     case "beneficiaries":
       return reconcile("beneficiaries", orgId, D.beneficiaryCentre.register, (r, i) => ({
         ref: nn(r[0]), full_name: r[1], gender: nn(r[2]), dob: nn(r[3]), id_masked: nn(r[4]),
-        household_ref: nn(r[5]), contact: nn(r[6]), joined_on: nn(r[7]), status: r[8], verification: r[9], notes: nn(r[10]), sort: i,
+        household_ref: nn(r[5]), contact: nn(r[6]), joined_on: nn(r[7]), status: r[8], verification: r[9], notes: nn(r[10]),
+        household_role: nn(r[11]), sort: i,
       }));
     case "households":
       return reconcile("households", orgId, D.beneficiaryCentre.households, (r, i) => ({

@@ -611,8 +611,9 @@ function importModal(cfg) {
     const arr = cfg.arr();
     if (scrim.querySelector("#imp-replace").checked) arr.length = 0;
     built.forEach((row) => arr.push(row));
+    const extra = cfg.afterImport ? (cfg.afterImport(built) || "") : "";
     commit(cfg.section);
-    toast(`Imported ${built.length} row(s) into ${cfg.title}.`);
+    toast(`Imported ${built.length} row(s) into ${cfg.title}.${extra}`);
     close();
   };
 }
@@ -1432,6 +1433,12 @@ function renderBeneficiary() {
 }
 const BENE_STATUSES = ["Active", "Deceased", "Removed", "Transferred"];
 const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
+/* Every person in a household's family tree — the ODI, the Family
+   Representative, each descendant — is a real beneficiary; this is the
+   structured "which one are they" tag, set automatically when extracted
+   from Household Records (see extractOneHousehold) or picked manually for
+   a beneficiary added straight into the register. */
+const HOUSEHOLD_ROLES = ["", "ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant"];
 
 function beneStats() {
   const b = beneRollup();
@@ -1447,12 +1454,13 @@ function renderBeneRegister(host) {
   mountRegister(host, {
     title: "Master Beneficiary Register", importKey: "beneficiaries", stats: beneStats,
     hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score.",
-    columns: [{ label: "Ref." }, { label: "Full name" }, { label: "Gender" }, { label: "DOB" }, { label: "Household" },
+    columns: [{ label: "Ref." }, { label: "Full name" }, { label: "Family position" }, { label: "Gender" }, { label: "DOB" }, { label: "Household" },
       { label: "Contact" }, { label: "Joined" }, { label: "Status" }, { label: "Verification" }],
     rows: () => DATA.beneficiaryCentre.register,
     empty: "No beneficiaries captured yet — Import a spreadsheet or add them.",
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
-      `<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]), `<span class="mono">${esc(r[3])}</span>`,
+      `<span style="font-weight:600;">${esc(r[1])}</span>`, r[11] ? `<span class="pill neutral">${esc(r[11])}</span>` : "—",
+      esc(r[2]), `<span class="mono">${esc(r[3])}</span>`,
       `<span class="mono">${esc(r[5])}</span>`, esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
       statusPill(r[8]), statusPill(r[9])],
     manage: () => listEditor(BENE_EDITORS.register()),
@@ -1498,12 +1506,42 @@ function renderBeneVerification(host) {
   host.querySelector("#bene-evidence-btn").onclick = () => attachmentsModal("beneficiary", null, "Beneficiary verification evidence");
 }
 /* Each household is a family tree rooted at its ODI: the ODI, the Family
-   Representative and up to 4 descendants can each become their own row in
-   the Master Beneficiary Register. Keyed by <household ref>-<slot>, so
-   running it again after editing a household updates the same beneficiary
-   rather than creating a duplicate; status/verification already set on an
-   existing extracted beneficiary is left alone. */
-function extractHouseholdsAsBeneficiaries(host) {
+   Representative and up to 4 descendants — is a real beneficiary. Each
+   becomes its own row in the Master Beneficiary Register, tagged with its
+   Family position (see HOUSEHOLD_ROLES) so 1st/2nd/3rd/4th Descendant is a
+   proper field, not a number you have to infer. Keyed by <household
+   ref>-<slot>, so running it again after editing a household updates the
+   same beneficiary rather than duplicating; status/verification already set
+   on an existing extracted beneficiary is left alone. Mutates
+   DATA.beneficiaryCentre.register directly — caller commits. */
+function extractOneHousehold(h, reg) {
+  const hhRef = h[0];
+  const slots = [
+    { suffix: "ODI", name: h[2], id: h[3], role: "ODI" },
+    { suffix: "REP", name: h[1], id: "", role: "Family Representative" },
+    { suffix: "D1", name: h[4], id: h[5], role: "1st Descendant" },
+    { suffix: "D2", name: h[6], id: h[7], role: "2nd Descendant" },
+    { suffix: "D3", name: h[8], id: h[9], role: "3rd Descendant" },
+    { suffix: "D4", name: h[10], id: h[11], role: "4th Descendant" },
+  ];
+  let created = 0, updated = 0;
+  slots.forEach((s) => {
+    const name = (s.name || "").trim();
+    if (!name) return;
+    const ref = `${hhRef}-${s.suffix}`;
+    const note = `Extracted as ${s.role} of household ${hhRef}.`;
+    const existing = reg.find((r) => r[0] === ref);
+    if (existing) {
+      existing[1] = name; existing[4] = maskId(s.id); existing[5] = hhRef; existing[10] = note; existing[11] = s.role;
+      updated++;
+    } else {
+      reg.push([ref, name, "Unspecified", "", maskId(s.id), hhRef, "", "", "Active", "Pending", note, s.role]);
+      created++;
+    }
+  });
+  return { created, updated };
+}
+function extractHouseholdsAsBeneficiaries() {
   const bulk = bulkState("bene-households");
   const households = DATA.beneficiaryCentre.households;
   const chosen = households.filter((h) => bulk.selected.has(String(h._id)));
@@ -1511,31 +1549,7 @@ function extractHouseholdsAsBeneficiaries(host) {
 
   const reg = DATA.beneficiaryCentre.register;
   let created = 0, updated = 0;
-  chosen.forEach((h) => {
-    const hhRef = h[0];
-    const slots = [
-      { suffix: "ODI", name: h[2], id: h[3], role: "ODI" },
-      { suffix: "REP", name: h[1], id: "", role: "Family Representative" },
-      { suffix: "D1", name: h[4], id: h[5], role: "Descendant" },
-      { suffix: "D2", name: h[6], id: h[7], role: "Descendant" },
-      { suffix: "D3", name: h[8], id: h[9], role: "Descendant" },
-      { suffix: "D4", name: h[10], id: h[11], role: "Descendant" },
-    ];
-    slots.forEach((s) => {
-      const name = (s.name || "").trim();
-      if (!name) return;
-      const ref = `${hhRef}-${s.suffix}`;
-      const note = `Extracted as ${s.role} of household ${hhRef}.`;
-      const existing = reg.find((r) => r[0] === ref);
-      if (existing) {
-        existing[1] = name; existing[4] = maskId(s.id); existing[5] = hhRef; existing[10] = note;
-        updated++;
-      } else {
-        reg.push([ref, name, "Unspecified", "", maskId(s.id), hhRef, "", "", "Active", "Pending", note]);
-        created++;
-      }
-    });
-  });
+  chosen.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; });
   if (!created && !updated) { toast("Nothing to extract — the selected household(s) have no names filled in yet.", true); return; }
   commit("beneficiaries");
   toast(`Extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""}.`);
@@ -1546,8 +1560,9 @@ function renderBeneHouseholds(host) {
   const selN = DATA.beneficiaryCentre.households.filter((h) => bulk.selected.has(String(h._id))).length;
   mountRegister(host, {
     title: "Household Records", importKey: "households",
-    hint: "Households are classified by their ODI — the root of the family tree. Select households below and use "
-      + "“Extract” to create or update a Master Register entry for the ODI, Family Representative and each descendant.",
+    hint: "Households are classified by their ODI — the root of the family tree. Importing a spreadsheet here also "
+      + "creates each ODI, Family Representative and descendant as a beneficiary automatically. After manual edits, "
+      + "select households below and use “Extract” to re-sync the Master Register.",
     columns: [{ label: "Ref." }, { label: "ODI" }, { label: "Family Representative" },
       { label: "Descendants", cls: "num" }, { label: "Linked in Register", cls: "num" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
@@ -1568,7 +1583,7 @@ function renderBeneHouseholds(host) {
     extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} → Beneficiaries</button>`],
     afterRender: (h) => {
       const b = h.querySelector("[data-reg-extract]");
-      if (b) b.onclick = () => extractHouseholdsAsBeneficiaries(host);
+      if (b) b.onclick = () => extractHouseholdsAsBeneficiaries();
     },
   });
 }
@@ -3035,10 +3050,12 @@ const IMPORT = {
     title: "beneficiaries", section: "beneficiaries", arr: () => DATA.beneficiaryCentre.register,
     targets: [{ k: "ref", label: "Register no." }, { k: "name", label: "Full name", required: true }, { k: "gender", label: "Gender" },
       { k: "dob", label: "Date of birth" }, { k: "idm", label: "ID (masked)" }, { k: "hh", label: "Household ref" },
+      { k: "role", label: "Family position (ODI / Family Representative / 1st-4th Descendant)" },
       { k: "contact", label: "Contact" }, { k: "joined", label: "Joined on" }, { k: "status", label: "Status" }, { k: "verif", label: "Verification" }],
     make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || "", maskId(v.idm), v.hh || "", v.contact || "", v.joined || "",
       ["Active", "Deceased", "Removed", "Transferred"].includes(v.status) ? v.status : "Active",
-      ["Verified", "Pending", "Disputed", "Rejected"].includes(v.verif) ? v.verif : "Pending", ""],
+      ["Verified", "Pending", "Disputed", "Rejected"].includes(v.verif) ? v.verif : "Pending", "",
+      HOUSEHOLD_ROLES.includes(v.role) ? v.role : (v.role || "")],
   },
   households: {
     title: "households", section: "households", arr: () => DATA.beneficiaryCentre.households,
@@ -3059,6 +3076,17 @@ const IMPORT = {
       v.d1 || "", maskId(v.d1id), v.d2 || "", maskId(v.d2id), v.d3 || "", maskId(v.d3id), v.d4 || "", maskId(v.d4id),
       v.status || "Active", !/^(no|n|false|0)$/i.test((v.resident || "").trim()),
     ],
+    // Every household imported here has its own family tree — extract the ODI, Family
+    // Representative and each descendant straight into the Master Register too, so one
+    // upload correctly produces both the household record AND the individual beneficiaries.
+    afterImport: (builtRows) => {
+      const reg = DATA.beneficiaryCentre.register;
+      let created = 0, updated = 0;
+      builtRows.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; });
+      if (!created && !updated) return "";
+      commit("beneficiaries");
+      return ` Also extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""} into the Master Register.`;
+    },
   },
   succession_cases: {
     title: "succession cases", section: "succession_cases", arr: () => DATA.beneficiaryCentre.succession,
@@ -3340,7 +3368,7 @@ const BENE_EDITORS = {
   register: () => ({
     title: "Master Beneficiary Register", arr: DATA.beneficiaryCentre.register, section: "beneficiaries",
     rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[9]}`,
-    blank: () => ["", "", "Female", "", "", "", "", new Date().toISOString().slice(0, 10), "Active", "Pending", ""],
+    blank: () => ["", "", "Female", "", "", "", "", new Date().toISOString().slice(0, 10), "Active", "Pending", "", ""],
     fields: (r) => [
       { key: "ref", label: "Register / member no.", type: "text", value: r[0] },
       { key: "name", label: "Full name", type: "text", value: r[1], required: true },
@@ -3348,13 +3376,17 @@ const BENE_EDITORS = {
       { key: "dob", label: "Date of birth", type: "date", value: r[3] },
       { key: "idm", label: "ID (auto-masked — only the last 4 digits are kept)", type: "text", value: r[4] },
       { key: "hh", label: "Household ref.", type: "text", value: r[5] },
+      { key: "role", label: "Family position", type: "select", options: HOUSEHOLD_ROLES, value: r[11] || "" },
       { key: "contact", label: "Contact", type: "text", value: r[6] },
       { key: "joined", label: "Joined on", type: "date", value: r[7] },
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
     ],
-    write: (r, o) => { r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = maskId(o.idm); r[5] = o.hh; r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes; },
+    write: (r, o) => {
+      r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = maskId(o.idm); r[5] = o.hh;
+      r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes; r[11] = o.role;
+    },
   }),
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
