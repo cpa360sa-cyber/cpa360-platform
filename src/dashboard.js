@@ -1439,6 +1439,7 @@ const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
    from Household Records (see extractOneHousehold) or picked manually for
    a beneficiary added straight into the register. */
 const HOUSEHOLD_ROLES = ["", "ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant"];
+const BENEFIT_BASIS_OPTIONS = ["", "Per Household", "Per Capita"];
 
 function beneStats() {
   const b = beneRollup();
@@ -1560,21 +1561,24 @@ function renderBeneHouseholds(host) {
   const selN = DATA.beneficiaryCentre.households.filter((h) => bulk.selected.has(String(h._id))).length;
   mountRegister(host, {
     title: "Household Records", importKey: "households",
-    hint: "Households are classified by their ODI — the root of the family tree. Importing a spreadsheet here also "
+    hint: "Households are a summary/rollup of the family — a household is not itself a beneficiary. Member names and "
+      + "IDs live in the Master Beneficiary Register (filter it by Household ref. to see who's in a household); "
+      + "“Members” below is a live count from there, not typed in by hand. Importing a spreadsheet here also "
       + "creates each ODI, Family Representative and descendant as a beneficiary automatically. After manual edits, "
       + "select households below and use “Extract” to re-sync the Master Register.",
-    columns: [{ label: "Ref." }, { label: "ODI" }, { label: "Family Representative" },
-      { label: "Descendants", cls: "num" }, { label: "Linked in Register", cls: "num" }, { label: "Resident?" }, { label: "Status" }],
+    columns: [{ label: "Household ID" }, { label: "ODI" }, { label: "Household Head" },
+      { label: "Members", cls: "num" }, { label: "Verification" }, { label: "Dispute" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
     cell: (r) => {
       // ID numbers are masked-entry fields (see the Add/Edit form) and — same as the
       // Master Beneficiary Register — never surfaced in the list view, only there.
-      const descendants = [r[4], r[6], r[8], r[10]].filter((n) => (n || "").trim() !== "").length;
+      const members = reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length;
       return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
         `<span style="font-weight:600;">${esc(r[2])}</span>`,
-        esc(r[1]), `<span class="mono">${descendants}</span>`,
-        `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
+        esc(r[1]), `<span class="mono">${members}</span>`,
+        statusPill(r[17] || "Pending"),
+        r[22] ? pill(r[23] ? `Disputed (${esc(r[23])})` : "Disputed", "critical") : pill("None", "neutral"),
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
     },
     manage: () => listEditor(BENE_EDITORS.households()),
@@ -3075,6 +3079,7 @@ const IMPORT = {
       v.famrep || "", v.odi, maskId(v.odiId),
       v.d1 || "", maskId(v.d1id), v.d2 || "", maskId(v.d2id), v.d3 || "", maskId(v.d3id), v.d4 || "", maskId(v.d4id),
       v.status || "Active", !/^(no|n|false|0)$/i.test((v.resident || "").trim()),
+      "", "", "", "Pending", "", "", "", "", false, "",
     ],
     // Every household imported here has its own family tree — extract the ODI, Family
     // Representative and each descendant straight into the Master Register too, so one
@@ -3391,9 +3396,13 @@ const BENE_EDITORS = {
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
     rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || r[1] || "Household"}`,
-    blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true],
+    blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true,
+      "", "", "", "Pending", "", "", "", "", false, ""],
     fields: (r) => [
-      { key: "famrep", label: "Family Representative", type: "text", value: r[1] },
+      { key: "famrep", label: "Household Head Name", type: "text", value: r[1] },
+      { key: "headId", label: "Household Head ID Number (auto-masked — only the last 4 digits are kept)", type: "text", value: r[14] },
+      { key: "headPhone", label: "Household Head Phone", type: "text", value: r[15] },
+      { key: "headAddress", label: "Household Head Address", type: "textarea", value: r[16] },
       { key: "odi", label: "ODI", type: "text", value: r[2], required: true },
       { key: "odiId", label: "ID no. of ODI (auto-masked — only the last 4 digits are kept)", type: "text", value: r[3] },
       { key: "d1", label: "1st Descendant", type: "text", value: r[4] },
@@ -3406,12 +3415,22 @@ const BENE_EDITORS = {
       { key: "d4id", label: "ID 4th Descendants (auto-masked — only the last 4 digits are kept)", type: "text", value: r[11] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
+      { key: "verification", label: "Verification Status", type: "select", options: VERIF_STATUSES, value: r[17] || "Pending" },
+      { key: "dateRegistered", label: "Date Registered", type: "date", value: r[18] },
+      { key: "lastReviewed", label: "Last Reviewed Date", type: "date", value: r[19] },
+      { key: "landRef", label: "Land / Site Allocation Reference", type: "text", value: r[20] },
+      { key: "benefitBasis", label: "Benefit Basis", type: "select", options: BENEFIT_BASIS_OPTIONS, value: r[21] || "" },
+      { key: "disputeFlag", label: "Dispute Flag", type: "select", options: ["No", "Yes"], value: r[22] ? "Yes" : "No" },
+      { key: "disputeRef", label: "Dispute Reference (see Duplicate / Conflict Cases)", type: "text", value: r[23] },
     ],
     write: (r, o) => {
       r[1] = o.famrep; r[2] = o.odi; r[3] = maskId(o.odiId);
       r[4] = o.d1; r[5] = maskId(o.d1id); r[6] = o.d2; r[7] = maskId(o.d2id);
       r[8] = o.d3; r[9] = maskId(o.d3id); r[10] = o.d4; r[11] = maskId(o.d4id);
       r[12] = o.status; r[13] = o.resident !== "No";
+      r[14] = maskId(o.headId); r[15] = o.headPhone; r[16] = o.headAddress;
+      r[17] = o.verification; r[18] = o.dateRegistered; r[19] = o.lastReviewed;
+      r[20] = o.landRef; r[21] = o.benefitBasis; r[22] = o.disputeFlag === "Yes"; r[23] = o.disputeRef;
     },
   }),
   succession: () => ({
