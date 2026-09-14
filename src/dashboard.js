@@ -279,8 +279,12 @@ function docCount(section, refId) {
   return m[refId == null ? "_" : String(refId)] || 0;
 }
 
-/* Reusable file manager. section: 'masterfile'|'action'|'score'|'general'. */
-function attachmentsModal(section, refId, title) {
+/* Reusable file manager. section: 'masterfile'|'action'|'score'|'general'.
+   opts.accept: input "accept" attribute (e.g. "application/pdf,.pdf") to steer the file
+   picker; opts.match: a RegExp tested against the chosen file's name/type before upload
+   (client-side only — the storage bucket itself accepts any file type). Both optional. */
+function attachmentsModal(section, refId, title, opts) {
+  opts = opts || {};
   const scrim = document.createElement("div");
   scrim.className = "modal-scrim cpa-dash";
   scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -288,7 +292,7 @@ function attachmentsModal(section, refId, title) {
     <div class="modal-body" style="display:block;">
       <div id="att-list">${stateHtml("loading", "Loading…")}</div>
       ${CAN_EDIT ? `<label class="btn primary" style="margin-top:12px;display:inline-flex;cursor:pointer;">
-        Upload a file<input type="file" id="att-file" hidden></label>
+        ${esc(opts.label || "Upload a file")}<input type="file" id="att-file" hidden${opts.accept ? ` accept="${esc(opts.accept)}"` : ""}></label>
         <span id="att-msg" style="font-size:11.5px;color:var(--ink-muted);margin-left:8px;"></span>` : ""}
     </div>
     <div class="modal-foot"><button class="btn primary" data-act="close" type="button">Done</button></div>
@@ -333,6 +337,9 @@ function attachmentsModal(section, refId, title) {
   if (fileInput) fileInput.onchange = async () => {
     const f = fileInput.files[0];
     if (!f) return;
+    if (opts.match && !opts.match.test(f.name) && !opts.match.test(f.type)) {
+      msg.textContent = opts.matchMsg || "Unsupported file type."; fileInput.value = ""; return;
+    }
     if (f.size > 25 * 1048576) { msg.textContent = "Max 25 MB."; fileInput.value = ""; return; }
     msg.textContent = "Uploading…";
     try {
@@ -1788,6 +1795,14 @@ function renderAdminPolicies(host) {
         `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[4]) || "—"}</span>`, esc(r[5]), statusPill(r[6])];
     },
     manage: () => listEditor(ADMIN_EDITORS.policies()),
+    extraTools: [`<button class="btn" data-policy-pdf type="button">Upload PDF</button>`],
+    afterRender: (h) => {
+      const b = h.querySelector("[data-policy-pdf]");
+      if (b) b.onclick = () => attachmentsModal("admin_policies", null, "Policies & SOPs — PDF documents", {
+        accept: "application/pdf,.pdf", label: "Upload a PDF",
+        match: /\.pdf$|^application\/pdf$/i, matchMsg: "Please choose a PDF file.",
+      });
+    },
   });
 }
 const MEDIA = ["Physical", "Digital", "Both"];
