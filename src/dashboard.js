@@ -4010,9 +4010,18 @@ export function printPack() {
   applyRoleGate();
   const d = new Date().toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" });
   const ph = container.querySelector("#print-header");
+  // Brand Box: the CPA's own logo/colors on the printed board pack, when set — see #/brand.
+  const primary = DATA.cpa.brandPrimary || "#132a4f";
+  const logo = DATA.cpa.logoDataUrl ? `<img src="${DATA.cpa.logoDataUrl}" alt="" style="max-height:38px;max-width:140px;">` : "";
   if (ph) ph.innerHTML =
-    `<div style="font-family:var(--font-display);font-weight:800;font-size:17px;">CPA360™ Command Center</div>
-     <div style="font-size:12px;color:#444;margin-top:2px;">${esc(DATA.cpa.name)} · ${esc(DATA.cpa.reg)} · Generated ${d}</div>`;
+    `<div style="display:flex;align-items:center;gap:10px;">
+       ${logo}
+       <div>
+         <div style="font-family:var(--font-display);font-weight:800;font-size:17px;color:${esc(primary)};">${esc(DATA.cpa.name)}</div>
+         <div style="font-size:12px;color:#444;margin-top:2px;">${esc(DATA.cpa.reg)} · Generated ${d}
+           ${DATA.cpa.brandFooter ? " · " + esc(DATA.cpa.brandFooter) : ""} · CPA360&trade; Command Center</div>
+       </div>
+     </div>`;
   window.print();
 }
 

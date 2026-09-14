@@ -5,6 +5,7 @@
    subscription. RLS does the tenant + role enforcement; this file never checks.
    ============================================================================ */
 import { supabase } from "./supabase.js";
+import { orgLogoDataUrl } from "./orgs.js";
 
 const num = (v) => (v == null || v === "" ? 0 : Number(v));
 const nn = (v) => (v == null || v === "" ? null : v);
@@ -107,12 +108,15 @@ export async function loadOrg(orgId) {
 
   const f = fin || {};
   const i = impact || {};
+  const logoDataUrl = org.logo_path ? await orgLogoDataUrl(org.logo_path).catch(() => null) : null;
 
   return {
     cpa: {
       name: org.name, reg: org.registration || "", region: org.region || "",
       established: org.established || "", landExtent: num(org.land_extent_ha),
       portions: num(org.portions), members: num(org.members_count),
+      brandPrimary: org.brand_primary || "", brandSecondary: org.brand_secondary || "",
+      brandFooter: org.brand_footer || "", logoDataUrl,
     },
     gates: (gates || []).map((g) => tagObj({ n: g.n, name: g.name, state: g.state, updated_at: g.updated_at }, g)),
     score: {
