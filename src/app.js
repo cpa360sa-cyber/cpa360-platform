@@ -3,7 +3,6 @@ import { onAuth, getSession, signOut } from "./auth.js";
 import { renderAuth } from "./auth-ui.js";
 import {
   myOrgs, resolveActiveOrg, setActiveOrgId, createOrg, seedSandbox, atLeast,
-  updateOrgBrand, uploadOrgLogo, removeOrgLogo, resolveBrand,
 } from "./orgs.js";
 import {
   listMembers, addMember, setMemberRole, removeMember,
@@ -53,7 +52,6 @@ const IC = {
   spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/>',
   plug: '<path d="M9 3v6M15 3v6M7 9h10v3a5 5 0 0 1-10 0zM12 17v4"/>',
   inbox: '<path d="M3 12h4l2 4h6l2-4h4"/><path d="M5 12 3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2l-2 7"/><path d="M3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6"/>',
-  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2.2-.9 2.2-2 0-.6-.3-1.1-.7-1.6-.5-.5-.7-1-.3-1.6.3-.5.9-.6 1.6-.6H17a4 4 0 0 0 4-4c0-4.9-4-8.2-9-8.2z"/><circle cx="7.3" cy="10.8" r="1.3"/><circle cx="10.3" cy="7" r="1.3"/><circle cx="15.2" cy="7.6" r="1.3"/>',
 };
 const svg = (name, cls) =>
   `<svg class="ic ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -96,7 +94,6 @@ const NAV = [
   ]},
   { group: "Manage", items: [
     { id: "members", label: "Members", icon: "team", app: true, admin: true },
-    { id: "brand", label: "Brand Box", icon: "palette", app: true, admin: true },
     { id: "integrations", label: "Integrations", icon: "plug", app: true },
     { id: "leads", label: "Leads Inbox", icon: "inbox", app: true, platformAdmin: true },
     { id: "settings", label: "Settings", icon: "cog", app: true },
@@ -508,7 +505,6 @@ function refreshChrome(routeView) {
 function route() {
   const h = location.hash || "#/";
   if (h.startsWith("#/members")) return { name: "members" };
-  if (h.startsWith("#/brand")) return { name: "brand" };
   if (h.startsWith("#/settings")) return { name: "settings" };
   if (h.startsWith("#/reports")) return { name: "reports" };
   if (h.startsWith("#/tools")) return { name: "tools" };
@@ -546,12 +542,10 @@ async function renderView() {
   if (r.name === "new") return renderNewOrg(view);
 
   if (r.name === "tools") {
-    // the library is the same for every CPA — available even before one is chosen;
-    // with one active, its Brand Box (logo/colors) is baked into every DOC download
+    // the library is the same for every CPA — available even before one is chosen
     setHeader("Records", "Tools Library"); markActiveNav("tools");
     if (state.active) refreshChrome("tools");
-    const brand = state.active ? await resolveBrand(state.active).catch(() => null) : null;
-    return renderToolsLibrary(view, brand);
+    return renderToolsLibrary(view);
   }
 
   if (r.name === "leads") {
@@ -568,12 +562,6 @@ async function renderView() {
     setHeader("Manage", "Members — " + state.active.name); markActiveNav("members");
     refreshChrome("members");
     return renderMembers(view);
-  }
-  if (r.name === "brand") {
-    if (!atLeast(state.active.role, "admin")) { location.hash = "#/v/exec"; return; }
-    setHeader("Manage", "Brand Box — " + state.active.name); markActiveNav("brand");
-    refreshChrome("brand");
-    return renderBrandBox(view);
   }
   if (r.name === "settings") {
     setHeader("Manage", "Settings"); markActiveNav("settings");
@@ -665,106 +653,6 @@ function renderSettings(view) {
   view.querySelector("#set-notify").onchange = (e) => {
     localStorage.setItem("cpa360.notify", e.target.checked ? "on" : "off");
     refreshChrome(route().view);
-  };
-}
-
-/* ---- brand box ---- */
-function renderBrandBox(view) {
-  const org = state.active;
-  const primary = org.brand_primary || "#1c3a68";
-  const secondary = org.brand_secondary || "#2f7d4f";
-  view.innerHTML = `
-    <p class="note" style="margin-bottom:18px">
-      ${esc(org.name)}&rsquo;s own logo, colors and letterhead — applied automatically to every DOC template
-      downloaded from the <a href="#/tools">Tools Library</a> and to the printed board pack (Reports &rarr; Board pack).
-      CSV templates are data-only and stay unbranded.
-    </p>
-    <div class="settings-grid">
-      <section class="card">
-        <div class="section-title" style="margin-top:0">Logo</div>
-        <div id="bb-logo-preview" style="margin-bottom:12px;min-height:48px;display:flex;align-items:center;font-size:12.5px;color:var(--ink-2)">Loading…</div>
-        <label class="btn primary" style="cursor:pointer;display:inline-flex;width:auto">Upload logo<input type="file" id="bb-logo-file" accept="image/*" hidden></label>
-        <button class="btn" id="bb-logo-remove" type="button" style="margin-left:8px;width:auto">Remove</button>
-        <div id="bb-logo-msg" style="font-size:11.5px;color:var(--ink-2);margin-top:8px"></div>
-        <p style="font-size:11.5px;color:var(--ink-muted);margin:10px 0 0">PNG, JPG or SVG, max 4&nbsp;MB.</p>
-      </section>
-      <section class="card">
-        <div class="section-title" style="margin-top:0">Brand colors</div>
-        <div class="field">
-          <label for="bb-primary">Primary color</label>
-          <div class="row-inline"><input type="color" id="bb-primary-pick" value="${esc(primary)}" style="width:44px;height:32px;padding:2px">
-            <input id="bb-primary" value="${esc(primary)}" style="flex:1"></div>
-        </div>
-        <div class="field">
-          <label for="bb-secondary">Secondary / accent color</label>
-          <div class="row-inline"><input type="color" id="bb-secondary-pick" value="${esc(secondary)}" style="width:44px;height:32px;padding:2px">
-            <input id="bb-secondary" value="${esc(secondary)}" style="flex:1"></div>
-        </div>
-      </section>
-      <section class="card">
-        <div class="section-title" style="margin-top:0">Letterhead footer</div>
-        <div class="field">
-          <label for="bb-footer">Address / contact line (optional)</label>
-          <textarea id="bb-footer" rows="3" placeholder="e.g. Plot 12, District Municipality · 012 345 6789 · info@cpa.org.za">${esc(org.brand_footer || "")}</textarea>
-        </div>
-        <button class="btn primary" id="bb-save" type="button" style="width:auto">Save Brand Box</button>
-        <div id="bb-msg" style="font-size:11.5px;color:var(--ink-2);margin-top:8px"></div>
-      </section>
-    </div>`;
-
-  const preview = view.querySelector("#bb-logo-preview");
-  function paintLogo(dataUrl) {
-    preview.innerHTML = dataUrl
-      ? `<img src="${dataUrl}" alt="" style="max-height:60px;max-width:240px">`
-      : `No logo uploaded yet.`;
-  }
-  resolveBrand(org).then((b) => paintLogo(b && b.logoDataUrl)).catch(() => (preview.textContent = "Couldn't load the logo."));
-
-  view.querySelector("#bb-logo-file").onchange = async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const msg = view.querySelector("#bb-logo-msg");
-    msg.textContent = "Uploading…";
-    try {
-      const path = await uploadOrgLogo(org.id, f);
-      org.logo_path = path; delete org._logoDataUrl;
-      msg.textContent = "";
-      e.target.value = "";
-      resolveBrand(org).then((b) => paintLogo(b && b.logoDataUrl));
-    } catch (err) { msg.textContent = "Failed: " + (err.message || err); }
-  };
-  view.querySelector("#bb-logo-remove").onclick = async () => {
-    if (!org.logo_path) return;
-    if (!confirm("Remove the logo?")) return;
-    const msg = view.querySelector("#bb-logo-msg");
-    try {
-      await removeOrgLogo(org.id, org.logo_path);
-      org.logo_path = null; org._logoDataUrl = null;
-      paintLogo(null); msg.textContent = "";
-    } catch (err) { msg.textContent = "Failed: " + (err.message || err); }
-  };
-
-  const syncPair = (pickId, textId) => {
-    const pick = view.querySelector(pickId), text = view.querySelector(textId);
-    pick.oninput = () => { text.value = pick.value; };
-    text.oninput = () => { if (/^#[0-9a-f]{6}$/i.test(text.value.trim())) pick.value = text.value.trim(); };
-  };
-  syncPair("#bb-primary-pick", "#bb-primary");
-  syncPair("#bb-secondary-pick", "#bb-secondary");
-
-  view.querySelector("#bb-save").onclick = async () => {
-    const msg = view.querySelector("#bb-msg");
-    const p = view.querySelector("#bb-primary").value.trim();
-    const s = view.querySelector("#bb-secondary").value.trim();
-    if ((p && !/^#[0-9a-f]{6}$/i.test(p)) || (s && !/^#[0-9a-f]{6}$/i.test(s))) {
-      msg.innerHTML = `<div class="msg err">Colors must be a hex code like #1c3a68.</div>`; return;
-    }
-    const footer = view.querySelector("#bb-footer").value.trim();
-    try {
-      await updateOrgBrand(org.id, { primary: p, secondary: s, footer });
-      org.brand_primary = p || null; org.brand_secondary = s || null; org.brand_footer = footer || null;
-      msg.innerHTML = `<div class="msg ok">Saved.</div>`;
-    } catch (err) { msg.innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
   };
 }
 

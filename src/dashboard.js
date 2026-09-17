@@ -279,7 +279,7 @@ function docCount(section, refId) {
   return m[refId == null ? "_" : String(refId)] || 0;
 }
 
-/* Reusable file manager. section: 'masterfile'|'action'|'score'|'general'.
+/* Reusable file manager. section: 'masterfile'|'action'|'score'|'general'|....
    opts.accept: input "accept" attribute (e.g. "application/pdf,.pdf") to steer the file
    picker; opts.match: a RegExp tested against the chosen file's name/type before upload
    (client-side only — the storage bucket itself accepts any file type). Both optional. */
@@ -1228,6 +1228,18 @@ function renderGovResolutions(host) {
     },
   });
 }
+/* A meeting can always be saved with no attachment — the scanned attendance
+   register is an optional evidence slot layered on top of the row via the
+   generic documents store (section "meeting-attendance"), same pattern as
+   the Resolutions register's doc chips. */
+function meetingDocCellHtml(refId) {
+  const att = docCount("meeting-attendance", refId);
+  return `<div class="row-actions doc-chips">
+    <button type="button" class="doc-chip${att ? "" : " missing"}"
+      data-meet-att="${esc(refId)}" title="Attendance register${att ? ` — ${att} file${att > 1 ? "s" : ""} attached` : " — missing"}"
+      aria-label="Attendance register${att ? "" : ", missing"}">${ATTENDEES}${att ? `<span>${att}</span>` : ""}</button>
+  </div>`;
+}
 function renderGovMeetings(host) { renderGovMeetingList(host, null); }
 function renderGovAgm(host) { renderGovMeetingList(host, ["AGM", "SGM"]); }
 function renderGovMeetingList(host, kinds) {
@@ -1236,13 +1248,24 @@ function renderGovMeetingList(host, kinds) {
   const nextAgm = (DATA.governance.calendar || []).find((r) => /general meeting/i.test(r[0]));
   mountRegister(host, {
     title: kinds ? "AGM / SGM Records" : "Meetings Register", importKey: "gov_meetings",
-    hint: kinds && nextAgm ? `Next AGM due ${nextAgm[2] || "—"}.` : (kinds ? "Annual and special general meetings." : "All governance meetings and their minute status."),
-    columns: [{ label: "Type" }, { label: "Date" }, { label: "Venue" }, { label: "Quorum" }, { label: "Attendance", cls: "num" }, { label: "Minutes" }, { label: "Notes" }],
+    hint: (kinds && nextAgm ? `Next AGM due ${nextAgm[2] || "—"}. ` : (kinds ? "Annual and special general meetings. " : "All governance meetings and their minute status. "))
+      + "Attach the scanned attendance register once it's available — a meeting can be recorded before it's ready.",
+    columns: [{ label: "Type" }, { label: "Date" }, { label: "Venue" }, { label: "Quorum" }, { label: "Attendance", cls: "num" }, { label: "Minutes" }, { label: "Notes" }, { label: "Attendance reg." }],
     rows: () => rows,
     empty: kinds ? "No general meetings recorded." : "No meetings recorded.",
     cell: (r) => [`<span class="pill brand">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`, esc(r[2]),
-      statusPill(r[3] || "Pending"), `<span class="mono">${esc(r[4] || "")}</span>`, statusPill(r[5]), `<span style="color:var(--ink-2);">${esc(r[6])}</span>`],
+      statusPill(r[3] || "Pending"), `<span class="mono">${esc(r[4] || "")}</span>`, statusPill(r[5]), `<span style="color:var(--ink-2);">${esc(r[6])}</span>`,
+      meetingDocCellHtml(r._id)],
     manage: () => listEditor(GOV_EDITORS.meetings()),
+    afterRender: (h) => {
+      h.querySelectorAll("[data-meet-att]").forEach((b) => (b.onclick = () => {
+        const r = rows.find((x) => String(x._id) === b.dataset.meetAtt);
+        attachmentsModal("meeting-attendance", r._id, "Attendance register — " + (r[0] || "Meeting") + " " + (r[1] || ""), {
+          accept: "application/pdf,.pdf", label: "Upload the scanned register (PDF)",
+          match: /\.pdf$|^application\/pdf$/i, matchMsg: "Please choose a PDF file.",
+        });
+      }));
+    },
   });
 }
 function renderGovCoi(host) {
@@ -1446,7 +1469,6 @@ const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
    from Household Records (see extractOneHousehold) or picked manually for
    a beneficiary added straight into the register. */
 const HOUSEHOLD_ROLES = ["", "ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant"];
-const BENEFIT_BASIS_OPTIONS = ["", "Per Household", "Per Capita"];
 
 function beneStats() {
   const b = beneRollup();
@@ -1568,24 +1590,21 @@ function renderBeneHouseholds(host) {
   const selN = DATA.beneficiaryCentre.households.filter((h) => bulk.selected.has(String(h._id))).length;
   mountRegister(host, {
     title: "Household Records", importKey: "households",
-    hint: "Households are a summary/rollup of the family — a household is not itself a beneficiary. Member names and "
-      + "IDs live in the Master Beneficiary Register (filter it by Household ref. to see who's in a household); "
-      + "“Members” below is a live count from there, not typed in by hand. Importing a spreadsheet here also "
+    hint: "Households are classified by their ODI — the root of the family tree. Importing a spreadsheet here also "
       + "creates each ODI, Family Representative and descendant as a beneficiary automatically. After manual edits, "
       + "select households below and use “Extract” to re-sync the Master Register.",
-    columns: [{ label: "Household ID" }, { label: "ODI" }, { label: "Household Head" },
-      { label: "Members", cls: "num" }, { label: "Verification" }, { label: "Dispute" }, { label: "Resident?" }, { label: "Status" }],
+    columns: [{ label: "Ref." }, { label: "ODI" }, { label: "Family Representative" },
+      { label: "Descendants", cls: "num" }, { label: "Linked in Register", cls: "num" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
     cell: (r) => {
       // ID numbers are masked-entry fields (see the Add/Edit form) and — same as the
       // Master Beneficiary Register — never surfaced in the list view, only there.
-      const members = reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length;
+      const descendants = [r[4], r[6], r[8], r[10]].filter((n) => (n || "").trim() !== "").length;
       return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
         `<span style="font-weight:600;">${esc(r[2])}</span>`,
-        esc(r[1]), `<span class="mono">${members}</span>`,
-        statusPill(r[17] || "Pending"),
-        r[22] ? pill(r[23] ? `Disputed (${esc(r[23])})` : "Disputed", "critical") : pill("None", "neutral"),
+        esc(r[1]), `<span class="mono">${descendants}</span>`,
+        `<span class="mono">${reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length}</span>`,
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
     },
     manage: () => listEditor(BENE_EDITORS.households()),
@@ -1795,14 +1814,6 @@ function renderAdminPolicies(host) {
         `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[4]) || "—"}</span>`, esc(r[5]), statusPill(r[6])];
     },
     manage: () => listEditor(ADMIN_EDITORS.policies()),
-    extraTools: [`<button class="btn" data-policy-pdf type="button">Upload PDF</button>`],
-    afterRender: (h) => {
-      const b = h.querySelector("[data-policy-pdf]");
-      if (b) b.onclick = () => attachmentsModal("admin_policies", null, "Policies & SOPs — PDF documents", {
-        accept: "application/pdf,.pdf", label: "Upload a PDF",
-        match: /\.pdf$|^application\/pdf$/i, matchMsg: "Please choose a PDF file.",
-      });
-    },
   });
 }
 const MEDIA = ["Physical", "Digital", "Both"];
@@ -3094,7 +3105,6 @@ const IMPORT = {
       v.famrep || "", v.odi, maskId(v.odiId),
       v.d1 || "", maskId(v.d1id), v.d2 || "", maskId(v.d2id), v.d3 || "", maskId(v.d3id), v.d4 || "", maskId(v.d4id),
       v.status || "Active", !/^(no|n|false|0)$/i.test((v.resident || "").trim()),
-      "", "", "", "Pending", "", "", "", "", false, "",
     ],
     // Every household imported here has its own family tree — extract the ODI, Family
     // Representative and each descendant straight into the Master Register too, so one
@@ -3411,13 +3421,9 @@ const BENE_EDITORS = {
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
     rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || r[1] || "Household"}`,
-    blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true,
-      "", "", "", "Pending", "", "", "", "", false, ""],
+    blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true],
     fields: (r) => [
-      { key: "famrep", label: "Household Head Name", type: "text", value: r[1] },
-      { key: "headId", label: "Household Head ID Number (auto-masked — only the last 4 digits are kept)", type: "text", value: r[14] },
-      { key: "headPhone", label: "Household Head Phone", type: "text", value: r[15] },
-      { key: "headAddress", label: "Household Head Address", type: "textarea", value: r[16] },
+      { key: "famrep", label: "Family Representative", type: "text", value: r[1] },
       { key: "odi", label: "ODI", type: "text", value: r[2], required: true },
       { key: "odiId", label: "ID no. of ODI (auto-masked — only the last 4 digits are kept)", type: "text", value: r[3] },
       { key: "d1", label: "1st Descendant", type: "text", value: r[4] },
@@ -3430,22 +3436,12 @@ const BENE_EDITORS = {
       { key: "d4id", label: "ID 4th Descendants (auto-masked — only the last 4 digits are kept)", type: "text", value: r[11] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
-      { key: "verification", label: "Verification Status", type: "select", options: VERIF_STATUSES, value: r[17] || "Pending" },
-      { key: "dateRegistered", label: "Date Registered", type: "date", value: r[18] },
-      { key: "lastReviewed", label: "Last Reviewed Date", type: "date", value: r[19] },
-      { key: "landRef", label: "Land / Site Allocation Reference", type: "text", value: r[20] },
-      { key: "benefitBasis", label: "Benefit Basis", type: "select", options: BENEFIT_BASIS_OPTIONS, value: r[21] || "" },
-      { key: "disputeFlag", label: "Dispute Flag", type: "select", options: ["No", "Yes"], value: r[22] ? "Yes" : "No" },
-      { key: "disputeRef", label: "Dispute Reference (see Duplicate / Conflict Cases)", type: "text", value: r[23] },
     ],
     write: (r, o) => {
       r[1] = o.famrep; r[2] = o.odi; r[3] = maskId(o.odiId);
       r[4] = o.d1; r[5] = maskId(o.d1id); r[6] = o.d2; r[7] = maskId(o.d2id);
       r[8] = o.d3; r[9] = maskId(o.d3id); r[10] = o.d4; r[11] = maskId(o.d4id);
       r[12] = o.status; r[13] = o.resident !== "No";
-      r[14] = maskId(o.headId); r[15] = o.headPhone; r[16] = o.headAddress;
-      r[17] = o.verification; r[18] = o.dateRegistered; r[19] = o.lastReviewed;
-      r[20] = o.landRef; r[21] = o.benefitBasis; r[22] = o.disputeFlag === "Yes"; r[23] = o.disputeRef;
     },
   }),
   succession: () => ({
@@ -4010,18 +4006,9 @@ export function printPack() {
   applyRoleGate();
   const d = new Date().toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" });
   const ph = container.querySelector("#print-header");
-  // Brand Box: the CPA's own logo/colors on the printed board pack, when set — see #/brand.
-  const primary = DATA.cpa.brandPrimary || "#132a4f";
-  const logo = DATA.cpa.logoDataUrl ? `<img src="${DATA.cpa.logoDataUrl}" alt="" style="max-height:38px;max-width:140px;">` : "";
   if (ph) ph.innerHTML =
-    `<div style="display:flex;align-items:center;gap:10px;">
-       ${logo}
-       <div>
-         <div style="font-family:var(--font-display);font-weight:800;font-size:17px;color:${esc(primary)};">${esc(DATA.cpa.name)}</div>
-         <div style="font-size:12px;color:#444;margin-top:2px;">${esc(DATA.cpa.reg)} · Generated ${d}
-           ${DATA.cpa.brandFooter ? " · " + esc(DATA.cpa.brandFooter) : ""} · CPA360&trade; Command Center</div>
-       </div>
-     </div>`;
+    `<div style="font-family:var(--font-display);font-weight:800;font-size:17px;">CPA360™ Command Center</div>
+     <div style="font-size:12px;color:#444;margin-top:2px;">${esc(DATA.cpa.name)} · ${esc(DATA.cpa.reg)} · Generated ${d}</div>`;
   window.print();
 }
 

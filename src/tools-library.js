@@ -16,12 +16,6 @@
 const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
-/* Brand Box — the active CPA's own logo/colors, set by renderToolsLibrary()
-   before any download runs and read by DOC() below. null = no active CPA
-   (or it hasn't set a brand yet), in which case documents fall back to the
-   default CPA360 look. */
-let BRAND = null;
-
 /* ---------------------------------------------------------------- categories */
 export const CATS = [
   { id: "assess", label: "Assessment & Planning", blurb: "Diagnose the institution and plan the work." },
@@ -39,54 +33,38 @@ export const CATS = [
 
 /* ------------------------------------------------------------- .doc builder */
 /* A Word-compatible HTML document: Word opens it as a formatted, editable file. */
-const docCss = (primary, secondary) => `
+const DOC_CSS = `
   body{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1f1f1f;line-height:1.45;margin:2.2cm 2cm;}
-  .hdr{border-bottom:2.5pt solid ${primary};padding-bottom:6pt;margin-bottom:16pt;display:flex;align-items:center;gap:12pt;}
-  .hdr-logo{max-height:46pt;max-width:150pt;}
-  .hdr-text{flex:1;}
-  .brand{font-size:8.5pt;letter-spacing:1.6pt;text-transform:uppercase;color:${secondary};font-weight:bold;}
-  h1{font-size:17pt;color:${primary};margin:3pt 0 2pt;}
+  .hdr{border-bottom:2.5pt solid #1c3a68;padding-bottom:6pt;margin-bottom:16pt;}
+  .brand{font-size:8.5pt;letter-spacing:1.6pt;text-transform:uppercase;color:#2f7d4f;font-weight:bold;}
+  h1{font-size:17pt;color:#132a4f;margin:3pt 0 2pt;}
   .sub{color:#555;font-size:10pt;margin:0;}
-  h2{font-size:12pt;color:${primary};border-bottom:.75pt solid #d8d8d8;padding-bottom:2pt;margin:15pt 0 6pt;}
-  h3{font-size:10.5pt;color:${primary};margin:10pt 0 3pt;}
+  h2{font-size:12pt;color:#1c3a68;border-bottom:.75pt solid #d8d8d8;padding-bottom:2pt;margin:15pt 0 6pt;}
+  h3{font-size:10.5pt;color:#1c3a68;margin:10pt 0 3pt;}
   p{margin:4pt 0;}
   ul,ol{margin:4pt 0;padding-left:20pt;}
   li{margin:2.5pt 0;}
   table{border-collapse:collapse;width:100%;margin:6pt 0;font-size:10pt;}
   th,td{border:.75pt solid #b3b3b3;padding:5pt 7pt;text-align:left;vertical-align:top;}
-  th{background:#eef2f7;color:${primary};}
+  th{background:#eef2f7;color:#132a4f;}
   .fill{color:#8a8a8a;}
   .note{font-size:9.5pt;color:#666;font-style:italic;}
   .foot{margin-top:22pt;border-top:.75pt solid #d8d8d8;padding-top:6pt;font-size:8.5pt;color:#777;}
   .sig td{height:34pt;}
 `;
-/* Brand Box fields, applied when set (see BRAND above), with the default
-   CPA360 look as the fallback for anyone without an active/branded CPA. */
 function DOC(title, sub, body) {
-  const primary = (BRAND && BRAND.primary) || "#1c3a68";
-  const secondary = (BRAND && BRAND.secondary) || "#2f7d4f";
-  const hasName = !!(BRAND && BRAND.name);
-  const logoImg = BRAND && BRAND.logoDataUrl ? `<img class="hdr-logo" src="${BRAND.logoDataUrl}" alt="">` : "";
-  const brandLine = hasName
-    ? esc(BRAND.name) + (BRAND.footer ? " &middot; " + esc(BRAND.footer) : "")
-    : "CPA360&trade; &nbsp;&middot;&nbsp; A GAD Foundation Programme";
-  const cpaName = hasName ? esc(BRAND.name) : `<span class="fill">________________________________</span>`;
-  const cpaReg = BRAND && BRAND.reg ? esc(BRAND.reg) : `<span class="fill">________________</span>`;
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>${esc(title)}</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
-<style>${docCss(primary, secondary)}</style></head>
+<style>${DOC_CSS}</style></head>
 <body>
 <div class="hdr">
-  ${logoImg}
-  <div class="hdr-text">
-    <div class="brand">${brandLine}</div>
-    <h1>${esc(title)}</h1>
-    <p class="sub">${esc(sub || "")}</p>
-  </div>
+  <div class="brand">CPA360&trade; &nbsp;&middot;&nbsp; A GAD Foundation Programme</div>
+  <h1>${esc(title)}</h1>
+  <p class="sub">${esc(sub || "")}</p>
 </div>
-<p><b>CPA name:</b> ${cpaName}
-&nbsp;&nbsp;<b>Registration no.:</b> ${cpaReg}
+<p><b>CPA name:</b> <span class="fill">________________________________</span>
+&nbsp;&nbsp;<b>Registration no.:</b> <span class="fill">________________</span>
 &nbsp;&nbsp;<b>Date:</b> <span class="fill">____________</span></p>
 ${body}
 <div class="foot">CPA360&trade; working template &mdash; adapt to your CPA&rsquo;s registered constitution, rules and context before use.
@@ -1324,8 +1302,7 @@ export function downloadTool(id) {
  * ========================================================================*/
 const FMT_LABEL = { csv: "CSV · Excel", doc: "DOC · Word" };
 
-export function renderToolsLibrary(view, brand) {
-  BRAND = brand || null;
+export function renderToolsLibrary(view) {
   const counts = CATS.map((c) => TOOLS.filter((t) => t.cat === c.id).length);
   const total = TOOLS.length;
 
@@ -1336,8 +1313,6 @@ export function renderToolsLibrary(view, brand) {
         <b>CSV</b> files open in Excel and their columns line up with the “Import CSV” buttons in each section, so a
         completed template loads straight back into CPA360. <b>DOC</b> files open in Word, ready to fill in.
         These are starting points — adapt each one to your CPA’s constitution and context.
-        ${BRAND && BRAND.name ? `Every DOC download below is pre-branded with ${esc(BRAND.name)}&rsquo;s logo, name and colors from its <a href="#/brand">Brand Box</a>.`
-          : `Set up a <a href="#/brand">Brand Box</a> for this CPA to have its logo, name and colors appear on every DOC template automatically.`}
       </p>
 
       <div class="tl-toolbar">
