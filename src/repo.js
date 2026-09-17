@@ -123,7 +123,8 @@ export async function loadOrg(orgId) {
       domains: (domains || []).map((d) => tagObj(
         { name: d.name, weight: num(d.weight), achieved: num(d.achieved), detailed: !!d.detailed }, d)),
       criteria: (criteria || []).map((c) => tagObj(
-        { domain: c.domain, name: c.name, weight: num(c.weight), achieved: num(c.achieved) }, c)),
+        { domain: c.domain, name: c.name, weight: num(c.weight), achieved: num(c.achieved),
+          note: c.note || "", locked: !!c.locked }, c)),
       bands: BANDS,
     },
     committee: (committee || []).map((r) => tagArr([r.role, r.name, r.term || "", r.body || "EXCO"], r)),
@@ -357,7 +358,7 @@ export async function saveSection(orgId, section, D) {
         for (const c of D.score.criteria) {
           if (!c._id) continue;
           const { error } = await supabase.from("score_criteria")
-            .update({ achieved: num(c.achieved), weight: num(c.weight), name: c.name })
+            .update({ achieved: num(c.achieved), weight: num(c.weight), name: c.name, note: nn(c.note), locked: !!c.locked })
             .eq("id", c._id);
           if (error) throw error;
         }

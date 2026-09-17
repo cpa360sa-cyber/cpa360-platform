@@ -211,6 +211,8 @@ function lineChart(containerId, months, values, { width = 560, height = 210 } = 
 /* ============ modal system ============ */
 function fieldHtml(f) {
   const v = esc(f.value);
+  if (f.type === "info")
+    return `<div class="field"><label>${esc(f.label)}</label><div class="hint" style="padding:8px 0 2px;">${v}</div></div>`;
   if (f.type === "select")
     return `<div class="field"><label for="fld-${f.key}">${esc(f.label)}</label>
       <select id="fld-${f.key}" name="${f.key}">${f.options.map((o) =>
@@ -241,6 +243,7 @@ function openModal(title, fields, onSave) {
     const out = {};
     let bad = false;
     fields.forEach((f) => {
+      if (f.type === "info") return;
       const inp = scrim.querySelector(`[name="${f.key}"]`);
       out[f.key] = inp.value.trim();
       if (f.required && !out[f.key]) { inp.style.borderColor = "var(--status-critical)"; bad = true; }
@@ -2820,6 +2823,291 @@ function editJourney() {
   });
 }
 
+/* ============ Institutional Performance — auto-scored criteria ============
+   Each of the 40 default criteria has a rule here that reads the CPA's own
+   register data and returns { ratio (0-1), detail (human-readable rationale) }.
+   syncAutoScore() applies these to DATA.score.criteria (skipping any a CPA
+   has deliberately locked to a manual value — see editDomain()), rolls the
+   result up into each "detailed" domain's total, and reports whether
+   anything changed so the caller knows whether to persist it. This is what
+   makes the 100-point score a live reflection of the registers, not a
+   hand-typed number: add a document, verify a household, close a dispute —
+   the relevant criterion re-scans on the next commit(). */
+const AUTO_SCORE_RULES = {
+  Governance: {
+    "Constitution & registration current": (D) => {
+      const mf = (D.masterFile || []).find((r) => /governance/i.test(r[1] || ""));
+      const pct = mf ? (+mf[3] || 0) : 0;
+      return { ratio: pct / 100, detail: mf ? `Master File "${mf[1]}" completeness ${pct}%` : "No 'Governance' Master File category found" };
+    },
+    "EXCO properly constituted & functional": (D) => {
+      const n = (D.committee || []).length;
+      return { ratio: Math.min(1, n / 5), detail: `${n} EXCO/office-bearer record(s) on file (target 5+)` };
+    },
+    "Regular minuted committee meetings": (D) => {
+      const now = Date.now(), win = 365 * 86400000;
+      const recent = (D.governance.meetings || []).filter((r) => r[1] && (now - new Date(r[1]).getTime()) <= win);
+      if (!recent.length) return { ratio: 0, detail: "No meetings recorded in the last 12 months" };
+      const adopted = recent.filter((r) => r[5] === "Adopted").length;
+      return { ratio: adopted / recent.length, detail: `${adopted}/${recent.length} meeting(s) in the last 12 months have adopted minutes` };
+    },
+    "AGM held annually with quorum": (D) => {
+      const agms = (D.governance.meetings || []).filter((r) => r[0] === "AGM" || r[0] === "SGM")
+        .sort((a, b) => String(b[1]).localeCompare(String(a[1])));
+      if (!agms.length) return { ratio: 0, detail: "No AGM/SGM recorded" };
+      const last = agms[0];
+      const days = (Date.now() - new Date(last[1]).getTime()) / 86400000;
+      if (days > 400) return { ratio: 0, detail: `Last AGM/SGM was ${Math.round(days)} days ago (${last[1]})` };
+      return { ratio: last[3] === "Quorate" ? 1 : 0.5, detail: `Last AGM/SGM ${last[1]} — quorum: ${last[3] || "not recorded"}` };
+    },
+    "Conflict-of-interest register maintained": (D) => {
+      const coi = D.governance.coi || [];
+      if (!coi.length) return { ratio: 0.5, detail: "No declarations on record yet (baseline credit)" };
+      const resolved = coi.filter((r) => !["Outstanding", "Declared"].includes(r[5])).length;
+      return { ratio: resolved / coi.length, detail: `${resolved}/${coi.length} declaration(s) managed, recused or closed` };
+    },
+  },
+  Beneficiaries: {
+    "Master beneficiary register complete": (D) => {
+      const reg = D.beneficiaryCentre.register || [];
+      if (!reg.length) return { ratio: 0, detail: "Register is empty" };
+      const complete = reg.filter((r) => (r[4] || "").trim() && (r[3] || "").trim()).length;
+      return { ratio: complete / reg.length, detail: `${complete}/${reg.length} member record(s) have both an ID and date of birth on file` };
+    },
+    "Verification process operating": (D) => {
+      const reg = D.beneficiaryCentre.register || [];
+      if (!reg.length) return { ratio: 0, detail: "Register is empty" };
+      const v = reg.filter((r) => r[9] === "Verified").length;
+      return { ratio: v / reg.length, detail: `${v}/${reg.length} member(s) verified` };
+    },
+    "Household records maintained": (D) => {
+      const hh = D.beneficiaryCentre.households || [];
+      if (!hh.length) return { ratio: 0, detail: "No households recorded" };
+      const v = hh.filter((r) => r[17] === "Verified").length;
+      return { ratio: v / hh.length, detail: `${v}/${hh.length} household(s) verified` };
+    },
+    "Succession & deceased updates current": (D) => {
+      const reg = D.beneficiaryCentre.register || [];
+      const dead = reg.filter((r) => r[8] === "Deceased");
+      if (!dead.length) return { ratio: 1, detail: "No deceased members on the register" };
+      const succ = D.beneficiaryCentre.succession || [];
+      const withCase = dead.filter((r) => succ.some((s) => s[0] === r[0])).length;
+      return { ratio: withCase / dead.length, detail: `${withCase}/${dead.length} deceased member(s) have a succession case lodged` };
+    },
+    "Dispute / duplicate resolution active": (D) => {
+      const d = D.beneficiaryCentre.disputes || [];
+      if (!d.length) return { ratio: 1, detail: "No open disputes" };
+      const resolved = d.filter((r) => r[5] === "Resolved").length;
+      return { ratio: resolved / d.length, detail: `${resolved}/${d.length} dispute case(s) resolved` };
+    },
+  },
+  Administration: {
+    "Master file complete & indexed": (D) => {
+      const mf = D.masterFile || [];
+      if (!mf.length) return { ratio: 0, detail: "Master File index is empty" };
+      const avg = mf.reduce((s, r) => s + (+r[3] || 0), 0) / mf.length;
+      return { ratio: avg / 100, detail: `Master File average completeness ${Math.round(avg)}%` };
+    },
+    "Records management system in use": (D) => {
+      const n = (D.admin.records || []).length;
+      return { ratio: Math.min(1, n / 5), detail: `${n} record series tracked (target 5+)` };
+    },
+    "Correspondence & resolution tracking": (D) => {
+      const c = D.admin.correspondence || [];
+      if (!c.length) return { ratio: 0, detail: "No correspondence recorded" };
+      const now = Date.now();
+      const overdue = c.filter((r) => r[6] && new Date(r[6]).getTime() < now && r[8] !== "Closed").length;
+      return { ratio: 1 - overdue / c.length, detail: `${c.length - overdue}/${c.length} correspondence item(s) not overdue` };
+    },
+    "Delegation of authority matrix in place": (D) => {
+      const n = (D.admin.doa || []).length;
+      return { ratio: Math.min(1, n / 5), detail: `${n} delegation line(s) recorded (target 5+)` };
+    },
+  },
+  Finance: {
+    "Approved annual budget": (D) => {
+      const b = +D.finance.annualBudget || 0;
+      return { ratio: b > 0 ? 1 : 0, detail: b > 0 ? `Annual budget of R${Math.round(b).toLocaleString()} set` : "No annual budget set" };
+    },
+    "Bookkeeping current & reconciled": (D) => {
+      const t = D.finProc.transactions || [];
+      if (!t.length) return { ratio: 0, detail: "No transactions recorded" };
+      const r = t.filter((x) => x[7]).length;
+      return { ratio: r / t.length, detail: `${r}/${t.length} transaction(s) reconciled to the bank` };
+    },
+    "Annual financial statements / audit": (D) => {
+      const rec = (D.admin.records || []).find((r) => /financial statement|audit/i.test(r[0] || ""));
+      if (!rec) return { ratio: 0, detail: "No financial statements/audit record series found" };
+      return { ratio: rec[6] === "Current" ? 1 : 0.5, detail: `"${rec[0]}" record series status: ${rec[6]}` };
+    },
+    "Banking controls & signatories": (D) => {
+      const hit = (D.admin.doa || []).some((r) => /bank|signat/i.test((r[0] || "") + (r[1] || "")));
+      return { ratio: hit ? 1 : 0, detail: hit ? "Banking/signatory authority found in the delegation matrix" : "No banking or signatory delegation on file" };
+    },
+    "Budget vs actual monitored": (D) => {
+      const cats = D.finance.categories || [];
+      if (!cats.length) return { ratio: 0, detail: "No budget categories recorded" };
+      const tracked = cats.filter((c) => (+c[2] || 0) > 0).length;
+      return { ratio: tracked / cats.length, detail: `${tracked}/${cats.length} budget categor(y/ies) have actuals recorded` };
+    },
+  },
+  "Land & Assets": {
+    "Land parcels registered & mapped": (D) => {
+      const l = D.assets.land || [];
+      if (!l.length) return { ratio: 0, detail: "No land parcels recorded" };
+      const mapped = l.filter((r) => (+r[2] || 0) > 0).length;
+      return { ratio: mapped / l.length, detail: `${mapped}/${l.length} parcel(s) have a recorded extent (ha)` };
+    },
+    "Allocations documented": (D) => {
+      const n = (D.assets.allocations || []).length;
+      return { ratio: Math.min(1, n / 5), detail: `${n} allocation(s) recorded (target 5+)` };
+    },
+    "Leases formalised & current": (D) => {
+      const l = D.assets.leases || [];
+      if (!l.length) return { ratio: 0, detail: "No leases recorded" };
+      const active = l.filter((r) => r[7] === "Active").length;
+      return { ratio: active / l.length, detail: `${active}/${l.length} lease(s) active` };
+    },
+    "Asset register maintained": (D) => {
+      const n = (D.assets.infrastructure || []).length;
+      return { ratio: Math.min(1, n / 5), detail: `${n} infrastructure asset(s) recorded (target 5+)` };
+    },
+    "Maintenance plan in place": (D) => {
+      const m = D.assets.maintenance || [];
+      if (!m.length) return { ratio: 0, detail: "No maintenance tasks recorded" };
+      const now = Date.now();
+      const ok = m.filter((r) => r[7] === "Completed" || !r[3] || new Date(r[3]).getTime() >= now).length;
+      return { ratio: ok / m.length, detail: `${ok}/${m.length} maintenance task(s) completed or not yet due` };
+    },
+  },
+  Productivity: {
+    "Productive enterprises identified": (D) => {
+      const n = (D.productivity.enterprises || []).length;
+      return { ratio: Math.min(1, n / 3), detail: `${n} enterprise(s) identified (target 3+)` };
+    },
+    "Land under active production": (D) => {
+      const e = D.productivity.enterprises || [];
+      if (!e.length) return { ratio: 0, detail: "No enterprises recorded" };
+      const active = e.filter((r) => r[6] === "Active").length;
+      return { ratio: active / e.length, detail: `${active}/${e.length} enterprise(s) active` };
+    },
+    "Production records kept": (D) => {
+      const n = (D.productivity.records || []).length;
+      return { ratio: Math.min(1, n / 6), detail: `${n} production record(s) logged (target 6+)` };
+    },
+    "Cost of production tracked": (D) => {
+      const recs = D.productivity.records || [];
+      const hit = recs.some((r) => (+r[6] || 0) > 0);
+      return { ratio: hit ? 1 : 0, detail: hit ? "Cost figures present on production records" : "No cost figures recorded on production records" };
+    },
+    "Water use secured": (D) => {
+      const w = D.productivity.water || [];
+      if (!w.length) return { ratio: 0, detail: "No water sources recorded" };
+      const lic = w.filter((r) => (r[4] || "").trim()).length;
+      return { ratio: lic / w.length, detail: `${lic}/${w.length} water source(s) have a licence reference` };
+    },
+  },
+  Commercialisation: {
+    "Market linkages established": (D) => {
+      const n = (D.commercial.markets || []).length;
+      return { ratio: n > 0 ? 1 : 0, detail: n > 0 ? `${n} market link(s) recorded` : "No market links recorded" };
+    },
+    "Off-take / sales agreements": (D) => {
+      const m = D.commercial.markets || [];
+      if (!m.length) return { ratio: 0, detail: "No market links recorded" };
+      const ag = m.filter((r) => r[5] && r[5] !== "None").length;
+      return { ratio: ag / m.length, detail: `${ag}/${m.length} market link(s) have an agreement in place` };
+    },
+    "Partnerships formalised": (D) => {
+      const p = D.commercial.partnerships || [];
+      if (!p.length) return { ratio: 0, detail: "No partnerships recorded" };
+      const active = p.filter((r) => r[5] === "Active").length;
+      return { ratio: active / p.length, detail: `${active}/${p.length} partnership(s) active` };
+    },
+    "Revenue diversification": (D) => {
+      const rev = D.commercial.revenue || [];
+      const active = rev.filter((r) => r[3] && r[4] === "Active");
+      const distinct = new Set(active.map((r) => r[1])).size;
+      return { ratio: Math.min(1, distinct / 3), detail: `${distinct} distinct active recurring revenue source(s) (target 3+)` };
+    },
+  },
+  Compliance: {
+    "Statutory returns filed (CIPC / SARS)": (D) => {
+      const c = (D.governance.calendar || []).filter((r) => r[1] === "Statutory");
+      if (!c.length) return { ratio: 0, detail: "No statutory items tracked on the governance calendar" };
+      const done = c.filter((r) => r[5] === "Done").length;
+      return { ratio: done / c.length, detail: `${done}/${c.length} statutory calendar item(s) done` };
+    },
+    "Regulatory permits current": (D) => {
+      const p = D.assets.permits || [];
+      if (!p.length) return { ratio: 0, detail: "No permits recorded" };
+      const valid = p.filter((r) => r[2] === "Valid").length;
+      return { ratio: valid / p.length, detail: `${valid}/${p.length} permit(s) valid` };
+    },
+    "Reporting to DALRRD": (D) => {
+      const c = (D.governance.calendar || []).filter((r) => /dalrrd/i.test(r[0] || "") || r[1] === "Reporting");
+      if (!c.length) return { ratio: 0, detail: "No DALRRD/reporting items tracked on the governance calendar" };
+      const done = c.filter((r) => r[5] === "Done").length;
+      return { ratio: done / c.length, detail: `${done}/${c.length} DALRRD/reporting item(s) done` };
+    },
+    "Policy framework adopted": (D) => {
+      const p = D.admin.policies || [];
+      if (!p.length) return { ratio: 0, detail: "No policies recorded" };
+      const adopted = p.filter((r) => r[6] === "Adopted").length;
+      return { ratio: adopted / p.length, detail: `${adopted}/${p.length} polic(y/ies) adopted` };
+    },
+  },
+  "Investment readiness": {
+    "Business plan / strategy adopted": (D) => {
+      const hit = (D.projects || []).some((r) => ["Approved", "Funded"].includes(r[6]));
+      return { ratio: hit ? 1 : 0, detail: hit ? "At least one project has an approved/funded business case" : "No project has an approved or funded business case" };
+    },
+    "Financials investment-grade": (D) => {
+      const hit = (D.commercial.revenue || []).some((r) => r[3] && r[4] === "Active" && !/grant/i.test((r[0] || "") + (r[1] || "")));
+      return { ratio: hit ? 1 : 0, detail: hit ? "At least one active, recurring, non-grant revenue stream" : "No active recurring non-grant revenue stream found" };
+    },
+    "Governance investment-grade": (D) => {
+      const gov = (D.score.domains || []).find((x) => x.name === "Governance");
+      if (!gov) return { ratio: 0, detail: "Governance domain not found" };
+      const sc = domainScore(gov);
+      return { ratio: sc / (gov.weight || 1), detail: `Governance domain scoring ${sc}/${gov.weight}` };
+    },
+    "Funding pipeline identified": (D) => {
+      const hit = (D.projects || []).some((r) => (r[7] || "").trim());
+      return { ratio: hit ? 1 : 0, detail: hit ? "At least one project has a named funder" : "No project has a named funder" };
+    },
+  },
+};
+/* Recomputes every unlocked criterion from AUTO_SCORE_RULES and rolls the
+   result up into each "detailed" domain's total. Returns true if anything
+   changed, so callers know whether the result needs persisting. Criteria
+   with no matching rule (custom/renamed criteria) and any locked by a CPA
+   via editDomain() are left untouched. */
+function syncAutoScore() {
+  if (!DATA || !DATA.score) return false;
+  let changed = false;
+  (DATA.score.criteria || []).forEach((c) => {
+    if (c.locked) return;
+    const rule = AUTO_SCORE_RULES[c.domain] && AUTO_SCORE_RULES[c.domain][c.name];
+    if (!rule) return;
+    let result;
+    try { result = rule(DATA); } catch (e) { return; }
+    if (!result) return;
+    const val = Math.round(Math.max(0, Math.min(1, result.ratio)) * c.weight * 100) / 100;
+    if (Math.abs((+c.achieved || 0) - val) > 0.005 || c.note !== result.detail) {
+      c.achieved = val; c.note = result.detail; changed = true;
+    }
+  });
+  (DATA.score.domains || []).forEach((d) => {
+    if (!d.detailed) return;
+    const crits = critFor(d.name);
+    if (!crits.length) return;
+    const total = Math.round(crits.reduce((s, c) => s + (+c.achieved || 0), 0));
+    if (total !== (+d.achieved || 0)) { d.achieved = total; changed = true; }
+  });
+  return changed;
+}
+
 /* ============ Institutional Performance ============ */
 function critFor(name) { return (DATA.score.criteria || []).filter((c) => c.domain === name); }
 function domainScore(d) {
@@ -2840,7 +3128,10 @@ function renderScore() {
     const crits = critFor(d.name);
     const rows = d.detailed && crits.length ? `<ul class="crit-list">${crits.map((c) => {
       const cp = Math.round((+c.achieved || 0) / (c.weight || 1) * 100);
-      return `<li><span class="crit-name">${esc(c.name)}</span>
+      const hasRule = AUTO_SCORE_RULES[d.name] && AUTO_SCORE_RULES[d.name][c.name];
+      const tag = hasRule ? (c.locked ? ` <span class="pill neutral" style="font-size:9px;" title="Manually overridden">manual</span>`
+        : ` <span class="pill good" style="font-size:9px;" title="${esc(c.note || "")}">auto</span>`) : "";
+      return `<li><span class="crit-name">${esc(c.name)}${tag}</span>
         <span class="bar-track sm"><span class="bar-fill ${healthTone(cp)}" style="width:${Math.max(3, cp)}%"></span></span>
         <span class="mono crit-val">${(+c.achieved || 0)}/${c.weight}</span></li>`;
     }).join("")}</ul>` : "";
@@ -2863,28 +3154,52 @@ function renderScore() {
       <td class="mono">${esc(r)}</td><td style="color:var(--ink-2);">${esc(dsc)}</td></tr>`;
   }).join("");
 }
+/* Criteria with a rule in AUTO_SCORE_RULES are, by default, computed live
+   from the CPA's own registers (see syncAutoScore) — shown here read-only
+   with the auto-scan's rationale. A CPA that disagrees can switch a
+   criterion to "Manual override"; that takes one extra save to unlock the
+   number field (this modal has no live re-render), which the mode-select's
+   own label makes explicit rather than surprising. Criteria with no rule
+   (a renamed or custom criterion) work exactly as before — plain manual entry. */
 function editDomain(name) {
   const d = DATA.score.domains.find((x) => x.name === name);
   if (!d) return;
   const crits = critFor(name);
+  const rules = AUTO_SCORE_RULES[name] || {};
   const fields = [
     { key: "detailed", label: "Scoring method", type: "select", options: ["Single score", "Detailed rubric"],
       value: d.detailed ? "Detailed rubric" : "Single score" },
   ];
-  if (crits.length) {
-    crits.forEach((c, i) => fields.push({
-      key: "c" + i, label: `${c.name} (of ${c.weight})`, type: "number", value: +c.achieved || 0,
-    }));
-  }
+  crits.forEach((c, i) => {
+    const rule = rules[c.name];
+    if (rule && !c.locked) {
+      fields.push({ key: "mode" + i, label: `${c.name} (of ${c.weight})`, type: "select",
+        options: ["Auto from data (recommended)", "Manual override — save once to unlock"],
+        value: "Auto from data (recommended)" });
+      fields.push({ key: "info" + i, label: "  ↳ auto-scan result", type: "info",
+        value: `${(+c.achieved || 0)}/${c.weight} — ${c.note || "no data yet"}` });
+    } else if (rule && c.locked) {
+      fields.push({ key: "mode" + i, label: `${c.name} (of ${c.weight})`, type: "select",
+        options: ["Manual override", "Auto from data (recommended)"], value: "Manual override" });
+      fields.push({ key: "c" + i, label: "  ↳ manually-set value", type: "number", value: +c.achieved || 0 });
+    } else {
+      fields.push({ key: "c" + i, label: `${c.name} (of ${c.weight})`, type: "number", value: +c.achieved || 0 });
+    }
+  });
   fields.push({ key: "single", label: `Overall domain score (of ${d.weight}) — used for "Single score"`, type: "number", value: +d.achieved || 0 });
   openModal(`Score — ${name}`, fields, (out) => {
     d.detailed = out.detailed === "Detailed rubric";
     crits.forEach((c, i) => {
-      let v = parseFloat(out["c" + i]);
-      if (!isNaN(v)) c.achieved = Math.max(0, Math.min(c.weight, v));
+      const rule = rules[c.name];
+      if (rule) c.locked = (out["mode" + i] || "").startsWith("Manual");
+      if (!rule || c.locked) {
+        const v = parseFloat(out["c" + i]);
+        if (!isNaN(v)) c.achieved = Math.max(0, Math.min(c.weight, v));
+      }
     });
     let sv = parseFloat(out.single);
     if (!isNaN(sv)) d.achieved = Math.max(0, Math.min(d.weight, sv));
+    syncAutoScore();
     if (d.detailed && crits.length) d.achieved = Math.round(crits.reduce((s, c) => s + (+c.achieved || 0), 0));
     commit("score");
   });
@@ -3843,6 +4158,11 @@ const BUTTONS = {
   "edit-permits-btn": editPermits, "edit-finance-btn": editFinanceFigures, "edit-categories-btn": editCategories,
   "add-project-btn": () => editProject(null), "edit-jobs-btn": editJobsByYear, "edit-impact-btn": editImpactFigures,
   "score-doc-btn": () => attachmentsModal("score", null, "Institutional Score — assessment document"),
+  "score-rescan-btn": () => {
+    const changed = syncAutoScore();
+    if (changed && CAN_EDIT) { commit("score"); toast("Score updated from the latest data."); }
+    else { renderScore(); toast(changed ? "Score updated locally (viewer — not saved)." : "Score already reflects the latest data."); }
+  },
   "mf-general-btn": () => attachmentsModal("general", null, "CPA — general documents"),
   "import-actions-btn": () => importModal(IMPORT.actions),
   "import-committee-btn": () => importModal(IMPORT.committee),
@@ -3887,6 +4207,12 @@ async function commit(section) {
     toast("Couldn't save: " + (e?.message || e), true);
     try { DATA = await repo.loadOrg(orgId); } catch (_) {}
   }
+  // The Institutional Score is a live reflection of the other registers —
+  // any commit here may have moved an auto-scored criterion, so re-scan and
+  // persist the score alongside whatever the caller just saved.
+  if (section !== "score") {
+    try { if (syncAutoScore()) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
+  }
   suppressRemoteUntil = Date.now() + 1500;
   renderCurrent();
   if (onChange) onChange();
@@ -3898,6 +4224,7 @@ export async function initDashboard({ orgId: oid, role, preload, noRealtime }) {
   orgId = oid;
   CAN_EDIT = role !== "viewer";
   DATA = preload || (await repo.loadOrg(orgId));
+  try { if (syncAutoScore() && CAN_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
   if (channel) repo.unsubscribe(channel);
   if (noRealtime) { channel = null; return; }
   channel = repo.subscribe(orgId, async () => {
@@ -3905,6 +4232,7 @@ export async function initDashboard({ orgId: oid, role, preload, noRealtime }) {
     if (document.querySelector(".modal-scrim")) { pendingRemote = true; return; }
     try {
       DATA = await repo.loadOrg(orgId);
+      try { if (syncAutoScore() && CAN_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
       renderCurrent();
       if (onChange) onChange();
     } catch (e) {}
@@ -4128,7 +4456,10 @@ const VIEW_HTML = `
       </div>
       <div class="card">
         <div class="card-head"><h3>The 100-point CPA360™ score</h3>
-          <span class="hint">Score each domain — single number, or the weighted rubric.</span></div>
+          <span class="hint">Most criteria auto-scan your registers live — add a document, verify a household, close
+            a dispute, and its criterion updates on its own. Switch a criterion to manual only if you have a good
+            reason the data doesn't capture.</span></div>
+        <button class="btn view-ok" id="score-rescan-btn" type="button">Rescan now</button>
         <div class="domain-grid" id="score-domains"></div>
       </div>
     </div>
