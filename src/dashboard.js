@@ -2869,10 +2869,15 @@ const AUTO_SCORE_RULES = {
   },
   Beneficiaries: {
     "Master beneficiary register complete": (D) => {
+      // Weighted blend, not an all-or-nothing AND: real recovered paper registers
+      // often have IDs for most members but never captured DOB at all — that
+      // shouldn't zero out a register that's otherwise substantially complete.
       const reg = D.beneficiaryCentre.register || [];
       if (!reg.length) return { ratio: 0, detail: "Register is empty" };
-      const complete = reg.filter((r) => (r[4] || "").trim() && (r[3] || "").trim()).length;
-      return { ratio: complete / reg.length, detail: `${complete}/${reg.length} member record(s) have both an ID and date of birth on file` };
+      const withId = reg.filter((r) => (r[4] || "").trim()).length;
+      const withDob = reg.filter((r) => (r[3] || "").trim()).length;
+      const ratio = 0.7 * (withId / reg.length) + 0.3 * (withDob / reg.length);
+      return { ratio, detail: `${withId}/${reg.length} member(s) have an ID on file, ${withDob}/${reg.length} have a date of birth` };
     },
     "Verification process operating": (D) => {
       const reg = D.beneficiaryCentre.register || [];
