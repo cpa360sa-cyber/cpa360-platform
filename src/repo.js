@@ -258,7 +258,7 @@ export async function listDocs(orgId, section, refId) {
   return data || [];
 }
 
-export async function uploadDoc(orgId, section, refId, file) {
+export async function uploadDoc(orgId, section, refId, file, extra) {
   const safe = (file.name || "file").replace(/[^\w.\- ]+/g, "_").slice(0, 120);
   const path = `${orgId}/${section}/${crypto.randomUUID()}-${safe}`;
   const up = await supabase.storage.from(BUCKET).upload(path, file, {
@@ -270,6 +270,7 @@ export async function uploadDoc(orgId, section, refId, file) {
   const { data, error } = await supabase.from("documents").insert({
     org_id: orgId, section, ref_id: refId == null ? null : String(refId),
     name: file.name, path, size: file.size, mime: file.type || null, uploaded_by: user?.id || null,
+    ...(extra || {}),
   }).select().single();
   if (error) {
     await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
@@ -287,6 +288,27 @@ export async function docUrl(path) {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600, { download: true });
   if (error) throw error;
   return data.signedUrl;
+}
+
+/* Inline preview — unlike docUrl(), no forced download, so an <img>/<video>/
+   <audio> can render it directly (browse without opening or downloading). */
+export async function docPreviewUrl(path) {
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/** Batched version of docPreviewUrl for a gallery grid — one round trip
+    instead of one per tile. Returns a Map<path, signedUrl>; a path whose
+    signing failed is simply absent from the map. */
+export async function docPreviewUrls(paths) {
+  const map = new Map();
+  const unique = [...new Set(paths)];
+  if (!unique.length) return map;
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(unique, 3600);
+  if (error) throw error;
+  (data || []).forEach((d) => { if (d.signedUrl && !d.error) map.set(d.path, d.signedUrl); });
+  return map;
 }
 
 export async function deleteDoc(doc) {

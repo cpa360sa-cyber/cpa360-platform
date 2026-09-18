@@ -187,6 +187,46 @@
 .cpa-dash .doc-chip.missing{ color:var(--status-critical); }
 .cpa-dash .doc-chip.missing::after{ content:""; position:absolute; top:1px; right:1px; width:6px; height:6px; border-radius:50%; background:var(--status-critical); border:1.5px solid var(--surface); }
 
+/* ---- Gallery / Media ---- */
+.cpa-dash .gallery-group{ margin-bottom:22px; }
+.cpa-dash .gallery-group-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+.cpa-dash .gallery-group-head h4{ font-family:var(--font-display); font-size:13px; font-weight:700; margin:0; }
+.cpa-dash .gallery-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
+.cpa-dash .gallery-tile{ all:unset; box-sizing:border-box; cursor:pointer; display:flex; flex-direction:column; gap:6px;
+  border:1px solid var(--border); border-radius:10px; padding:6px; background:var(--surface); transition:border-color .12s ease, box-shadow .12s ease; }
+.cpa-dash .gallery-tile:hover{ border-color:var(--brand-2); box-shadow:var(--shadow-lift); }
+.cpa-dash .gallery-thumb{ position:relative; aspect-ratio:1/1; border-radius:7px; overflow:hidden; background:var(--surface-3); display:flex; align-items:center; justify-content:center; }
+.cpa-dash .gallery-thumb img, .cpa-dash .gallery-thumb video{ width:100%; height:100%; object-fit:cover; display:block; }
+.cpa-dash .gallery-thumb .gallery-ic{ color:var(--ink-muted); }
+.cpa-dash .gallery-thumb .gallery-ic svg{ width:34px; height:34px; }
+.cpa-dash .gallery-thumb .gallery-ic.audio{ color:var(--brand); }
+.cpa-dash .gallery-play{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; background:rgba(12,20,45,.28); pointer-events:none; }
+.cpa-dash .gallery-play svg{ width:30px; height:30px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
+.cpa-dash .gallery-name{ font-size:11px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 2px; }
+
+/* ---- lightbox (browse full-size without downloading) ---- */
+.cpa-dash.lightbox-scrim{ align-items:center; background:rgba(6,10,24,.86); }
+.cpa-dash .lightbox{ position:relative; width:min(92vw,1000px); background:transparent; border:0; box-shadow:none; display:flex; flex-direction:column; align-items:center; gap:12px; }
+.cpa-dash .lightbox-media{ width:100%; max-height:78vh; display:flex; align-items:center; justify-content:center; }
+.cpa-dash .lightbox-media img, .cpa-dash .lightbox-media video{ max-width:100%; max-height:78vh; border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.4); }
+.cpa-dash .lightbox-audio{ display:flex; flex-direction:column; align-items:center; gap:14px; color:#fff; padding:40px; }
+.cpa-dash .lightbox-audio svg{ width:64px; height:64px; opacity:.85; }
+.cpa-dash .lightbox-info{ width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; color:#fff; flex-wrap:wrap; }
+.cpa-dash .lightbox-info b{ font-size:13px; }
+.cpa-dash .lightbox-info .hint{ display:block; color:rgba(255,255,255,.65); margin-top:2px; }
+.cpa-dash .lightbox-info .btn{ background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.25); color:#fff; }
+.cpa-dash .lightbox-close{ all:unset; position:absolute; top:-42px; right:0; cursor:pointer; width:32px; height:32px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:26px; line-height:1; background:rgba(255,255,255,.1); }
+.cpa-dash .lightbox-close:hover{ background:rgba(255,255,255,.2); }
+.cpa-dash .lightbox-nav{ all:unset; position:absolute; top:50%; transform:translateY(-50%); cursor:pointer; width:42px; height:42px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:28px; line-height:1; background:rgba(255,255,255,.12); z-index:2; }
+.cpa-dash .lightbox-nav:hover{ background:rgba(255,255,255,.25); }
+.cpa-dash .lightbox-nav.prev{ left:-8px; } .cpa-dash .lightbox-nav.next{ right:-8px; }
+@media (max-width:700px){
+  .cpa-dash .lightbox-nav.prev{ left:2px; } .cpa-dash .lightbox-nav.next{ right:2px; }
+  .cpa-dash .gallery-grid{ grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); }
+}
+
 /* ---- modal (scrim is appended to <body> but carries .cpa-dash) ---- */
 .cpa-dash.modal-scrim{ position:fixed; inset:0; background:rgba(12,20,45,.55); backdrop-filter:blur(2px); z-index:120; display:flex; align-items:flex-start; justify-content:center; padding:6vh 16px; overflow-y:auto; }
 .cpa-dash .modal{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); width:min(520px,100%); box-shadow:var(--shadow-lift); }

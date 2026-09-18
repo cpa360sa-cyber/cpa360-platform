@@ -23,6 +23,9 @@ const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>';
 const CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8.5 12.5 17a4 4 0 0 1-5.7-5.7l8-8a2.7 2.7 0 0 1 3.8 3.8l-8 8a1.4 1.4 0 0 1-2-2l7.3-7.3"/></svg>';
 const ATTENDEES = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17.5" cy="9" r="2.3"/><path d="M15.6 13c2.7.5 4.9 2.5 4.9 6"/></svg>';
+const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>';
+const AUDIO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>';
+const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3h7l5 5v13H7z"/><path d="M13 3v6h6"/></svg>';
 
 const STATUS_TONE = {
   "Completed": "good", "Verified": "good", "Active": "good", "On Track": "good", "Complete": "good", "Valid": "good", "Paid": "good",
@@ -57,6 +60,7 @@ export const NAV = [
   { id: "productivity", label: "Productivity Centre", group: "Operations", eyebrow: "Operations", title: "Productivity Centre", sub: "Crops, orchards, timber, livestock, water, labour, inputs, harvest, sales and cost of production." },
   { id: "projects", label: "Projects & Commercialisation", group: "Operations", eyebrow: "Operations", title: "Projects & Commercialisation", sub: "Project pipeline and scorecards, business cases, funding readiness, markets, partnerships and revenue." },
   { id: "masterfile", label: "CPA Master File", group: "Records", eyebrow: "Records", title: "CPA Master File", sub: "The complete institutional record, indexed to the CPA360™ Master File structure." },
+  { id: "gallery", label: "Gallery / Media", group: "Records", eyebrow: "Records", title: "Gallery & Media", sub: "Photos, videos and audio — meeting evidence, site visits, verification photos — organized automatically by date." },
   { id: "actions", label: "Action Tracker", group: "Tools", eyebrow: "Tools", title: "Action Tracker", sub: "Open items from resolutions, assessments and Committee decisions, in one place." },
   { id: "impact", label: "Impact & M&E", group: "Tools", eyebrow: "Tools", title: "Impact & M&E", sub: "The outcomes CPA360™ implementation is producing on the ground." },
 ];
@@ -1424,6 +1428,253 @@ function renderMasterFile() {
   }));
   const gb = $("mf-general-btn");
   if (gb) gb.textContent = "General documents" + ((((DATA._docCounts || {}).general || {})._ || 0) ? ` · ${((DATA._docCounts || {}).general || {})._}` : "");
+}
+
+/* ============ Gallery / Media ============
+   A media item is just a `documents` row (section "gallery", ref_id null) —
+   the storage/RLS model is identical to every other attachment in the app.
+   What's bespoke here: kind detection (image/video/audio), an auto-organize
+   pass that groups everything into month folders by "date taken" (EXIF for
+   JPEGs, else the file's own last-modified date, else upload date), and an
+   in-browser lightbox so files can be browsed without downloading. */
+const MEDIA_EXT = {
+  image: ["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp", "svg"],
+  video: ["mp4", "mov", "webm", "m4v", "avi", "mkv"],
+  audio: ["mp3", "wav", "m4a", "aac", "ogg", "opus", "flac"],
+};
+function mediaKind(mime, name) {
+  const m = (mime || "").toLowerCase();
+  if (m.startsWith("image/")) return "image";
+  if (m.startsWith("video/")) return "video";
+  if (m.startsWith("audio/")) return "audio";
+  const ext = (name || "").split(".").pop().toLowerCase();
+  for (const k of Object.keys(MEDIA_EXT)) if (MEDIA_EXT[k].includes(ext)) return k;
+  return "other";
+}
+/* Best-effort EXIF "date taken" reader for JPEGs — reads just the first
+   128KB (the EXIF block always sits at the very start of the file, long
+   before pixel data), walks the JPEG marker chain to APP1, then the TIFF
+   IFD0 → Exif SubIFD for tag 0x9003 (DateTimeOriginal). Any failure at any
+   step returns null and the caller falls back to the file's own date —
+   this is a nice-to-have, never something upload correctness depends on. */
+async function readExifDate(file) {
+  try {
+    const buf = await file.slice(0, 131072).arrayBuffer();
+    const view = new DataView(buf);
+    if (view.byteLength < 4 || view.getUint16(0) !== 0xffd8) return null;
+    let offset = 2;
+    while (offset + 4 <= view.byteLength) {
+      if (view.getUint8(offset) !== 0xff) return null;
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) { offset += 2; continue; }
+      if (marker === 0xda) return null; // start of scan — image data follows, no more markers to scan
+      if (offset + 4 > view.byteLength) return null;
+      const segLen = view.getUint16(offset + 2);
+      if (marker === 0xe1 && offset + 4 + 6 <= view.byteLength && view.getUint32(offset + 4) === 0x45786966) {
+        const tiffStart = offset + 4 + 6;
+        if (tiffStart + 8 > view.byteLength) return null;
+        const little = view.getUint16(tiffStart) === 0x4949;
+        const g16 = (o) => view.getUint16(o, little);
+        const g32 = (o) => view.getUint32(o, little);
+        const readIfd = (ifdOffset) => {
+          if (ifdOffset + 2 > view.byteLength) return {};
+          const count = g16(ifdOffset);
+          const entries = {};
+          for (let i = 0; i < count; i++) {
+            const eo = ifdOffset + 2 + i * 12;
+            if (eo + 12 > view.byteLength) break;
+            entries[g16(eo)] = { numValues: g32(eo + 4), valueOffset: eo + 8 };
+          }
+          return entries;
+        };
+        const readAscii = (entry) => {
+          let start = entry.valueOffset;
+          const len = entry.numValues;
+          if (len > 4) start = tiffStart + g32(entry.valueOffset);
+          if (start + len > view.byteLength) return "";
+          let s = "";
+          for (let i = 0; i < len - 1; i++) s += String.fromCharCode(view.getUint8(start + i));
+          return s;
+        };
+        const ifd0 = readIfd(tiffStart + g32(tiffStart + 4));
+        let dateStr = "";
+        if (ifd0[0x8769]) {
+          const exifIfd = readIfd(tiffStart + g32(ifd0[0x8769].valueOffset));
+          dateStr = (exifIfd[0x9003] && readAscii(exifIfd[0x9003])) || (exifIfd[0x9004] && readAscii(exifIfd[0x9004])) || "";
+        }
+        if (!dateStr && ifd0[0x0132]) dateStr = readAscii(ifd0[0x0132]);
+        const m = /^(\d{4}):(\d{2}):(\d{2})/.exec(dateStr);
+        return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+      }
+      offset += 2 + segLen;
+    }
+  } catch (e) { /* not a JPEG, truncated, or malformed — fall back below */ }
+  return null;
+}
+async function fileTakenOn(file, kind) {
+  if (kind === "image") {
+    const exif = await readExifDate(file);
+    if (exif) return exif;
+  }
+  if (file.lastModified) {
+    const d = new Date(file.lastModified);
+    if (!isNaN(d) && d.getFullYear() > 1990) return d.toISOString().slice(0, 10);
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+function galleryMonthKey(doc) {
+  const raw = doc.taken_on || (doc.uploaded_at || "").slice(0, 10);
+  const d = raw ? new Date(raw + (raw.length === 10 ? "T00:00:00" : "")) : null;
+  if (!d || isNaN(d)) return { label: "Undated", sort: "0000-00" };
+  return { label: d.toLocaleDateString("en-ZA", { month: "long", year: "numeric" }), sort: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` };
+}
+let GALLERY = { docs: [], urls: new Map(), filter: "all" };
+function galleryTileHtml(doc, i) {
+  const kind = mediaKind(doc.mime, doc.name);
+  const url = GALLERY.urls.get(doc.path);
+  let thumb;
+  if (kind === "image" && url) thumb = `<img src="${esc(url)}" loading="lazy" alt="">`;
+  else if (kind === "video" && url) thumb = `<video src="${esc(url)}#t=0.5" preload="metadata" muted playsinline></video><span class="gallery-play">${PLAY_ICON}</span>`;
+  else if (kind === "audio") thumb = `<span class="gallery-ic audio">${AUDIO_ICON}</span>`;
+  else thumb = `<span class="gallery-ic">${FILE_ICON}</span>`;
+  return `<button type="button" class="gallery-tile" data-gi="${i}" title="${esc(doc.name)}">
+    <span class="gallery-thumb">${thumb}</span>
+    <span class="gallery-name">${esc(doc.name)}</span>
+  </button>`;
+}
+function paintGallery() {
+  const host = $("gallery-body");
+  if (!host) return;
+  const filtered = GALLERY.filter === "all" ? GALLERY.docs : GALLERY.docs.filter((d) => mediaKind(d.mime, d.name) === GALLERY.filter);
+  const counts = { image: 0, video: 0, audio: 0, other: 0 };
+  GALLERY.docs.forEach((d) => { counts[mediaKind(d.mime, d.name)] = (counts[mediaKind(d.mime, d.name)] || 0) + 1; });
+  const groups = new Map();
+  filtered.forEach((d) => {
+    const g = galleryMonthKey(d);
+    if (!groups.has(g.sort)) groups.set(g.sort, { label: g.label, items: [] });
+    groups.get(g.sort).items.push(d);
+  });
+  const sortedKeys = [...groups.keys()].sort((a, b) => b.localeCompare(a));
+  const indexOf = new Map(filtered.map((d, i) => [d, i]));
+  host.innerHTML = `
+    <div class="grid grid-4">
+      ${statTile("Total files", GALLERY.docs.length, "Images, video & audio", "")}
+      ${statTile("Images", counts.image || 0, "", "")}
+      ${statTile("Videos", counts.video || 0, "", "")}
+      ${statTile("Audio", counts.audio || 0, "", "")}
+    </div>
+    <div class="card-head" style="margin:18px 0 12px;">
+      <div><h3 style="font-size:13px;">Media</h3>
+        <span class="hint">Auto-organized into month folders by the date each file was taken (read from the photo itself where
+          possible) — not the date it was uploaded. Click any tile to preview it in full, without downloading.</span></div>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${["all", "image", "video", "audio"].map((k) => `<button class="btn${GALLERY.filter === k ? " active" : ""}" data-gfilter="${k}" type="button">${k === "all" ? "All" : k[0].toUpperCase() + k.slice(1) + "s"}</button>`).join("")}
+        ${CAN_EDIT ? `<label class="btn primary" style="cursor:pointer;display:inline-flex;">Upload media<input type="file" id="gallery-file" accept="image/*,video/*,audio/*" multiple hidden></label>` : ""}
+      </span>
+    </div>
+    <div id="gallery-msg" style="font-size:11.5px;color:var(--ink-muted);margin-bottom:8px;"></div>
+    <div id="gallery-groups">
+      ${filtered.length ? sortedKeys.map((k) => {
+        const g = groups.get(k);
+        return `<div class="gallery-group">
+          <div class="gallery-group-head"><h4>${esc(g.label)}</h4><span class="hint">${g.items.length} file${g.items.length === 1 ? "" : "s"}</span></div>
+          <div class="gallery-grid">${g.items.map((d) => galleryTileHtml(d, indexOf.get(d))).join("")}</div>
+        </div>`;
+      }).join("") : stateHtml("empty", GALLERY.docs.length ? "No files match this filter." : "No media uploaded yet — add photos, video or audio with “Upload media”.")}
+    </div>`;
+
+  host.querySelectorAll("[data-gfilter]").forEach((b) => (b.onclick = () => { GALLERY.filter = b.dataset.gfilter; paintGallery(); }));
+  host.querySelectorAll("[data-gi]").forEach((b) => (b.onclick = () => openLightbox(filtered, +b.dataset.gi)));
+  const fi = host.querySelector("#gallery-file");
+  if (fi) fi.onchange = () => uploadGalleryFiles([...fi.files], host.querySelector("#gallery-msg"), fi);
+}
+async function refreshGallery() {
+  const host = $("gallery-body");
+  if (host && !GALLERY.docs.length) host.innerHTML = stateHtml("loading", "Loading gallery…");
+  try {
+    const docs = await repo.listDocs(orgId, "gallery", null);
+    const urlMap = await repo.docPreviewUrls(docs.map((d) => d.path)).catch(() => new Map());
+    GALLERY.docs = docs;
+    GALLERY.urls = urlMap;
+    paintGallery();
+  } catch (e) {
+    if (host) host.innerHTML = stateHtml("error", "Couldn't load the gallery. " + (e.message || e));
+  }
+}
+function renderGallery() { refreshGallery(); }
+async function uploadGalleryFiles(files, msgEl, input) {
+  if (!files.length) return;
+  const max = 200 * 1048576;
+  let ok = 0, failed = 0;
+  for (const f of files) {
+    if (f.size > max) { failed++; continue; }
+    if (msgEl) msgEl.textContent = `Uploading ${f.name}… (${ok + failed + 1}/${files.length})`;
+    try {
+      const kind = mediaKind(f.type, f.name);
+      const takenOn = await fileTakenOn(f, kind);
+      await repo.uploadDoc(orgId, "gallery", null, f, { taken_on: takenOn });
+      bumpDocCount("gallery", null, 1);
+      ok++;
+    } catch (e) { failed++; }
+  }
+  if (input) input.value = "";
+  if (msgEl) msgEl.textContent = failed ? `Uploaded ${ok}, ${failed} failed (max 200 MB each).` : `Uploaded ${ok} file${ok === 1 ? "" : "s"}.`;
+  await refreshGallery();
+  if (onChange) onChange();
+}
+/* Lightbox — browse full-size without opening a new tab or downloading;
+   Prev/Next and Esc/arrow keys move within the currently filtered set. */
+function openLightbox(list, index) {
+  let i = index;
+  const scrim = document.createElement("div");
+  scrim.className = "modal-scrim cpa-dash lightbox-scrim";
+  document.body.appendChild(scrim);
+  const close = () => { document.removeEventListener("keydown", onKey); scrim.remove(); };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft") show(i - 1);
+    else if (e.key === "ArrowRight") show(i + 1);
+  };
+  document.addEventListener("keydown", onKey);
+  function show(n) {
+    i = (n + list.length) % list.length;
+    const d = list[i];
+    const kind = mediaKind(d.mime, d.name);
+    const url = GALLERY.urls.get(d.path) || "";
+    const media = kind === "image" ? `<img src="${esc(url)}" alt="${esc(d.name)}">`
+      : kind === "video" ? `<video src="${esc(url)}" controls autoplay></video>`
+      : kind === "audio" ? `<div class="lightbox-audio">${AUDIO_ICON}<audio src="${esc(url)}" controls autoplay></audio></div>`
+      : `<div class="lightbox-audio">${FILE_ICON}<p class="hint">Preview isn't available for this file type.</p></div>`;
+    scrim.innerHTML = `
+      <div class="lightbox" role="dialog" aria-modal="true" aria-label="${esc(d.name)}">
+        <button class="lightbox-close" data-act="close" type="button" aria-label="Close">&times;</button>
+        ${list.length > 1 ? `<button class="lightbox-nav prev" data-act="prev" type="button" aria-label="Previous">&#8249;</button>
+        <button class="lightbox-nav next" data-act="next" type="button" aria-label="Next">&#8250;</button>` : ""}
+        <div class="lightbox-media">${media}</div>
+        <div class="lightbox-info">
+          <div><b>${esc(d.name)}</b><span class="hint">${esc(galleryMonthKey(d).label)} · ${fmtBytes(d.size)}</span></div>
+          <span class="row-actions">
+            <a class="btn" href="${esc(url)}" download="${esc(d.name)}" target="_blank" rel="noopener">Download</a>
+            ${CAN_EDIT ? `<button class="btn danger" data-act="delete" type="button">Delete</button>` : ""}
+          </span>
+        </div>
+      </div>`;
+    scrim.querySelector('[data-act="close"]').onclick = close;
+    scrim.addEventListener("click", (e) => { if (e.target === scrim) close(); }, { once: true });
+    const prevBtn = scrim.querySelector('[data-act="prev"]'); if (prevBtn) prevBtn.onclick = () => show(i - 1);
+    const nextBtn = scrim.querySelector('[data-act="next"]'); if (nextBtn) nextBtn.onclick = () => show(i + 1);
+    const delBtn = scrim.querySelector('[data-act="delete"]');
+    if (delBtn) delBtn.onclick = () => confirmModal(`Delete "${d.name}"? This can't be undone.`, async () => {
+      try {
+        await repo.deleteDoc(d);
+        bumpDocCount("gallery", null, -1);
+        close();
+        await refreshGallery();
+        if (onChange) onChange();
+      } catch (e) { toast("Couldn't delete: " + (e.message || e), true); }
+    });
+  }
+  show(i);
 }
 
 const BENE_TABS = [
@@ -3353,7 +3604,7 @@ const RENDERERS = {
   exec: renderExec, score: renderScore, journey: renderJourney,
   profile: renderProfile, beneficiary: renderBeneficiary, administration: renderAdministration, hr: renderHR,
   finance: renderFinance, assets: renderAssets, productivity: renderProductivity, projects: renderProjects,
-  masterfile: renderMasterFile, actions: renderActions, impact: renderImpact,
+  masterfile: renderMasterFile, actions: renderActions, impact: renderImpact, gallery: renderGallery,
 };
 
 /* CSV import specs — map spreadsheet columns onto each collection's row shape */
@@ -4499,6 +4750,10 @@ const VIEW_HTML = `
       </span>
     </div>
     <div class="doc-grid" id="masterfile-grid"></div>
+  </section>
+
+  <section class="view hidden" id="view-gallery">
+    <div id="gallery-body"></div>
   </section>
 
   <section class="view hidden" id="view-beneficiary">

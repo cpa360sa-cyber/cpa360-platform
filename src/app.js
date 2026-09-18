@@ -54,6 +54,7 @@ const IC = {
   plug: '<path d="M9 3v6M15 3v6M7 9h10v3a5 5 0 0 1-10 0zM12 17v4"/>',
   inbox: '<path d="M3 12h4l2 4h6l2-4h4"/><path d="M5 12 3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2l-2 7"/><path d="M3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6"/>',
   palette: '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2.2-.9 2.2-2 0-.6-.3-1.1-.7-1.6-.5-.5-.7-1-.3-1.6.3-.5.9-.6 1.6-.6H17a4 4 0 0 0 4-4c0-4.9-4-8.2-9-8.2z"/><circle cx="7.3" cy="10.8" r="1.3"/><circle cx="10.3" cy="7" r="1.3"/><circle cx="15.2" cy="7.6" r="1.3"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15.5 16 10 5 21"/>',
 };
 const svg = (name, cls) =>
   `<svg class="ic ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -90,6 +91,7 @@ const NAV = [
   ]},
   { group: "Records", items: [
     { id: "masterfile", label: "Master File", icon: "folder" },
+    { id: "gallery", label: "Gallery / Media", icon: "image" },
     { id: "actions", label: "Action Tracker", icon: "check" },
     { id: "impact", label: "Impact & M&E", icon: "pulse" },
     { id: "tools", label: "Tools Library", icon: "kit", app: true },
