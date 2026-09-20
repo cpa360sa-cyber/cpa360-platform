@@ -12,6 +12,9 @@ export const signUp = (email, password) =>
 export const sendMagicLink = (email) =>
   supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo() } });
 
+export const signInWithGoogle = () =>
+  supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: redirectTo() } });
+
 export const sendReset = (email) =>
   supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectTo() });
 
