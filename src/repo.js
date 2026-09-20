@@ -80,6 +80,7 @@ export async function loadOrg(orgId) {
     sel("proc_requisitions", "sort"),
     sel("proc_purchase_orders", "sort"),
     sel("fin_payments", "sort"),
+    sel("fin_bills", "sort"),
     sel("projects", "sort"),
     sel("markets", "sort"),
     sel("partnerships", "sort"),
@@ -95,7 +96,7 @@ export async function loadOrg(orgId) {
          land, leases,
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
-         finPay, projects, markets, partnerships, revenue, impact, docs] =
+         finPay, finBills, projects, markets, partnerships, revenue, impact, docs] =
     results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
@@ -224,6 +225,9 @@ export async function loadOrg(orgId) {
         [r.ref || "", r.po_date || "", r.supplier || "", r.description, num(r.amount), r.requisition_ref || "", r.status], r)),
       payments: (finPay || []).map((r) => tagArr(
         [r.pay_date || "", r.payee, r.description || "", num(r.amount), r.method || "", r.po_ref || "", r.reference || "", r.status], r)),
+      bills: (finBills || []).map((r) => tagArr(
+        [r.ref || "", r.bill_type || "Other", r.provider || "", r.account_number || "", r.bill_date || "", r.due_date || "",
+         num(r.amount), num(r.amount_paid), r.status || "Outstanding", r.notes || "", r.created_at || ""], r)),
     },
     projects: (projects || []).map((r) => tagArr(
       [r.name, r.stage || "", num(r.budget), num(r.spent), num(r.progress_pct), r.status,
@@ -581,6 +585,13 @@ export async function saveSection(orgId, section, D) {
     case "fin_payments":
       return reconcile("fin_payments", orgId, D.finProc.payments, (r, i) => ({
         pay_date: nn(r[0]), payee: r[1], description: nn(r[2]), amount: num(r[3]), method: nn(r[4]), po_ref: nn(r[5]), reference: nn(r[6]), status: r[7], sort: i,
+      }));
+
+    case "fin_bills":
+      return reconcile("fin_bills", orgId, D.finProc.bills, (r, i) => ({
+        ref: nn(r[0]), bill_type: r[1] || "Other", provider: nn(r[2]), account_number: nn(r[3]),
+        bill_date: nn(r[4]), due_date: nn(r[5]), amount: num(r[6]), amount_paid: num(r[7]),
+        status: r[8] || "Outstanding", notes: nn(r[9]), sort: i,
       }));
 
     case "projects":

@@ -2374,6 +2374,7 @@ function renderAssetMaint(host) {
 const FIN_TABS = [
   { id: "budget", label: "Budget" },
   { id: "transactions", label: "Transactions" },
+  { id: "bills", label: "Bills" },
   { id: "requisitions", label: "Requisitions" },
   { id: "pos", label: "Purchase Orders" },
   { id: "suppliers", label: "Suppliers" },
@@ -2382,7 +2383,7 @@ const FIN_TABS = [
   { id: "compliance", label: "Procurement Compliance" },
 ];
 const FIN_PANELS = {
-  budget: renderFinBudget, transactions: renderFinTransactions, requisitions: renderFinRequisitions,
+  budget: renderFinBudget, transactions: renderFinTransactions, bills: renderFinBills, requisitions: renderFinRequisitions,
   pos: renderFinPOs, suppliers: renderFinSuppliers, payments: renderFinPayments,
   bva: renderFinBVA, compliance: renderFinCompliance,
 };
@@ -2471,6 +2472,64 @@ function renderFinTransactions(host) {
       `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, esc(r[5]), `<span class="mono">${esc(r[6])}</span>`,
       r[7] ? '<span class="pill good">✓</span>' : '<span class="pill warning">—</span>'],
     manage: () => listEditor(FIN_EDITORS.transactions()),
+  });
+}
+/* Municipal rates, Eskom, water and other recurring bills — distinct from the
+   Transactions ledger (money that's already moved): a bill is an outstanding
+   obligation, tracked with the scanned/PDF bill attached until it's paid
+   down. Outstanding is always amount − amount_paid, never typed by hand, so
+   it can't drift out of sync with what's actually been paid. */
+const BILL_TYPES = ["Municipality (Rates & Taxes)", "Eskom (Electricity)", "Water", "Sewerage", "Refuse", "Telecoms", "Insurance", "Other"];
+const BILL_STATUSES = ["Outstanding", "Partially Paid", "Paid", "Disputed"];
+function billOutstanding(r) { return Math.max(0, (+r[6] || 0) - (+r[7] || 0)); }
+function billDocCellHtml(refId) {
+  const n = docCount("bill", refId);
+  return `<div class="row-actions doc-chips">
+    <button type="button" class="doc-chip${n ? "" : " missing"}"
+      data-bill-doc="${esc(refId)}" title="Bill document${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
+      aria-label="Bill document${n ? "" : ", missing"}">${CLIP}${n ? `<span>${n}</span>` : ""}</button>
+  </div>`;
+}
+function renderFinBills(host) {
+  const rows = DATA.finProc.bills || [];
+  const now = new Date();
+  const outstandingTotal = rows.reduce((s, r) => s + billOutstanding(r), 0);
+  const overdue = rows.filter((r) => billOutstanding(r) > 0 && r[5] && new Date(r[5]) < now).length;
+  const missingDoc = rows.filter((r) => docCount("bill", r._id) === 0).length;
+  mountRegister(host, {
+    title: "Bills", importKey: "fin_bills",
+    hint: "Municipality, Eskom, water and other recurring bills — attach the scanned/PDF bill and track what's still owed. "
+      + "“Outstanding” is worked out from Amount − Paid to date, so it always matches what you've actually paid.",
+    stats: () => [
+      statTile("Bills on file", rows.length, "", ""),
+      statTile("Total outstanding", fmtR(outstandingTotal), "Across all bills", outstandingTotal ? "warning" : "good"),
+      statTile("Overdue", overdue, "Past the due date, still owing", overdue ? "critical" : "good"),
+      statTile("Missing the bill document", missingDoc, "No file attached", missingDoc ? "warning" : "good"),
+    ],
+    columns: [{ label: "Bill" }, { label: "Provider" }, { label: "Account no." }, { label: "Bill date" }, { label: "Due" },
+      { label: "Amount", cls: "num" }, { label: "Outstanding", cls: "num" }, { label: "Status" }, { label: "Added" }, { label: "Document" }],
+    rows: () => rows,
+    empty: "No bills recorded — upload a municipality, Eskom or water bill to get started.",
+    cell: (r) => {
+      const out = billOutstanding(r);
+      const late = out > 0 && r[5] && new Date(r[5]) < now;
+      return [`<span class="pill neutral">${esc(r[1])}</span>`, `<span style="font-weight:600;">${esc(r[2]) || "—"}</span>`,
+        `<span class="mono" style="color:var(--ink-muted);">${esc(r[3])}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[5]) || "—"}</span>`,
+        `<span class="mono">${fmtR(+r[6] || 0)}</span>`,
+        `<span class="mono" style="${out ? "font-weight:700;" : ""}">${fmtR(out)}</span>`,
+        statusPill(late ? "Overdue" : r[8]), `<span class="hint">${esc((r[10] || "").slice(0, 10))}</span>`, billDocCellHtml(r._id)];
+    },
+    manage: () => listEditor(FIN_EDITORS.bills()),
+    afterRender: (h) => {
+      h.querySelectorAll("[data-bill-doc]").forEach((b) => (b.onclick = () => {
+        const r = rows.find((x) => String(x._id) === b.dataset.billDoc);
+        attachmentsModal("bill", r._id, "Bill — " + (r[2] || r[1]), {
+          accept: "application/pdf,.pdf,image/*", label: "Upload the bill (PDF or photo)",
+          match: /\.(pdf|jpe?g|png|heic|webp)$|^(application\/pdf|image\/)/i, matchMsg: "Please choose a PDF or an image.",
+        });
+      }));
+    },
   });
 }
 const REQ_STATUSES = ["Submitted", "Approved", "Rejected", "Converted"];
@@ -3721,6 +3780,16 @@ const IMPORT = {
     make: (v) => [v.date || "", v.desc, v.cat || "", /^i/i.test(v.type || "") ? "Income" : "Expense",
       parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, v.method || "EFT", v.ref || "", false],
   },
+  fin_bills: {
+    title: "bills", section: "fin_bills", arr: () => DATA.finProc.bills,
+    targets: [{ k: "ref", label: "Bill / invoice ref." }, { k: "billType", label: "Bill type (Municipality / Eskom / Water / ...)" },
+      { k: "provider", label: "Provider", required: true }, { k: "account", label: "Account number" },
+      { k: "billDate", label: "Bill date" }, { k: "dueDate", label: "Due date" },
+      { k: "amount", label: "Amount" }, { k: "paid", label: "Paid to date" }, { k: "status", label: "Status" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.ref || "", BILL_TYPES.includes(v.billType) ? v.billType : "Other", v.provider, v.account || "",
+      v.billDate || "", v.dueDate || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0,
+      parseFloat((v.paid || "").replace(/[^\d.-]/g, "")) || 0, BILL_STATUSES.includes(v.status) ? v.status : "Outstanding", v.notes || ""],
+  },
   proc_suppliers: {
     title: "suppliers", section: "proc_suppliers", arr: () => DATA.finProc.suppliers,
     targets: [{ k: "name", label: "Supplier", required: true }, { k: "cat", label: "Category" }, { k: "contact", label: "Contact" },
@@ -4092,6 +4161,27 @@ const FIN_EDITORS = {
       { key: "rec", label: "Reconciled", type: "select", options: ["No", "Yes"], value: r[7] ? "Yes" : "No" },
     ],
     write: (r, o) => { r[0] = o.date; r[1] = o.desc; r[2] = o.cat; r[3] = o.type; r[4] = parseFloat(o.amount) || 0; r[5] = o.method; r[6] = o.ref; r[7] = o.rec === "Yes"; },
+  }),
+  bills: () => ({
+    title: "Bills", arr: DATA.finProc.bills, section: "fin_bills",
+    rowLabel: (r) => `${esc(r[1])} — ${r[2] || "?"} (${fmtR(billOutstanding(r))} outstanding)`,
+    blank: () => ["", BILL_TYPES[0], "", "", new Date().toISOString().slice(0, 10), "", 0, 0, "Outstanding", ""],
+    fields: (r) => [
+      { key: "ref", label: "Bill / invoice ref. (optional)", type: "text", value: r[0] },
+      { key: "billType", label: "Bill type", type: "select", options: BILL_TYPES, value: r[1] },
+      { key: "provider", label: "Provider (e.g. the municipality's name)", type: "text", value: r[2], required: true },
+      { key: "account", label: "Account number", type: "text", value: r[3] },
+      { key: "billDate", label: "Bill date", type: "date", value: r[4] },
+      { key: "dueDate", label: "Due date", type: "date", value: r[5] },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[6], min: 0 },
+      { key: "paid", label: "Paid to date (R)", type: "number", value: r[7], min: 0 },
+      { key: "status", label: "Status", type: "select", options: BILL_STATUSES, value: r[8] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[9] },
+    ],
+    write: (r, o) => {
+      r[0] = o.ref; r[1] = o.billType; r[2] = o.provider; r[3] = o.account; r[4] = o.billDate; r[5] = o.dueDate;
+      r[6] = parseFloat(o.amount) || 0; r[7] = parseFloat(o.paid) || 0; r[8] = o.status; r[9] = o.notes;
+    },
   }),
   suppliers: () => ({
     title: "Suppliers", arr: DATA.finProc.suppliers, section: "proc_suppliers",
