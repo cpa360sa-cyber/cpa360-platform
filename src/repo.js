@@ -81,6 +81,13 @@ export async function loadOrg(orgId) {
     sel("proc_purchase_orders", "sort"),
     sel("fin_payments", "sort"),
     sel("fin_bills", "sort"),
+    sel("fin_quotes", "sort"),
+    sel("fin_contracts", "sort"),
+    sel("fin_grn", "sort"),
+    sel("fin_afs", "sort"),
+    sel("fin_member_pay", "sort"),
+    sel("fin_bank_recon", "sort"),
+    sel("fin_close", "sort"),
     sel("projects", "sort"),
     sel("markets", "sort"),
     sel("partnerships", "sort"),
@@ -96,7 +103,8 @@ export async function loadOrg(orgId) {
          land, leases,
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
-         finPay, finBills, projects, markets, partnerships, revenue, impact, docs] =
+         finPay, finBills, finQuotes, finContracts, finGrn, finAfs, finMemberPay, finBankRecon, finClose,
+         projects, markets, partnerships, revenue, impact, docs] =
     results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
@@ -228,6 +236,25 @@ export async function loadOrg(orgId) {
       bills: (finBills || []).map((r) => tagArr(
         [r.ref || "", r.bill_type || "Other", r.provider || "", r.account_number || "", r.bill_date || "", r.due_date || "",
          num(r.amount), num(r.amount_paid), r.status || "Outstanding", r.notes || "", r.created_at || ""], r)),
+      quotes: (finQuotes || []).map((r) => tagArr(
+        [r.requisition_ref || "", r.description, r.supplier || "", num(r.amount), r.quote_date || "", !!r.selected, r.notes || ""], r)),
+      contracts: (finContracts || []).map((r) => tagArr(
+        [r.ref || "", r.party, r.purpose || "", r.contract_type || "", r.start_date || "", r.end_date || "",
+         num(r.value), r.renewal || "", r.status || "Active", r.notes || ""], r)),
+      grn: (finGrn || []).map((r) => tagArr(
+        [r.ref || "", r.po_ref || "", r.description, r.received_date || "", r.received_by || "",
+         r.condition || "Good", r.discrepancy || "", r.status || "Received", r.notes || ""], r)),
+      afs: (finAfs || []).map((r) => tagArr(
+        [r.financial_year, r.status || "Draft", r.auditor || "", r.date_approved_members || "",
+         r.date_filed_dalrrd || "", r.date_filed_cipc || "", r.notes || ""], r)),
+      memberPay: (finMemberPay || []).map((r) => tagArr(
+        [r.member_name, r.role || "", r.payment_type || "Sitting Allowance", num(r.amount), r.period || "",
+         r.resolution_ref || "", !!r.disclosed_agm, r.notes || ""], r)),
+      bankRecon: (finBankRecon || []).map((r) => tagArr(
+        [r.period, num(r.bank_balance), num(r.book_balance), r.prepared_by || "", r.reviewed_by || "", r.status || "Draft", r.notes || ""], r)),
+      close: (finClose || []).map((r) => tagArr(
+        [r.period, !!r.journals_posted, !!r.accruals_done, !!r.bank_rec_done, !!r.reports_issued,
+         r.signed_off_by || "", r.sign_off_date || "", r.notes || ""], r)),
     },
     projects: (projects || []).map((r) => tagArr(
       [r.name, r.stage || "", num(r.budget), num(r.spent), num(r.progress_pct), r.status,
@@ -592,6 +619,49 @@ export async function saveSection(orgId, section, D) {
         ref: nn(r[0]), bill_type: r[1] || "Other", provider: nn(r[2]), account_number: nn(r[3]),
         bill_date: nn(r[4]), due_date: nn(r[5]), amount: num(r[6]), amount_paid: num(r[7]),
         status: r[8] || "Outstanding", notes: nn(r[9]), sort: i,
+      }));
+
+    case "fin_quotes":
+      return reconcile("fin_quotes", orgId, D.finProc.quotes, (r, i) => ({
+        requisition_ref: nn(r[0]), description: r[1], supplier: nn(r[2]), amount: num(r[3]),
+        quote_date: nn(r[4]), selected: !!r[5], notes: nn(r[6]), sort: i,
+      }));
+
+    case "fin_contracts":
+      return reconcile("fin_contracts", orgId, D.finProc.contracts, (r, i) => ({
+        ref: nn(r[0]), party: r[1], purpose: nn(r[2]), contract_type: nn(r[3]),
+        start_date: nn(r[4]), end_date: nn(r[5]), value: num(r[6]), renewal: nn(r[7]),
+        status: r[8] || "Active", notes: nn(r[9]), sort: i,
+      }));
+
+    case "fin_grn":
+      return reconcile("fin_grn", orgId, D.finProc.grn, (r, i) => ({
+        ref: nn(r[0]), po_ref: nn(r[1]), description: r[2], received_date: nn(r[3]), received_by: nn(r[4]),
+        condition: r[5] || "Good", discrepancy: nn(r[6]), status: r[7] || "Received", notes: nn(r[8]), sort: i,
+      }));
+
+    case "fin_afs":
+      return reconcile("fin_afs", orgId, D.finProc.afs, (r, i) => ({
+        financial_year: r[0], status: r[1] || "Draft", auditor: nn(r[2]), date_approved_members: nn(r[3]),
+        date_filed_dalrrd: nn(r[4]), date_filed_cipc: nn(r[5]), notes: nn(r[6]), sort: i,
+      }));
+
+    case "fin_member_pay":
+      return reconcile("fin_member_pay", orgId, D.finProc.memberPay, (r, i) => ({
+        member_name: r[0], role: nn(r[1]), payment_type: r[2] || "Sitting Allowance", amount: num(r[3]),
+        period: nn(r[4]), resolution_ref: nn(r[5]), disclosed_agm: !!r[6], notes: nn(r[7]), sort: i,
+      }));
+
+    case "fin_bank_recon":
+      return reconcile("fin_bank_recon", orgId, D.finProc.bankRecon, (r, i) => ({
+        period: r[0], bank_balance: num(r[1]), book_balance: num(r[2]), prepared_by: nn(r[3]),
+        reviewed_by: nn(r[4]), status: r[5] || "Draft", notes: nn(r[6]), sort: i,
+      }));
+
+    case "fin_close":
+      return reconcile("fin_close", orgId, D.finProc.close, (r, i) => ({
+        period: r[0], journals_posted: !!r[1], accruals_done: !!r[2], bank_rec_done: !!r[3], reports_issued: !!r[4],
+        signed_off_by: nn(r[5]), sign_off_date: nn(r[6]), notes: nn(r[7]), sort: i,
       }));
 
     case "projects":

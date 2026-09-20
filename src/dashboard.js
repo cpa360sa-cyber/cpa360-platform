@@ -2375,16 +2375,25 @@ const FIN_TABS = [
   { id: "budget", label: "Budget" },
   { id: "transactions", label: "Transactions" },
   { id: "bills", label: "Bills" },
+  { id: "quotes", label: "Quotations" },
   { id: "requisitions", label: "Requisitions" },
   { id: "pos", label: "Purchase Orders" },
+  { id: "grn", label: "Goods/Services Received" },
+  { id: "contracts", label: "Contracts" },
   { id: "suppliers", label: "Suppliers" },
   { id: "payments", label: "Payments" },
+  { id: "bankrecon", label: "Bank Reconciliations" },
+  { id: "close", label: "Month-End Close" },
+  { id: "afs", label: "Annual Financial Statements" },
+  { id: "memberpay", label: "Members' Remuneration" },
   { id: "bva", label: "Budget vs Actual" },
   { id: "compliance", label: "Procurement Compliance" },
 ];
 const FIN_PANELS = {
-  budget: renderFinBudget, transactions: renderFinTransactions, bills: renderFinBills, requisitions: renderFinRequisitions,
-  pos: renderFinPOs, suppliers: renderFinSuppliers, payments: renderFinPayments,
+  budget: renderFinBudget, transactions: renderFinTransactions, bills: renderFinBills, quotes: renderFinQuotes,
+  requisitions: renderFinRequisitions, pos: renderFinPOs, grn: renderFinGrn, contracts: renderFinContracts,
+  suppliers: renderFinSuppliers, payments: renderFinPayments, bankrecon: renderFinBankRecon, close: renderFinClose,
+  afs: renderFinAfs, memberpay: renderFinMemberPay,
   bva: renderFinBVA, compliance: renderFinCompliance,
 };
 function renderFinance() {
@@ -2546,6 +2555,253 @@ function renderFinBills(host) {
         });
       }));
     },
+  });
+}
+/* Shared single-attachment doc chip for the six registers below — same visual
+   as billDocCellHtml's chips, generalized since each of these needs exactly
+   one evidence slot (unlike Bills' bill+POP pair). */
+function docChip(section, refId, label) {
+  const n = docCount(section, refId);
+  return `<button type="button" class="doc-chip${n ? "" : " missing"}"
+    data-doc-chip="${esc(section)}::${esc(refId)}" title="${esc(label)}${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
+    aria-label="${esc(label)}${n ? "" : ", missing"}">${CLIP}${n ? `<span>${n}</span>` : ""}</button>`;
+}
+function wireDocChips(host, rows, labelFor) {
+  host.querySelectorAll("[data-doc-chip]").forEach((b) => (b.onclick = () => {
+    const sep = b.dataset.docChip.indexOf("::");
+    const section = b.dataset.docChip.slice(0, sep), refId = b.dataset.docChip.slice(sep + 2);
+    const r = rows.find((x) => String(x._id) === refId);
+    if (r) attachmentsModal(section, r._id, labelFor(r), {
+      accept: "application/pdf,.pdf,image/*", label: "Upload (PDF or photo)",
+      match: /\.(pdf|jpe?g|png|heic|webp)$|^(application\/pdf|image\/)/i, matchMsg: "Please choose a PDF or an image.",
+    });
+  }));
+}
+
+/* Quotations — competitive-sourcing evidence per requisition (item 3.3 of a
+   typical FINCOM agenda). Multiple quotes share one requisition_ref; one is
+   marked "selected". */
+function renderFinQuotes(host) {
+  const rows = DATA.finProc.quotes || [];
+  const byReq = {};
+  rows.forEach((r) => { if ((r[0] || "").trim()) (byReq[r[0]] ||= []).push(r); });
+  const reqRefs = Object.keys(byReq);
+  const under3 = reqRefs.filter((k) => byReq[k].length < 3).length;
+  const noSelection = reqRefs.filter((k) => !byReq[k].some((r) => r[5])).length;
+  mountRegister(host, {
+    title: "Quotations", importKey: "fin_quotes",
+    hint: "Competitive sourcing evidence — record every quote obtained for a requisition (aim for at least 3) and mark the one selected. Attach the quote document itself.",
+    stats: () => [
+      statTile("Quotes on file", rows.length, "", ""),
+      statTile("Requisitions quoted", reqRefs.length, "Distinct requisition refs", ""),
+      statTile("Fewer than 3 quotes", under3, "Below the usual SCM minimum", under3 ? "warning" : "good"),
+      statTile("No quote selected", noSelection, "Has quotes but none marked selected", noSelection ? "warning" : "good"),
+    ],
+    columns: [{ label: "Requisition ref." }, { label: "Description" }, { label: "Supplier" }, { label: "Amount", cls: "num" },
+      { label: "Quote date" }, { label: "Selected" }, { label: "Document" }],
+    rows: () => rows,
+    empty: "No quotes recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "—"}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+      esc(r[2]), `<span class="mono">${fmtR(+r[3] || 0)}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`,
+      r[5] ? pill("Selected", "good") : pill("—", "neutral"), docChip("quote", r._id, "Quote document")],
+    manage: () => listEditor(FIN_EDITORS.quotes()),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Quote — " + (r[2] || r[1])),
+  });
+}
+
+/* Contracts register — signed agreements with suppliers/professionals
+   (item 3.4). Distinct from Suppliers, which tracks the entity, not the
+   individual agreement's terms/expiry. */
+const CONTRACT_STATUSES = ["Active", "Expiring Soon", "Expired", "Terminated"];
+function renderFinContracts(host) {
+  const rows = DATA.finProc.contracts || [];
+  const now = new Date();
+  const daysTo = (d) => (new Date(d) - now) / 86400000;
+  const in60 = rows.filter((r) => r[5] && r[8] === "Active" && daysTo(r[5]) >= 0 && daysTo(r[5]) <= 60).length;
+  const expiredButActive = rows.filter((r) => r[5] && r[8] === "Active" && daysTo(r[5]) < 0).length;
+  mountRegister(host, {
+    title: "Contracts Register", importKey: "fin_contracts",
+    hint: "Signed agreements with suppliers, professionals and service providers — with the actual contract attached, so renewal and expiry never get missed.",
+    stats: () => [
+      statTile("Contracts on file", rows.length, "", ""),
+      statTile("Active", rows.filter((r) => r[8] === "Active").length, "", "good"),
+      statTile("Expiring within 60 days", in60, "", in60 ? "warning" : "good"),
+      statTile("Expired but marked Active", expiredButActive, "Needs a status update", expiredButActive ? "critical" : "good"),
+    ],
+    columns: [{ label: "Ref." }, { label: "Party" }, { label: "Type" }, { label: "Start" }, { label: "End" },
+      { label: "Value", cls: "num" }, { label: "Status" }, { label: "Document" }],
+    rows: () => rows,
+    empty: "No contracts recorded.",
+    cell: (r) => {
+      const late = r[5] && r[8] === "Active" && daysTo(r[5]) < 0;
+      return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "—"}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+        esc(r[3]) || "—", `<span class="mono">${esc(r[4]) || "—"}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[5]) || "—"}</span>`,
+        `<span class="mono">${fmtR(+r[6] || 0)}</span>`, statusPill(r[8]), docChip("contract", r._id, "Signed contract")];
+    },
+    manage: () => listEditor(FIN_EDITORS.contracts()),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Contract — " + r[1]),
+  });
+}
+
+/* Goods/services received (GRN) — independent confirmation before payment
+   (item 3.6): the classic segregation-of-duties control between the person
+   who orders and the person who pays. */
+const GRN_STATUSES = ["Received", "Partially Received", "Discrepancy", "Rejected"];
+function renderFinGrn(host) {
+  const rows = DATA.finProc.grn || [];
+  const pos = DATA.finProc.pos || [];
+  const grnPoRefs = new Set(rows.map((r) => r[1]).filter(Boolean));
+  const needingGrn = pos.filter((p) => ["Delivered", "Invoiced", "Paid"].includes(p[6]));
+  const missingGrn = needingGrn.filter((p) => !grnPoRefs.has(p[0])).length;
+  const discrepancies = rows.filter((r) => r[7] === "Discrepancy").length;
+  const withDoc = rows.filter((r) => docCount("grn", r._id) > 0).length;
+  mountRegister(host, {
+    title: "Goods/Services Received", importKey: "fin_grn",
+    hint: "Independent confirmation that what was ordered actually arrived, before it's paid. Cross-checked against Purchase Orders below.",
+    stats: () => [
+      statTile("GRNs on file", rows.length, "", ""),
+      statTile("POs delivered without a GRN", missingGrn, "Paid/invoiced with no receipt confirmed", missingGrn ? "critical" : "good"),
+      statTile("Discrepancies", discrepancies, "Received didn't match ordered", discrepancies ? "warning" : "good"),
+      statTile("Documents attached", `${withDoc} / ${rows.length}`, "", ""),
+    ],
+    columns: [{ label: "Ref." }, { label: "PO ref." }, { label: "Description" }, { label: "Received" }, { label: "Received by" },
+      { label: "Condition" }, { label: "Status" }, { label: "Document" }],
+    rows: () => rows,
+    empty: "No goods/services receipts recorded.",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "—"}</span>`, `<span class="mono">${esc(r[1]) || "—"}</span>`,
+      `<span style="font-weight:600;">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3]) || "—"}</span>`, esc(r[4]) || "—",
+      pill(r[5], r[5] === "Good" ? "good" : ["Poor", "Non-functional"].includes(r[5]) ? "critical" : "warning"),
+      statusPill(r[7]), docChip("grn", r._id, "Delivery note / GRN")],
+    manage: () => listEditor(FIN_EDITORS.grn()),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "GRN — " + r[2]),
+  });
+}
+
+/* Annual Financial Statements — one row per financial year (item 4): draft →
+   audited → adopted by members → filed with DALRRD/CIPC. Also read by the
+   Institutional Score's "Annual financial statements / audit" criterion in
+   preference to the old admin_records name-matching heuristic. */
+const AFS_STATUSES = ["Draft", "Under Audit", "Audited", "Adopted", "Filed"];
+function renderFinAfs(host) {
+  const rows = [...(DATA.finProc.afs || [])].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+  const latest = rows[0];
+  const notFiled = rows.filter((r) => r[1] === "Adopted" && !r[4] && !r[5]).length;
+  const withDoc = rows.filter((r) => docCount("afs", r._id) > 0).length;
+  mountRegister(host, {
+    title: "Annual Financial Statements", importKey: "fin_afs",
+    hint: "One row per financial year — draft, under audit, adopted by members, then filed. Attach the actual AFS document; this feeds the Institutional Score directly.",
+    stats: () => [
+      statTile("Years on file", rows.length, "", ""),
+      statTile("Latest year", latest ? latest[0] : "—", latest ? latest[1] : "", ""),
+      statTile("Adopted but not yet filed", notFiled, "", notFiled ? "warning" : "good"),
+      statTile("Documents attached", `${withDoc} / ${rows.length}`, "", ""),
+    ],
+    columns: [{ label: "Financial year" }, { label: "Status" }, { label: "Auditor" }, { label: "Approved by members" },
+      { label: "Filed DALRRD" }, { label: "Filed CIPC" }, { label: "Document" }],
+    rows: () => rows,
+    empty: "No financial years recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, statusPill(r[1]), esc(r[2]) || "—",
+      `<span class="mono">${esc(r[3]) || "—"}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`, `<span class="mono">${esc(r[5]) || "—"}</span>`,
+      docChip("afs", r._id, "AFS document")],
+    manage: () => listEditor(FIN_EDITORS.afs()),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Annual Financial Statements — " + r[0]),
+  });
+}
+
+/* Members' remuneration — payments/benefits to EXCO/committee members
+   (item 4.6), a known high-scrutiny area for CPAs. Links to the approving
+   resolution by ref. rather than duplicating a document slot — the actual
+   resolution document already lives in Governance → Resolutions. */
+const MEMBER_PAY_TYPES = ["Sitting Allowance", "Stipend", "Travel/Subsistence", "Other Benefit"];
+function renderFinMemberPay(host) {
+  const rows = DATA.finProc.memberPay || [];
+  const total = rows.reduce((s, r) => s + (+r[3] || 0), 0);
+  const noResolution = rows.filter((r) => !(r[5] || "").trim()).length;
+  const notDisclosed = rows.filter((r) => !r[6]).length;
+  mountRegister(host, {
+    title: "Members' Remuneration", importKey: "fin_member_pay",
+    hint: "Payments and benefits to EXCO/committee members — a high-scrutiny area. Link each to the resolution that approved it and confirm it was disclosed at the AGM.",
+    stats: () => [
+      statTile("Total paid to members", fmtR(total), "All periods on file", ""),
+      statTile("Payments", rows.length, "", ""),
+      statTile("No resolution linked", noResolution, "Approval not referenced", noResolution ? "critical" : "good"),
+      statTile("Not disclosed at AGM", notDisclosed, "", notDisclosed ? "warning" : "good"),
+    ],
+    columns: [{ label: "Member" }, { label: "Role" }, { label: "Type" }, { label: "Amount", cls: "num" },
+      { label: "Period" }, { label: "Resolution ref." }, { label: "Disclosed AGM" }],
+    rows: () => rows,
+    empty: "No member payments recorded.",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]) || "—", `<span class="pill neutral">${esc(r[2])}</span>`,
+      `<span class="mono">${fmtR(+r[3] || 0)}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`,
+      (r[5] || "").trim() ? `<span class="mono">${esc(r[5])}</span>` : pill("Missing", "critical"),
+      r[6] ? pill("Yes", "good") : pill("No", "warning")],
+    manage: () => listEditor(FIN_EDITORS.memberPay()),
+  });
+}
+
+/* Monthly bank reconciliations — a formal, signed-off statement (item 5.5),
+   distinct from the per-transaction "reconciled" checkbox on Transactions. */
+const BANKRECON_STATUSES = ["Draft", "Reviewed", "Signed Off"];
+function bankReconDiff(r) { return (+r[1] || 0) - (+r[2] || 0); }
+function renderFinBankRecon(host) {
+  const rows = [...(DATA.finProc.bankRecon || [])].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+  const unresolved = rows.filter((r) => Math.abs(bankReconDiff(r)) > 1).length;
+  const notSignedOff = rows.filter((r) => r[5] !== "Signed Off").length;
+  const missingDoc = rows.filter((r) => docCount("bankrecon", r._id) === 0).length;
+  mountRegister(host, {
+    title: "Bank Reconciliations", importKey: "fin_bank_recon",
+    hint: "A formal, signed-off reconciliation for every month — attach the statement itself. This is the first thing an auditor asks for.",
+    stats: () => [
+      statTile("Months on file", rows.length, "", ""),
+      statTile("Unresolved differences", unresolved, "Bank ≠ books by more than R1", unresolved ? "critical" : "good"),
+      statTile("Not yet signed off", notSignedOff, "", notSignedOff ? "warning" : "good"),
+      statTile("Missing the statement", missingDoc, "No file attached", missingDoc ? "warning" : "good"),
+    ],
+    columns: [{ label: "Period" }, { label: "Bank balance", cls: "num" }, { label: "Book balance", cls: "num" }, { label: "Difference", cls: "num" },
+      { label: "Prepared by" }, { label: "Reviewed by" }, { label: "Status" }, { label: "Document" }],
+    rows: () => rows,
+    empty: "No bank reconciliations recorded.",
+    cell: (r) => {
+      const diff = bankReconDiff(r);
+      return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="mono">${fmtR(+r[1] || 0)}</span>`, `<span class="mono">${fmtR(+r[2] || 0)}</span>`,
+        `<span class="mono" style="${Math.abs(diff) > 1 ? "color:var(--status-critical);font-weight:700;" : ""}">${fmtR(diff)}</span>`,
+        esc(r[3]) || "—", esc(r[4]) || "—", statusPill(r[5]), docChip("bankrecon", r._id, "Reconciliation statement")];
+    },
+    manage: () => listEditor(FIN_EDITORS.bankRecon()),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Bank Reconciliation — " + r[0]),
+  });
+}
+
+/* Month-end close checklist (item 5.7/5.8) — ties journals, accruals, bank
+   reconciliation and reporting together into one auditable per-month record. */
+function closeCompletionPct(r) { const items = [r[1], r[2], r[3], r[4]]; return Math.round(items.filter(Boolean).length / items.length * 100); }
+function renderFinClose(host) {
+  const rows = [...(DATA.finProc.close || [])].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+  const fullyClosed = rows.filter((r) => closeCompletionPct(r) === 100).length;
+  const notSignedOff = rows.filter((r) => !(r[5] || "").trim()).length;
+  const latest = rows[0];
+  mountRegister(host, {
+    title: "Month-End Close Checklist", importKey: "fin_close",
+    hint: "Journals posted, accruals raised, bank reconciled, reports issued — one row per month, ticked off and signed.",
+    stats: () => [
+      statTile("Months tracked", rows.length, "", ""),
+      statTile("Fully closed", fullyClosed, "All four steps done", ""),
+      statTile("Latest month", latest ? `${closeCompletionPct(latest)}%` : "—", latest ? latest[0] : "", latest && closeCompletionPct(latest) < 100 ? "warning" : "good"),
+      statTile("Not signed off", notSignedOff, "", notSignedOff ? "warning" : "good"),
+    ],
+    columns: [{ label: "Period" }, { label: "Journals" }, { label: "Accruals" }, { label: "Bank rec" }, { label: "Reports" },
+      { label: "Complete", cls: "num" }, { label: "Signed off by" }, { label: "Sign-off date" }],
+    rows: () => rows,
+    empty: "No months tracked yet.",
+    cell: (r) => {
+      const pct = closeCompletionPct(r);
+      const yn = (v) => (v ? pill("Done", "good") : pill("Pending", "warning"));
+      return [`<span style="font-weight:600;">${esc(r[0])}</span>`, yn(r[1]), yn(r[2]), yn(r[3]), yn(r[4]),
+        `<span class="mono" style="${pct === 100 ? "color:var(--status-good);" : "font-weight:700;"}">${pct}%</span>`,
+        esc(r[5]) || "—", `<span class="mono">${esc(r[6]) || "—"}</span>`];
+    },
+    manage: () => listEditor(FIN_EDITORS.close()),
   });
 }
 const REQ_STATUSES = ["Submitted", "Approved", "Rejected", "Converted"];
@@ -3267,8 +3523,17 @@ const AUTO_SCORE_RULES = {
       return { ratio: r / t.length, detail: `${r}/${t.length} transaction(s) reconciled to the bank` };
     },
     "Annual financial statements / audit": (D) => {
+      // Prefer the dedicated AFS register (Finance → Annual Financial Statements)
+      // once it has data — a graduated read of real lifecycle progress, not just
+      // a yes/no guess from a Master File record-series name.
+      const afs = D.finProc.afs || [];
+      if (afs.length) {
+        const latest = [...afs].sort((a, b) => String(b[0]).localeCompare(String(a[0])))[0];
+        const byStatus = { "Draft": 0.2, "Under Audit": 0.4, "Audited": 0.7, "Adopted": 0.9, "Filed": 1 };
+        return { ratio: byStatus[latest[1]] ?? 0, detail: `FY ${latest[0]} status: ${latest[1]}` };
+      }
       const rec = (D.admin.records || []).find((r) => /financial statement|audit/i.test(r[0] || ""));
-      if (!rec) return { ratio: 0, detail: "No financial statements/audit record series found" };
+      if (!rec) return { ratio: 0, detail: "No financial year recorded — add one under Finance → Annual Financial Statements" };
       return { ratio: rec[6] === "Current" ? 1 : 0.5, detail: `"${rec[0]}" record series status: ${rec[6]}` };
     },
     "Banking controls & signatories": (D) => {
@@ -3806,6 +4071,56 @@ const IMPORT = {
       v.billDate || "", v.dueDate || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0,
       parseFloat((v.paid || "").replace(/[^\d.-]/g, "")) || 0, BILL_STATUSES.includes(v.status) ? v.status : "Outstanding", v.notes || ""],
   },
+  fin_quotes: {
+    title: "quotes", section: "fin_quotes", arr: () => DATA.finProc.quotes,
+    targets: [{ k: "reqRef", label: "Requisition ref." }, { k: "desc", label: "Description", required: true }, { k: "supplier", label: "Supplier" },
+      { k: "amount", label: "Amount" }, { k: "date", label: "Quote date" }, { k: "selected", label: "Selected (Yes/No)" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.reqRef || "", v.desc, v.supplier || "", parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0,
+      v.date || "", /^y/i.test(v.selected || ""), v.notes || ""],
+  },
+  fin_contracts: {
+    title: "contracts", section: "fin_contracts", arr: () => DATA.finProc.contracts,
+    targets: [{ k: "ref", label: "Contract ref." }, { k: "party", label: "Party", required: true }, { k: "purpose", label: "Purpose" }, { k: "type", label: "Type" },
+      { k: "start", label: "Start date" }, { k: "end", label: "End date" }, { k: "value", label: "Value" }, { k: "renewal", label: "Renewal terms" },
+      { k: "status", label: "Status" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.ref || "", v.party, v.purpose || "", v.type || "", v.start || "", v.end || "",
+      parseFloat((v.value || "").replace(/[^\d.-]/g, "")) || 0, v.renewal || "", CONTRACT_STATUSES.includes(v.status) ? v.status : "Active", v.notes || ""],
+  },
+  fin_grn: {
+    title: "goods/services received", section: "fin_grn", arr: () => DATA.finProc.grn,
+    targets: [{ k: "ref", label: "GRN ref." }, { k: "poRef", label: "PO ref." }, { k: "desc", label: "Description", required: true }, { k: "date", label: "Received date" },
+      { k: "by", label: "Received by" }, { k: "condition", label: "Condition" }, { k: "discrepancy", label: "Discrepancy" }, { k: "status", label: "Status" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.ref || "", v.poRef || "", v.desc, v.date || "", v.by || "", CONDITIONS.includes(v.condition) ? v.condition : "Good",
+      v.discrepancy || "", GRN_STATUSES.includes(v.status) ? v.status : "Received", v.notes || ""],
+  },
+  fin_afs: {
+    title: "annual financial statements", section: "fin_afs", arr: () => DATA.finProc.afs,
+    targets: [{ k: "year", label: "Financial year", required: true }, { k: "status", label: "Status" }, { k: "auditor", label: "Auditor" },
+      { k: "approved", label: "Approved by members on" }, { k: "dalrrd", label: "Filed with DALRRD on" }, { k: "cipc", label: "Filed with CIPC on" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.year, AFS_STATUSES.includes(v.status) ? v.status : "Draft", v.auditor || "", v.approved || "", v.dalrrd || "", v.cipc || "", v.notes || ""],
+  },
+  fin_member_pay: {
+    title: "members' remuneration", section: "fin_member_pay", arr: () => DATA.finProc.memberPay,
+    targets: [{ k: "name", label: "Member name", required: true }, { k: "role", label: "Role" }, { k: "type", label: "Payment type" }, { k: "amount", label: "Amount" },
+      { k: "period", label: "Period" }, { k: "resolution", label: "Resolution ref." }, { k: "disclosed", label: "Disclosed at AGM (Yes/No)" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.name, v.role || "", MEMBER_PAY_TYPES.includes(v.type) ? v.type : "Sitting Allowance",
+      parseFloat((v.amount || "").replace(/[^\d.-]/g, "")) || 0, v.period || "", v.resolution || "", /^y/i.test(v.disclosed || ""), v.notes || ""],
+  },
+  fin_bank_recon: {
+    title: "bank reconciliations", section: "fin_bank_recon", arr: () => DATA.finProc.bankRecon,
+    targets: [{ k: "period", label: "Period", required: true }, { k: "bank", label: "Bank balance" }, { k: "book", label: "Book balance" },
+      { k: "prepared", label: "Prepared by" }, { k: "reviewed", label: "Reviewed by" }, { k: "status", label: "Status" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.period, parseFloat((v.bank || "").replace(/[^\d.-]/g, "")) || 0, parseFloat((v.book || "").replace(/[^\d.-]/g, "")) || 0,
+      v.prepared || "", v.reviewed || "", BANKRECON_STATUSES.includes(v.status) ? v.status : "Draft", v.notes || ""],
+  },
+  fin_close: {
+    title: "month-end close", section: "fin_close", arr: () => DATA.finProc.close,
+    targets: [{ k: "period", label: "Period", required: true }, { k: "journals", label: "Journals posted (Yes/No)" }, { k: "accruals", label: "Accruals done (Yes/No)" },
+      { k: "bankRec", label: "Bank rec done (Yes/No)" }, { k: "reports", label: "Reports issued (Yes/No)" }, { k: "signedBy", label: "Signed off by" },
+      { k: "signedDate", label: "Sign-off date" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.period, /^y/i.test(v.journals || ""), /^y/i.test(v.accruals || ""), /^y/i.test(v.bankRec || ""), /^y/i.test(v.reports || ""),
+      v.signedBy || "", v.signedDate || "", v.notes || ""],
+  },
   proc_suppliers: {
     title: "suppliers", section: "proc_suppliers", arr: () => DATA.finProc.suppliers,
     targets: [{ k: "name", label: "Supplier", required: true }, { k: "cat", label: "Category" }, { k: "contact", label: "Contact" },
@@ -4197,6 +4512,130 @@ const FIN_EDITORS = {
     write: (r, o) => {
       r[0] = o.ref; r[1] = o.billType; r[2] = o.provider; r[3] = o.account; r[4] = o.billDate; r[5] = o.dueDate;
       r[6] = parseFloat(o.amount) || 0; r[7] = parseFloat(o.paid) || 0; r[8] = o.status; r[9] = o.notes;
+    },
+  }),
+  quotes: () => ({
+    title: "Quotes", arr: DATA.finProc.quotes, section: "fin_quotes",
+    rowLabel: (r) => `${r[2] || "?"} — ${fmtR(r[3])} (${r[0] || "no req ref"})`,
+    blank: () => ["", "", "", 0, new Date().toISOString().slice(0, 10), false, ""],
+    fields: (r) => [
+      { key: "reqRef", label: "Requisition ref.", type: "text", value: r[0] },
+      { key: "desc", label: "Description", type: "text", value: r[1], required: true },
+      { key: "supplier", label: "Supplier", type: "text", value: r[2] },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[3], min: 0 },
+      { key: "date", label: "Quote date", type: "date", value: r[4] },
+      { key: "selected", label: "Selected", type: "select", options: ["No", "Yes"], value: r[5] ? "Yes" : "No" },
+      { key: "notes", label: "Notes", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.reqRef; r[1] = o.desc; r[2] = o.supplier; r[3] = parseFloat(o.amount) || 0; r[4] = o.date; r[5] = o.selected === "Yes"; r[6] = o.notes; },
+  }),
+  contracts: () => ({
+    title: "Contracts", arr: DATA.finProc.contracts, section: "fin_contracts",
+    rowLabel: (r) => `${r[1]} — ${r[3] || "Contract"} (${r[8]})`,
+    blank: () => ["", "", "", "", "", "", 0, "", "Active", ""],
+    fields: (r) => [
+      { key: "ref", label: "Contract ref. (optional)", type: "text", value: r[0] },
+      { key: "party", label: "Party / supplier", type: "text", value: r[1], required: true },
+      { key: "purpose", label: "Purpose", type: "textarea", value: r[2] },
+      { key: "type", label: "Contract type", type: "text", value: r[3] },
+      { key: "start", label: "Start date", type: "date", value: r[4] },
+      { key: "end", label: "End date", type: "date", value: r[5] },
+      { key: "value", label: "Value (R)", type: "number", value: r[6], min: 0 },
+      { key: "renewal", label: "Renewal terms", type: "text", value: r[7] },
+      { key: "status", label: "Status", type: "select", options: CONTRACT_STATUSES, value: r[8] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[9] },
+    ],
+    write: (r, o) => {
+      r[0] = o.ref; r[1] = o.party; r[2] = o.purpose; r[3] = o.type; r[4] = o.start; r[5] = o.end;
+      r[6] = parseFloat(o.value) || 0; r[7] = o.renewal; r[8] = o.status; r[9] = o.notes;
+    },
+  }),
+  grn: () => ({
+    title: "Goods/services received", arr: DATA.finProc.grn, section: "fin_grn",
+    rowLabel: (r) => `${r[2]} — ${r[1] || "no PO ref"}`,
+    blank: () => ["", "", "", new Date().toISOString().slice(0, 10), "", "Good", "", "Received", ""],
+    fields: (r) => [
+      { key: "ref", label: "GRN ref. (optional)", type: "text", value: r[0] },
+      { key: "poRef", label: "Purchase order ref.", type: "text", value: r[1] },
+      { key: "desc", label: "Description", type: "text", value: r[2], required: true },
+      { key: "date", label: "Received date", type: "date", value: r[3] },
+      { key: "by", label: "Received by", type: "text", value: r[4] },
+      { key: "condition", label: "Condition", type: "select", options: CONDITIONS, value: r[5] },
+      { key: "discrepancy", label: "Discrepancy (if any)", type: "textarea", value: r[6] },
+      { key: "status", label: "Status", type: "select", options: GRN_STATUSES, value: r[7] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[8] },
+    ],
+    write: (r, o) => {
+      r[0] = o.ref; r[1] = o.poRef; r[2] = o.desc; r[3] = o.date; r[4] = o.by;
+      r[5] = o.condition; r[6] = o.discrepancy; r[7] = o.status; r[8] = o.notes;
+    },
+  }),
+  afs: () => ({
+    title: "Annual financial statements", arr: DATA.finProc.afs, section: "fin_afs",
+    rowLabel: (r) => `FY ${r[0]} — ${r[1]}`,
+    blank: () => [String(new Date().getFullYear()), "Draft", "", "", "", "", ""],
+    fields: (r) => [
+      { key: "year", label: "Financial year (e.g. 2025/26)", type: "text", value: r[0], required: true },
+      { key: "status", label: "Status", type: "select", options: AFS_STATUSES, value: r[1] },
+      { key: "auditor", label: "Auditor", type: "text", value: r[2] },
+      { key: "approved", label: "Approved by members on", type: "date", value: r[3] },
+      { key: "dalrrd", label: "Filed with DALRRD on", type: "date", value: r[4] },
+      { key: "cipc", label: "Filed with CIPC on", type: "date", value: r[5] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.year; r[1] = o.status; r[2] = o.auditor; r[3] = o.approved; r[4] = o.dalrrd; r[5] = o.cipc; r[6] = o.notes; },
+  }),
+  memberPay: () => ({
+    title: "Members' remuneration", arr: DATA.finProc.memberPay, section: "fin_member_pay",
+    rowLabel: (r) => `${r[0]} — ${fmtR(r[3])} (${r[4] || "?"})`,
+    blank: () => ["", "", MEMBER_PAY_TYPES[0], 0, "", "", false, ""],
+    fields: (r) => [
+      { key: "name", label: "Member name", type: "text", value: r[0], required: true },
+      { key: "role", label: "Role", type: "text", value: r[1] },
+      { key: "type", label: "Payment type", type: "select", options: MEMBER_PAY_TYPES, value: r[2] },
+      { key: "amount", label: "Amount (R)", type: "number", value: r[3], min: 0 },
+      { key: "period", label: "Period (e.g. 2026 Q2)", type: "text", value: r[4] },
+      { key: "resolution", label: "Resolution ref. (see Governance → Resolutions)", type: "text", value: r[5] },
+      { key: "disclosed", label: "Disclosed at AGM", type: "select", options: ["No", "Yes"], value: r[6] ? "Yes" : "No" },
+      { key: "notes", label: "Notes", type: "textarea", value: r[7] },
+    ],
+    write: (r, o) => {
+      r[0] = o.name; r[1] = o.role; r[2] = o.type; r[3] = parseFloat(o.amount) || 0;
+      r[4] = o.period; r[5] = o.resolution; r[6] = o.disclosed === "Yes"; r[7] = o.notes;
+    },
+  }),
+  bankRecon: () => ({
+    title: "Bank reconciliations", arr: DATA.finProc.bankRecon, section: "fin_bank_recon",
+    rowLabel: (r) => `${r[0]} — ${r[5]}`,
+    blank: () => ["", 0, 0, "", "", "Draft", ""],
+    fields: (r) => [
+      { key: "period", label: "Period (e.g. March 2026)", type: "text", value: r[0], required: true },
+      { key: "bank", label: "Bank statement balance (R)", type: "number", value: r[1] },
+      { key: "book", label: "Book (ledger) balance (R)", type: "number", value: r[2] },
+      { key: "prepared", label: "Prepared by", type: "text", value: r[3] },
+      { key: "reviewed", label: "Reviewed by", type: "text", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: BANKRECON_STATUSES, value: r[5] },
+      { key: "notes", label: "Reconciling items / notes", type: "textarea", value: r[6] },
+    ],
+    write: (r, o) => { r[0] = o.period; r[1] = parseFloat(o.bank) || 0; r[2] = parseFloat(o.book) || 0; r[3] = o.prepared; r[4] = o.reviewed; r[5] = o.status; r[6] = o.notes; },
+  }),
+  close: () => ({
+    title: "Month-end close", arr: DATA.finProc.close, section: "fin_close",
+    rowLabel: (r) => `${r[0]} — ${closeCompletionPct(r)}% complete`,
+    blank: () => ["", false, false, false, false, "", "", ""],
+    fields: (r) => [
+      { key: "period", label: "Period (e.g. March 2026)", type: "text", value: r[0], required: true },
+      { key: "journals", label: "Journals posted", type: "select", options: ["No", "Yes"], value: r[1] ? "Yes" : "No" },
+      { key: "accruals", label: "Accruals done", type: "select", options: ["No", "Yes"], value: r[2] ? "Yes" : "No" },
+      { key: "bankRec", label: "Bank reconciliation done", type: "select", options: ["No", "Yes"], value: r[3] ? "Yes" : "No" },
+      { key: "reports", label: "Reports issued", type: "select", options: ["No", "Yes"], value: r[4] ? "Yes" : "No" },
+      { key: "signedBy", label: "Signed off by", type: "text", value: r[5] },
+      { key: "signedDate", label: "Sign-off date", type: "date", value: r[6] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[7] },
+    ],
+    write: (r, o) => {
+      r[0] = o.period; r[1] = o.journals === "Yes"; r[2] = o.accruals === "Yes"; r[3] = o.bankRec === "Yes"; r[4] = o.reports === "Yes";
+      r[5] = o.signedBy; r[6] = o.signedDate; r[7] = o.notes;
     },
   }),
   suppliers: () => ({
