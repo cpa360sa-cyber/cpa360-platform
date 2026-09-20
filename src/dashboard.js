@@ -2482,12 +2482,18 @@ function renderFinTransactions(host) {
 const BILL_TYPES = ["Municipality (Rates & Taxes)", "Eskom (Electricity)", "Water", "Sewerage", "Refuse", "Telecoms", "Insurance", "Other"];
 const BILL_STATUSES = ["Outstanding", "Partially Paid", "Paid", "Disputed"];
 function billOutstanding(r) { return Math.max(0, (+r[6] || 0) - (+r[7] || 0)); }
+/* Two independently-tracked evidence slots per bill, same pattern as the
+   Resolutions register's "signed resolution" / "attendance register" chips:
+   the bill itself, and — once it's been paid — the proof of payment. */
 function billDocCellHtml(refId) {
-  const n = docCount("bill", refId);
+  const doc = docCount("bill", refId);
+  const pop = docCount("bill-pop", refId);
+  const chip = (kind, n, label) => `<button type="button" class="doc-chip${n ? "" : " missing"}"
+      data-bill-${kind}="${esc(refId)}" title="${label}${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
+      aria-label="${label}${n ? "" : ", missing"}">${CLIP}${n ? `<span>${n}</span>` : ""}</button>`;
   return `<div class="row-actions doc-chips">
-    <button type="button" class="doc-chip${n ? "" : " missing"}"
-      data-bill-doc="${esc(refId)}" title="Bill document${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
-      aria-label="Bill document${n ? "" : ", missing"}">${CLIP}${n ? `<span>${n}</span>` : ""}</button>
+    ${chip("doc", doc, "Bill document")}
+    ${chip("pop", pop, "Proof of payment")}
   </div>`;
 }
 function renderFinBills(host) {
@@ -2496,18 +2502,21 @@ function renderFinBills(host) {
   const outstandingTotal = rows.reduce((s, r) => s + billOutstanding(r), 0);
   const overdue = rows.filter((r) => billOutstanding(r) > 0 && r[5] && new Date(r[5]) < now).length;
   const missingDoc = rows.filter((r) => docCount("bill", r._id) === 0).length;
+  const missingPop = rows.filter((r) => (+r[7] || 0) > 0 && docCount("bill-pop", r._id) === 0).length;
   mountRegister(host, {
     title: "Bills", importKey: "fin_bills",
-    hint: "Municipality, Eskom, water and other recurring bills — attach the scanned/PDF bill and track what's still owed. "
-      + "“Outstanding” is worked out from Amount − Paid to date, so it always matches what you've actually paid.",
+    hint: "Municipality, Eskom, water and other recurring bills — attach the scanned/PDF bill and, once it's paid, the "
+      + "proof of payment, and track what's still owed. “Outstanding” is worked out from Amount − Paid to date, so it "
+      + "always matches what you've actually paid.",
     stats: () => [
       statTile("Bills on file", rows.length, "", ""),
       statTile("Total outstanding", fmtR(outstandingTotal), "Across all bills", outstandingTotal ? "warning" : "good"),
       statTile("Overdue", overdue, "Past the due date, still owing", overdue ? "critical" : "good"),
       statTile("Missing the bill document", missingDoc, "No file attached", missingDoc ? "warning" : "good"),
+      statTile("Missing proof of payment", missingPop, "Paid something, no POP attached", missingPop ? "warning" : "good"),
     ],
     columns: [{ label: "Bill" }, { label: "Provider" }, { label: "Account no." }, { label: "Bill date" }, { label: "Due" },
-      { label: "Amount", cls: "num" }, { label: "Outstanding", cls: "num" }, { label: "Status" }, { label: "Added" }, { label: "Document" }],
+      { label: "Amount", cls: "num" }, { label: "Outstanding", cls: "num" }, { label: "Status" }, { label: "Added" }, { label: "Documents" }],
     rows: () => rows,
     empty: "No bills recorded — upload a municipality, Eskom or water bill to get started.",
     cell: (r) => {
@@ -2526,6 +2535,13 @@ function renderFinBills(host) {
         const r = rows.find((x) => String(x._id) === b.dataset.billDoc);
         attachmentsModal("bill", r._id, "Bill — " + (r[2] || r[1]), {
           accept: "application/pdf,.pdf,image/*", label: "Upload the bill (PDF or photo)",
+          match: /\.(pdf|jpe?g|png|heic|webp)$|^(application\/pdf|image\/)/i, matchMsg: "Please choose a PDF or an image.",
+        });
+      }));
+      h.querySelectorAll("[data-bill-pop]").forEach((b) => (b.onclick = () => {
+        const r = rows.find((x) => String(x._id) === b.dataset.billPop);
+        attachmentsModal("bill-pop", r._id, "Proof of payment — " + (r[2] || r[1]), {
+          accept: "application/pdf,.pdf,image/*", label: "Upload proof of payment (PDF or photo)",
           match: /\.(pdf|jpe?g|png|heic|webp)$|^(application\/pdf|image\/)/i, matchMsg: "Please choose a PDF or an image.",
         });
       }));
