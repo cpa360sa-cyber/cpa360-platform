@@ -173,7 +173,7 @@ function renderShell() {
       <div class="nav-scrim" id="nav-scrim"></div>
       <aside class="sidebar">
         <div class="sb-brand">
-          <span class="sb-mark" aria-hidden="true">C</span>
+          <span class="sb-mark"><img src="./assets/logo-cpa360.webp" alt="CPA360"></span>
           <span class="sb-brand-txt"><b>CPA360&trade;</b><span>A GAD Foundation Programme</span></span>
         </div>
         <nav class="sb-nav" id="nav" aria-label="Sections">${state.active ? navGroupsHtml() : ""}</nav>

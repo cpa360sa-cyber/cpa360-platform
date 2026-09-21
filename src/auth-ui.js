@@ -10,7 +10,7 @@ const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (m) =>
 
 const BRAND = `
   <div class="auth-brand">
-    <div class="auth-mark">C</div>
+    <div class="auth-mark"><img src="./assets/logo-cpa360.webp" alt="CPA360"></div>
     <div><b>CPA360&trade;</b><span>Institutional Operating System</span></div>
   </div>`;
 
@@ -37,7 +37,7 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
     <div class="auth-split">
       <aside class="auth-hero">
         <div class="ah-brand">
-          <div class="ah-mark">C</div>
+          <div class="ah-mark"><img src="./assets/logo-cpa360.webp" alt="CPA360"></div>
           <div><b>CPA360&trade;</b><span>A GAD Foundation Programme</span></div>
         </div>
         <h2>Your CPA Institutional Operating System.</h2>
