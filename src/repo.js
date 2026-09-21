@@ -4,7 +4,7 @@
    renderers expect, writes one section back at a time, and exposes a realtime
    subscription. RLS does the tenant + role enforcement; this file never checks.
    ============================================================================ */
-import { supabase } from "./supabase.js";
+import { supabase, FUNCTIONS_URL } from "./supabase.js";
 import { orgLogoDataUrl } from "./orgs.js";
 
 const num = (v) => (v == null || v === "" ? 0 : Number(v));
@@ -201,7 +201,10 @@ export async function loadOrg(orgId) {
       allocations: (allocations || []).map((r) => tagArr(
         [r.beneficiary, r.portion || "", r.purpose || "", num(r.area_ha), r.allocated_on || "", r.agreement_ref || "", r.status], r)),
       movable: (movable || []).map((r) => tagArr([r.asset_class, num(r.item_count), r.condition || ""], r)),
-      permits: (permits || []).map((r) => tagArr([r.name, r.valid_until || "", r.status], r)),
+      permits: (permits || []).map((r) => tagArr([r.name, r.valid_until || "", r.status,
+        r.commodity || "Other", r.applicant_name || "", r.applicant_email || "", r.site_ref || "",
+        r.species || "", r.quantity || "", r.purpose || "", r.workflow_stage || "Not Started",
+        r.permit_number || "", r.decision_notes || "", r.email_sent_at || ""], r)),
       infrastructure: (infra || []).map((r) => tagArr(
         [r.name, r.itype, r.location || "", num(r.install_year), num(r.value), r.condition, r.status, r.notes || ""], r)),
       maintenance: (maint || []).map((r) => tagArr(
@@ -340,6 +343,30 @@ export async function docPreviewUrls(paths) {
   if (error) throw error;
   (data || []).forEach((d) => { if (d.signedUrl && !d.error) map.set(d.path, d.signedUrl); });
   return map;
+}
+
+/* ---------------------------------------------------------- permit email --- */
+/* Emails a generated document (the issued permit) to an applicant via the
+   send-permit-email Edge Function. Throws with the function's own error
+   message on failure — including the clear "not configured yet" message
+   when the project has no RESEND_API_KEY secret set, so the caller can
+   surface that directly rather than pretending the email went out. */
+export async function sendPermitEmail({ orgId, to, subject, html, filename, fileBase64 }) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("your session expired — sign in again");
+  const res = await fetch(`${FUNCTIONS_URL}/send-permit-email`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ org_id: orgId, to, subject, html, filename, file_base64: fileBase64 }),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || `send failed (${res.status})`);
+  return out;
+}
+
+export async function markPermitEmailed(permitId) {
+  const { error } = await supabase.from("permits").update({ email_sent_at: new Date().toISOString() }).eq("id", permitId);
+  if (error) throw error;
 }
 
 export async function deleteDoc(doc) {
@@ -554,7 +581,11 @@ export async function saveSection(orgId, section, D) {
       }));
     case "permits":
       return reconcile("permits", orgId, D.assets.permits, (r, i) => ({
-        name: r[0], valid_until: nn(r[1]), status: r[2], sort: i,
+        name: r[0], valid_until: nn(r[1]), status: r[2],
+        commodity: r[3] || "Other", applicant_name: nn(r[4]), applicant_email: nn(r[5]), site_ref: nn(r[6]),
+        species: nn(r[7]), quantity: nn(r[8]), purpose: nn(r[9]), workflow_stage: r[10] || "Not Started",
+        permit_number: nn(r[11]), decision_notes: nn(r[12]),
+        sort: i,
       }));
     case "infrastructure":
       return reconcile("infrastructure", orgId, D.assets.infrastructure, (r, i) => ({

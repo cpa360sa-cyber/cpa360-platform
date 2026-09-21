@@ -164,6 +164,8 @@
 .cpa-dash .btn.primary:hover{ color:#fff; filter:brightness(1.08); }
 .cpa-dash .btn.danger{ background:var(--status-critical); border-color:var(--status-critical); color:#fff; }
 .cpa-dash .btn.active{ background:var(--brand-tint); border-color:var(--brand); color:var(--brand); }
+.cpa-dash .btn.good{ background:var(--status-good); border-color:var(--status-good); color:#fff; }
+.cpa-dash .btn.small{ padding:4px 10px; font-size:11px; }
 .cpa-dash .card-head .btn{ padding:4px 10px; font-size:11px; }
 .cpa-dash th.chk, .cpa-dash td.chk{ width:32px; text-align:center; padding-left:10px; padding-right:4px; }
 .cpa-dash th.chk input, .cpa-dash td.chk input{ width:15px; height:15px; accent-color:var(--brand-2); cursor:pointer; }
