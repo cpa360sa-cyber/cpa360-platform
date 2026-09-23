@@ -12,6 +12,7 @@ import * as dash from "./dashboard.js";
 import { renderToolsLibrary } from "./tools-library.js";
 import { renderIntegrations } from "./integrations.js";
 import { renderLeadsAdmin } from "./leads-admin.js";
+import { renderStageReviews } from "./stage-reviews-admin.js";
 
 const root = document.getElementById("root");
 const ENV = window.__CPA360_ENV || {};
@@ -101,6 +102,7 @@ const NAV = [
     { id: "brand", label: "Brand Box", icon: "palette", app: true, admin: true },
     { id: "integrations", label: "Integrations", icon: "plug", app: true },
     { id: "leads", label: "Leads Inbox", icon: "inbox", app: true, platformAdmin: true },
+    { id: "stage-reviews", label: "Stage Reviews", icon: "check", app: true, platformAdmin: true },
     { id: "settings", label: "Settings", icon: "cog", app: true },
   ]},
 ];
@@ -516,6 +518,7 @@ function route() {
   if (h.startsWith("#/tools")) return { name: "tools" };
   if (h.startsWith("#/integrations")) return { name: "integrations" };
   if (h.startsWith("#/leads")) return { name: "leads" };
+  if (h.startsWith("#/stage-reviews")) return { name: "stage-reviews" };
   if (h.startsWith("#/new")) return { name: "new" };
   if (h.startsWith("#/v/")) {
     const parts = h.slice(4).split("/");
@@ -561,6 +564,13 @@ async function renderView() {
     setHeader("Manage", "Leads Inbox"); markActiveNav("leads");
     if (state.active) refreshChrome("leads");
     return renderLeadsAdmin(view);
+  }
+
+  if (r.name === "stage-reviews") {
+    if (!state.isPlatformAdmin) { location.hash = state.active ? "#/v/exec" : "#/"; return; }
+    setHeader("Manage", "Stage Reviews"); markActiveNav("stage-reviews");
+    if (state.active) refreshChrome("stage-reviews");
+    return renderStageReviews(view);
   }
 
   if (!state.active) return renderWelcome(view);

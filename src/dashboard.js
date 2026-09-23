@@ -227,7 +227,7 @@ function fieldHtml(f) {
   return `<div class="field"><label for="fld-${f.key}">${esc(f.label)}</label>
     <input id="fld-${f.key}" name="${f.key}" type="${f.type || "text"}" value="${v}"${f.type === "number" ? ' inputmode="numeric"' : ""}></div>`;
 }
-function openModal(title, fields, onSave) {
+function openModal(title, fields, onSave, saveLabel) {
   const scrim = document.createElement("div");
   scrim.className = "modal-scrim cpa-dash";
   scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -235,7 +235,7 @@ function openModal(title, fields, onSave) {
     <div class="modal-body">${fields.map(fieldHtml).join("")}</div>
     <div class="modal-foot">
       <button class="btn" data-act="cancel" type="button">Cancel</button>
-      <button class="btn primary" data-act="save" type="button">Save</button>
+      <button class="btn primary" data-act="save" type="button">${esc(saveLabel || "Save")}</button>
     </div></div>`;
   document.body.appendChild(scrim);
   const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
@@ -3363,6 +3363,7 @@ function renderProjFunding(host) {
     return { name: r[0], funder: r[7], readiness: +r[9] || 0, met, of: checks.length, checks };
   });
   const avg = rows.length ? Math.round(rows.reduce((s, r) => s + r.readiness, 0) / rows.length) : 0;
+  const packUnlocked = stageUnlocked(7);
   host.innerHTML = `
     <div class="grid grid-4">
       ${statTile("Portfolio readiness", avg + "%", "Average across projects", avg >= 60 ? "good" : avg >= 35 ? "warning" : "critical")}
@@ -3371,7 +3372,11 @@ function renderProjFunding(host) {
       ${statTile("Co-funding", fmtR(p.reduce((s, r) => s + (+r[8] || 0), 0)), "Secured across the pipeline", "")}
     </div>
     <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Funding readiness by project</h3>
-      <span class="hint">Computed from the project's business case, budget, funder and co-funding fields.</span></div></div>
+      <span class="hint">Computed from the project's business case, budget, funder and co-funding fields.</span></div>
+      ${packUnlocked
+        ? `<button class="btn primary" id="investor-pack-btn" type="button">Investor Readiness Pack (Word)</button>`
+        : `<button class="btn" type="button" disabled title="Unlocks at Stage 7 — Scale, once GAD Foundation confirms this CPA has reached it.">🔒 Investor Readiness Pack</button>`}
+    </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Project</th><th>Funder</th><th class="num">Checks met</th><th style="min-width:180px;">Readiness</th></tr></thead>
       <tbody>${rows.length ? rows.map((r) => {
@@ -3382,6 +3387,56 @@ function renderProjFunding(host) {
           <span class="hint">${r.checks.filter((c) => !c[1]).map((c) => c[0]).join(", ") || "all met"}</span></td></tr>`;
       }).join("") : emptyRow(4, "No projects yet.")}</tbody>
     </table></div>`;
+  const ipb = host.querySelector("#investor-pack-btn");
+  if (ipb) ipb.onclick = downloadInvestorPack;
+}
+/* Investor Readiness Pack — a curated, funder-facing summary. Gated to Stage 7
+   (Scale) per the Journey's own definition of that stage ("a bankable business
+   plan, investment-grade governance and finance, a funding pipeline"); the
+   button in renderProjFunding() only renders when stageUnlocked(7). */
+function downloadInvestorPack() {
+  if (!stageUnlocked(7)) { toast("This unlocks at Stage 7 — Scale.", true); return; }
+  const total = scoreTotal();
+  const band = maturityBand(total);
+  const exco = (DATA.committee || []).filter((r) => r[3] === "EXCO" || !r[3]);
+  const bene = DATA.beneficiary || {};
+  const revenue = (DATA.commercial?.revenue || []).filter((r) => r[4] === "Active");
+  const recurring = revenue.reduce((s, r) => s + (+r[2] || 0), 0);
+  const agreements = (DATA.commercial?.markets || []).filter((r) => ["MOU", "Signed offtake"].includes(r[5]));
+  const pipeline = DATA.projects || [];
+  const body = `
+    <h2>Institutional Snapshot</h2>
+    <table>
+      <tr><td style="width:36%;font-weight:600;">CPA</td><td>${esc(DATA.cpa.name)}</td></tr>
+      <tr><td style="font-weight:600;">Registration</td><td>${esc(DATA.cpa.reg || "—")}</td></tr>
+      <tr><td style="font-weight:600;">Region</td><td>${esc(DATA.cpa.region || "—")}</td></tr>
+      <tr><td style="font-weight:600;">Land extent</td><td>${esc(DATA.cpa.landExtent || "—")} ha across ${esc(DATA.cpa.portions || "—")} portion(s)</td></tr>
+      <tr><td style="font-weight:600;">CPA360&trade; Institutional Score</td><td><b>${total} / 100</b> — ${esc(band.name)}</td></tr>
+      <tr><td style="font-weight:600;">CPA360&trade; Journey stage</td><td>Stage 7 — Scale (GAD Foundation-confirmed)</td></tr>
+    </table>
+    <h2>Governance</h2>
+    <table><tr><td style="width:36%;font-weight:600;">EXCO / office bearers</td><td>${exco.length} on record</td></tr>
+      <tr><td style="font-weight:600;">Governance domain score</td><td>${domainScore(DATA.score.domains.find((d) => d.name === "Governance") || { achieved: 0 })} / 15</td></tr></table>
+    <h2>Beneficiaries</h2>
+    <table><tr><td style="width:36%;font-weight:600;">Verified beneficiaries</td><td>${bene.verified || 0} of ${bene.total || 0}</td></tr>
+      <tr><td style="font-weight:600;">Households</td><td>${bene.households || 0}</td></tr></table>
+    <h2>Finance</h2>
+    <table><tr><td style="width:36%;font-weight:600;">Finance domain score</td><td>${domainScore(DATA.score.domains.find((d) => d.name === "Finance") || { achieved: 0 })} / 15</td></tr></table>
+    <h2>Commercialisation &amp; Revenue</h2>
+    <table>
+      <tr><td style="width:36%;font-weight:600;">Active recurring revenue</td><td>${fmtR(recurring)} / year</td></tr>
+      <tr><td style="font-weight:600;">Signed market agreements</td><td>${agreements.length}</td></tr>
+    </table>
+    <h2>Funding Pipeline</h2>
+    <table>
+      <tr><th>Project</th><th>Stage</th><th>Budget</th><th>Funder</th><th>Readiness</th></tr>
+      ${pipeline.length ? pipeline.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1] || "")}</td><td>${fmtR(r[2] || 0)}</td><td>${esc(r[7] || "—")}</td><td>${esc(r[9] || 0)}%</td></tr>`).join("")
+        : `<tr><td colspan="5">No projects on record.</td></tr>`}
+    </table>
+    <p class="warn">This pack summarises institutional data recorded on CPA360&trade; as at ${new Date().toLocaleDateString("en-ZA", { day: "2-digit", month: "long", year: "numeric" })}.
+      It is evidence of institutional readiness, not a guarantee of funding, financial return, or credit approval.</p>`;
+  const html = permitDocShell("Investor Readiness Pack", DATA.cpa.name || "", body);
+  downloadFile(`Investor-Readiness-Pack-${(DATA.cpa.name || "CPA").replace(/[^\w\- ]+/g, "_")}.doc`, html, "application/msword");
 }
 const MARKET_STATUSES = ["Exploring", "Negotiating", "Active", "Lapsed"];
 const AGREEMENT_STATES = ["None", "Verbal", "MOU", "Signed offtake"];
@@ -3643,9 +3698,74 @@ async function renderExecDocs() {
   } catch (e) { el.innerHTML = `<li class="muted">Couldn't load documents.</li>`; }
 }
 
-/* ============ CPA360 Journey ============ */
+/* ============ CPA360 Journey — stage readiness & gating ============
+   Advancing a stage used to be a free-text dropdown any member could set —
+   fine while the stage was purely descriptive, unsafe once it also unlocks
+   features (a CPA could just declare itself "Stage 7"). Now the client only
+   ever *proposes*: it evaluates STAGE_READY[nextStage] against the CPA's own
+   live data and, when met, calls flag_stage_review() (server-side, checked
+   against the CPA's actual current gate — see migration 0037). Only a GAD
+   Foundation reviewer approving that flag (decide_stage_review(), the
+   Stage Reviews screen) moves `gates`/`orgs.current_gate`. */
+function pctDomain(name) {
+  const d = DATA.score.domains.find((x) => x.name === name);
+  if (!d || !d.weight) return 0;
+  return domainScore(d) / d.weight;
+}
+const STAGE_READY = {
+  2: () => {
+    const identity = !!(DATA.cpa.name && DATA.cpa.reg);
+    const bene = (DATA.beneficiaryCentre?.register || []).length;
+    const scored = scoreTotal() > 0;
+    return { ready: identity && bene > 0 && scored,
+      detail: `Institutional identity captured: ${identity ? "yes" : "no"}; beneficiary records on file: ${bene}; baseline score computed: ${scored ? "yes" : "no"}.` };
+  },
+  3: () => {
+    const gov = pctDomain("Governance"), comp = pctDomain("Compliance");
+    const bank = (DATA.finProc?.bankRecon || []).length > 0;
+    return { ready: gov >= 0.6 && comp >= 0.5 && bank,
+      detail: `Governance ${Math.round(gov * 100)}% (need 60%); Compliance ${Math.round(comp * 100)}% (need 50%); bank reconciliation on record: ${bank ? "yes" : "no"}.` };
+  },
+  4: () => {
+    const admin = pctDomain("Administration"), fin = pctDomain("Finance");
+    const overdue = (DATA.actions || []).filter((a) => a[5] === "Overdue").length;
+    return { ready: admin >= 0.65 && fin >= 0.65 && overdue <= 2,
+      detail: `Administration ${Math.round(admin * 100)}% (need 65%); Finance ${Math.round(fin * 100)}% (need 65%); overdue actions: ${overdue} (need ≤ 2).` };
+  },
+  5: () => {
+    const admin = pctDomain("Administration");
+    const afsOk = (DATA.finProc?.afs || []).some((r) => ["Audited", "Adopted", "Filed"].includes(r[1]));
+    const total = scoreTotal();
+    return { ready: admin >= 0.8 && afsOk && total >= 71,
+      detail: `Administration ${Math.round(admin * 100)}% (need 80%); an adopted/audited/filed AFS on record: ${afsOk ? "yes" : "no"}; total score ${total} (need ≥ 71).` };
+  },
+  6: () => {
+    const prod = pctDomain("Productivity");
+    return { ready: prod >= 0.6, detail: `Productivity ${Math.round(prod * 100)}% (need 60%).` };
+  },
+  7: () => {
+    const comm = pctDomain("Commercialisation"), inv = pctDomain("Investment readiness");
+    return { ready: comm >= 0.6 && inv >= 0.5,
+      detail: `Commercialisation ${Math.round(comm * 100)}% (need 60%); Investment readiness ${Math.round(inv * 100)}% (need 50%).` };
+  },
+};
+function currentStageN() { return (DATA.gates.find((g) => g.state === "current") || DATA.gates[0] || { n: 1 }).n; }
+function stageUnlocked(n) { return currentStageN() >= n; }
+function pendingStageReview() { return (DATA.stageReviews || []).find((r) => r.status === "pending"); }
+async function maybeFlagStageReadiness() {
+  if (!DATA || !DATA.gates.length) return;
+  const cur = currentStageN();
+  if (cur >= 7) return;
+  const toStage = cur + 1;
+  const rule = STAGE_READY[toStage];
+  if (!rule) return;
+  const { ready, detail } = rule();
+  if (!ready) return;
+  if ((DATA.stageReviews || []).some((r) => r.to_stage === toStage && r.status === "pending")) return;
+  await repo.flagStageReview(orgId, toStage, { detail, at: new Date().toISOString() });
+}
 function renderJourney() {
-  const curN = (DATA.gates.find((g) => g.state === "current") || { n: 1 }).n;
+  const curN = currentStageN();
   $("journey-list").innerHTML = JOURNEY.map((s) => {
     const g = DATA.gates.find((x) => x.n === s.n) || { state: "upcoming", name: s.key };
     const cls = g.state === "done" ? "done" : g.state === "current" ? "current" : "";
@@ -3659,25 +3779,48 @@ function renderJourney() {
     </div>`;
   }).join("");
   const cur = JOURNEY.find((s) => s.n === curN) || JOURNEY[0];
+  const pending = pendingStageReview();
+  const lastHeld = !pending && [...(DATA.stageReviews || [])].reverse().find((r) => r.status === "held");
   $("journey-note").innerHTML =
-    `This CPA is at <strong>Stage ${curN} — ${esc(cur.key)}</strong>. ` +
-    (curN < 7 ? `Next: <strong>${esc(JOURNEY[curN].key)}</strong>.` : `The final stage — focus on sustaining investment readiness.`);
+    `This CPA is at <strong>Stage ${curN} — ${esc(cur.key)}</strong>, confirmed by GAD Foundation. ` +
+    (curN < 7 ? `Next: <strong>${esc(JOURNEY[curN].key)}</strong>.` : `The final stage — focus on sustaining investment readiness.`) +
+    (pending ? `<br><span class="pill brand" style="margin-top:6px;display:inline-block;">Flagged for review — Stage ${pending.to_stage} (${esc(JOURNEY.find((s) => s.n === pending.to_stage)?.key || "")})</span> A GAD Foundation reviewer will confirm before anything unlocks.` :
+     lastHeld ? `<br><span class="pill" style="margin-top:6px;display:inline-block;">Last review (Stage ${lastHeld.to_stage}) was held${lastHeld.decision_note ? ": " + esc(lastHeld.decision_note) : ""}.</span>` : "");
 }
-function editJourney() {
-  const cur = DATA.gates.find((g) => g.state === "current") || DATA.gates[0];
-  openModal("Set current stage", [
-    { key: "stage", label: "Current stage", type: "select",
-      options: JOURNEY.map((s) => `${s.n} — ${s.key}`),
-      value: `${cur.n} — ${(JOURNEY.find((s) => s.n === cur.n) || {}).key || cur.name}` },
-  ], (out) => {
-    const n = parseInt(out.stage);
-    DATA.gates.forEach((g) => {
-      const j = JOURNEY.find((s) => s.n === g.n);
-      if (j) g.name = j.key;
-      g.state = g.n < n ? "done" : g.n === n ? "current" : "upcoming";
-    });
-    commit("gates");
-  });
+function checkStageReadiness() {
+  const cur = currentStageN();
+  if (cur >= 7) {
+    openModal("Stage readiness", [{ key: "i", label: "Status", type: "info", value: "This CPA is already at the final stage (Scale)." }], () => {}, "OK");
+    return;
+  }
+  const toStage = cur + 1;
+  const next = JOURNEY.find((s) => s.n === toStage);
+  const pending = pendingStageReview();
+  const { ready, detail } = STAGE_READY[toStage] ? STAGE_READY[toStage]() : { ready: false, detail: "No readiness rule defined." };
+  const fields = [
+    { key: "i1", label: `Readiness for Stage ${toStage} — ${next.key}`, type: "info", value: detail },
+  ];
+  if (pending) {
+    fields.push({ key: "i2", label: "Status", type: "info", value: `Already flagged for GAD Foundation review on ${new Date(pending.flagged_at).toLocaleDateString("en-ZA")}.` });
+  } else if (ready && CAN_EDIT) {
+    fields.push({ key: "i2", label: "Status", type: "info", value: "Criteria met — flagging this CPA for GAD Foundation review now." });
+  } else if (ready) {
+    fields.push({ key: "i2", label: "Status", type: "info", value: "Criteria met — ask an editor on this CPA to flag it for GAD Foundation review." });
+  } else {
+    fields.push({ key: "i2", label: "Status", type: "info", value: "Not yet ready — keep building the registers above and this will flag automatically." });
+  }
+  openModal(`Check readiness — Stage ${toStage}`, fields, () => {
+    if (ready && !pending && CAN_EDIT) {
+      maybeFlagStageReadiness()
+        .then(() => {
+          DATA.stageReviews = DATA.stageReviews || [];
+          DATA.stageReviews.push({ from_stage: cur, to_stage: toStage, status: "pending", flagged_detail: { detail }, flagged_at: new Date().toISOString() });
+          toast(`Flagged for GAD Foundation review — Stage ${toStage}.`);
+          renderCurrent();
+        })
+        .catch((e) => toast("Couldn't flag for review: " + (e?.message || e), true));
+    }
+  }, "OK");
 }
 
 /* ============ Institutional Performance — auto-scored criteria ============
@@ -5228,7 +5371,7 @@ const HR_EDITORS = {
 };
 
 const BUTTONS = {
-  "edit-identity-btn": editIdentity, "edit-journey-btn": editJourney,
+  "edit-identity-btn": editIdentity, "edit-journey-btn": checkStageReadiness,
   "edit-committee-btn": editCommittee, "add-action-btn": () => editAction(null), "edit-masterfile-btn": editMasterFile,
   "edit-beneficiary-btn": editBeneficiary, "edit-land-btn": editLand, "edit-movable-btn": editMovable,
   "edit-leases-btn": editLeases, "edit-allocations-btn": editAllocations,
@@ -5292,6 +5435,7 @@ async function commit(section) {
   if (section !== "score") {
     try { if (syncAutoScore()) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
   }
+  maybeFlagStageReadiness().catch(() => {});
   suppressRemoteUntil = Date.now() + 1500;
   renderCurrent();
   if (onChange) onChange();
@@ -5304,6 +5448,7 @@ export async function initDashboard({ orgId: oid, role, preload, noRealtime }) {
   CAN_EDIT = role !== "viewer";
   DATA = preload || (await repo.loadOrg(orgId));
   try { if (syncAutoScore() && CAN_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
+  if (CAN_EDIT) maybeFlagStageReadiness().catch(() => {});
   if (channel) repo.unsubscribe(channel);
   if (noRealtime) { channel = null; return; }
   channel = repo.subscribe(orgId, async () => {
@@ -5312,6 +5457,7 @@ export async function initDashboard({ orgId: oid, role, preload, noRealtime }) {
     try {
       DATA = await repo.loadOrg(orgId);
       try { if (syncAutoScore() && CAN_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
+      if (CAN_EDIT) maybeFlagStageReadiness().catch(() => {});
       renderCurrent();
       if (onChange) onChange();
     } catch (e) {}
@@ -5510,7 +5656,7 @@ const VIEW_HTML = `
   <section class="view hidden" id="view-journey">
     <div class="card" style="margin-bottom:16px;">
       <div class="card-head"><h3>Where this CPA is on the journey</h3>
-        <button class="btn" id="edit-journey-btn" type="button">Set current stage</button></div>
+        <button class="btn" id="edit-journey-btn" type="button">Check readiness</button></div>
       <p class="hint" id="journey-note" style="margin:2px 0 0;"></p>
     </div>
     <div class="journey" id="journey-list"></div>

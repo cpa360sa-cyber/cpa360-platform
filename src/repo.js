@@ -41,6 +41,7 @@ export async function loadOrg(orgId) {
   const results = await Promise.all([
     supabase.from("orgs").select("*").eq("id", orgId).single(),
     sel("gates", "n"),
+    sel("stage_reviews", "flagged_at"),
     sel("score_domains", "sort"),
     sel("score_criteria", "sort"),
     sel("committee", "sort"),
@@ -97,7 +98,7 @@ export async function loadOrg(orgId) {
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
-  const [org, gates, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
+  const [org, gates, stageReviews, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
          govCal, adCorr, adDoa, adPol, adRec, hrStaff, hrPos, hrPay,
          actions, mf, bene, beneReg, households, succession, beneDisputes,
          land, leases,
@@ -128,6 +129,10 @@ export async function loadOrg(orgId) {
       brandFooter: org.brand_footer || "", logoDataUrl,
     },
     gates: (gates || []).map((g) => tagObj({ n: g.n, name: g.name, state: g.state, updated_at: g.updated_at }, g)),
+    stageReviews: (stageReviews || []).map((r) => tagObj({
+      from_stage: r.from_stage, to_stage: r.to_stage, status: r.status, flagged_detail: r.flagged_detail,
+      flagged_at: r.flagged_at, decided_at: r.decided_at, decision_note: r.decision_note,
+    }, r)),
     score: {
       domains: (domains || []).map((d) => tagObj(
         { name: d.name, weight: num(d.weight), achieved: num(d.achieved), detailed: !!d.detailed }, d)),
@@ -369,6 +374,23 @@ export async function markPermitEmailed(permitId) {
   if (error) throw error;
 }
 
+/* ---------------------------------------------------------- stage gating --- */
+export async function flagStageReview(orgId, toStage, detail) {
+  const { error } = await supabase.rpc("flag_stage_review", { p_org: orgId, p_to_stage: toStage, p_detail: detail || {} });
+  if (error) throw error;
+}
+
+export async function listStageReviews(status = "pending") {
+  const { data, error } = await supabase.rpc("list_stage_reviews", { p_status: status });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function decideStageReview(reviewId, decision, note) {
+  const { error } = await supabase.rpc("decide_stage_review", { p_review_id: reviewId, p_decision: decision, p_note: note || null });
+  if (error) throw error;
+}
+
 export async function deleteDoc(doc) {
   const { error } = await supabase.from("documents").delete().eq("id", doc.id);
   if (error) throw error;
@@ -418,17 +440,6 @@ export async function saveSection(orgId, section, D) {
         members_count: num(D.cpa.members),
       }).eq("id", orgId);
       if (error) throw error;
-      return;
-    }
-
-    case "gates": {
-      for (const g of D.gates) {
-        const { error } = await supabase.from("gates")
-          .update({ name: g.name, state: g.state }).eq("org_id", orgId).eq("n", g.n);
-        if (error) throw error;
-      }
-      const cur = D.gates.find((g) => g.state === "current");
-      if (cur) await supabase.from("orgs").update({ current_gate: cur.n }).eq("id", orgId);
       return;
     }
 
