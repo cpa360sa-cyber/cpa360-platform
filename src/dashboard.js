@@ -1330,11 +1330,12 @@ const GOV_TABS = [
   { id: "agm", label: "AGM / SGM" },
   { id: "coi", label: "Conflict of Interest" },
   { id: "calendar", label: "Governance Calendar" },
+  { id: "reports", label: "Gov. Reports" },
 ];
 const GOV_PANELS = {
   identity: renderGovIdentity, exco: renderGovExco, committees: renderGovCommittees,
   resolutions: renderGovResolutions, meetings: renderGovMeetings, agm: renderGovAgm,
-  coi: renderGovCoi, calendar: renderGovCalendar,
+  coi: renderGovCoi, calendar: renderGovCalendar, reports: renderGovReports,
 };
 function renderProfile() {
   const strip = $("governance-subtabs");
@@ -1550,6 +1551,512 @@ function renderGovCalendar(host) {
     },
     manage: () => listEditor(GOV_EDITORS.calendar()),
   });
+}
+
+/* ============ Government Reports (Governance → Gov. Reports) ============
+   What a CPA owes the Department — the CPA Office / Registrar of Communal
+   Property Associations (Dept. of Land Reform and Rural Development). Each row
+   is one obligation instance (e.g. "Annual financial statements, FY2025/26");
+   the catalogue below holds the legal basis, what goes in the pack, and an
+   auto-scan that checks the CPA's own registers for readiness. Annual returns
+   fall due two months after the AGM (CPA Act regulations 8, 9 & 11 as applied
+   by the Department). This is guidance, not legal advice — the tab says so and
+   points users to the CPA Office for prescribed forms.
+   "Collaborate" never calls a meeting API (no secrets needed): it deep-links
+   into Teams / Google Calendar / Zoom pre-filled, and also offers an .ics file
+   and an e-mailed invitation, then stores the join link on the report. */
+Object.assign(STATUS_TONE, { "In Preparation": "warning", "Ready to Submit": "good", "Submitted": "good", "Acknowledged": "good", "Queried by Dept": "critical" });
+const GOV_REPORT_STATUSES = ["Not Started", "In Preparation", "Ready to Submit", "Submitted", "Acknowledged", "Queried by Dept"];
+const GOV_REPORT_VIA = ["Email", "Departmental portal", "Hand delivery", "Courier / post", "Meeting"];
+const GOV_REPORT_CATS = ["Statutory", "Registrar-directed", "Programme"];
+const GOV_PLATFORMS = ["Microsoft Teams", "Zoom", "Google Meet"];
+const GOV_DEPT = "Department of Land Reform and Rural Development";
+const GOV_DEPT_SITE = "https://www.dlrrd.gov.za";
+const GOV_DONE = ["Submitted", "Acknowledged"];
+
+const pad2 = (n) => String(n).padStart(2, "0");
+const isoDay = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtDay = (s) => (s ? new Date(String(s).slice(0, 10) + "T00:00:00").toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" }) : "");
+function addMonthsISO(s, n) {
+  const d = new Date(s + "T00:00:00");
+  if (isNaN(d)) return "";
+  const day = d.getDate();
+  d.setDate(1); d.setMonth(d.getMonth() + n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return isoDay(d);
+}
+function isoOffset(d) {
+  const off = -d.getTimezoneOffset(), a = Math.abs(off);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00${off >= 0 ? "+" : "-"}${pad2(Math.floor(a / 60))}:${pad2(a % 60)}`;
+}
+const utcStamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+function latestAgm() {
+  return (DATA.governance.meetings || []).filter((r) => r[0] === "AGM" && r[1]).sort((a, b) => String(b[1]).localeCompare(String(a[1])))[0] || null;
+}
+
+const GOV_REPORT_TYPES = [
+  { type: "agm_minutes", title: "AGM notice & minutes", category: "Statutory", annual: true,
+    basis: "CPA Act regulations (Regs 8, 9 & 11): hold at least one general meeting a year and furnish the Director-General with the required information and documents within two months of the AGM.",
+    enclosures: ["Notice of the AGM and proof members were notified", "Signed (or adopted) minutes of the AGM", "Attendance register", "Resolutions passed at the AGM"],
+    ready: () => {
+      const a = latestAgm();
+      if (!a) return { ratio: 0, gaps: ["No AGM recorded — add it under Governance → AGM / SGM"] };
+      const gaps = [];
+      if (a[5] === "Draft") gaps.push("AGM minutes are still a draft — get them adopted and signed");
+      if (a[5] === "Pending") gaps.push("AGM minutes have not been written up yet");
+      const att = docCount("meeting-attendance", a._id) > 0;
+      if (!att) gaps.push("Scanned attendance register not attached to the AGM record");
+      const base = a[5] === "Adopted" ? 1 : a[5] === "Draft" ? 0.6 : 0.2;
+      return { ratio: base * 0.85 + (att ? 0.15 : 0), gaps };
+    } },
+  { type: "committee_return", title: "Governing body (committee) return", category: "Statutory", annual: true,
+    basis: "Names — and, where readily available, ID numbers and addresses — of the governing body members elected at the AGM must reach the Director-General within two months of that AGM.",
+    enclosures: ["List of governing body members elected at the AGM (name, ID number, address, position)", "Extract of the AGM minutes recording the election", "Certified ID copies where available"],
+    ready: () => {
+      const c = (DATA.committee || []).filter((r) => (r[1] || "").trim());
+      if (!c.length) return { ratio: 0, gaps: ["No office bearers recorded — add them under Governance → EXCO & Office Bearers"] };
+      const missing = [["Chairperson", /chair/i], ["Secretary", /secretar/i], ["Treasurer", /treasur/i]].filter(([, re]) => !c.some((r) => re.test(r[0] || ""))).map(([n]) => n);
+      return { ratio: 1 - missing.length / 3, gaps: missing.map((n) => `No ${n} recorded`),
+        note: "The register holds names and roles — add each member's ID number and address to the return itself." };
+    } },
+  { type: "afs", title: "Annual financial statements (independently verified)", category: "Statutory", annual: true,
+    basis: "Annual balance sheet / financial statements, independently verified, must be furnished to the Director-General within two months of the AGM (CPA Act regulations).",
+    enclosures: ["Annual financial statements for the year", "Independent auditor's / reviewer's report", "Members' resolution adopting the statements"],
+    ready: () => {
+      const afs = DATA.finProc?.afs || [];
+      if (!afs.length) return { ratio: 0, gaps: ["No financial year recorded — add one under Finance → Annual Financial Statements"] };
+      const latest = [...afs].sort((a, b) => String(b[0]).localeCompare(String(a[0])))[0];
+      const by = { "Draft": 0.3, "Under Audit": 0.5, "Audited": 0.85, "Adopted": 0.95, "Filed": 1 };
+      const gaps = [];
+      if (!["Audited", "Adopted", "Filed"].includes(latest[1])) gaps.push(`FY ${latest[0]} is "${latest[1]}" — the Department expects independently verified statements`);
+      if (latest[1] !== "Adopted" && latest[1] !== "Filed") gaps.push("Statements not yet adopted by the members");
+      return { ratio: by[latest[1]] ?? 0, gaps };
+    } },
+  { type: "land_tx", title: "Land transactions report", category: "Statutory", annual: true,
+    basis: "CPAs report on land transactions each year (CPA Act regulations). File a nil return if there were none.",
+    enclosures: ["Schedule of land transactions in the year (leases, allocations, disposals, encumbrances)", "Copies of lease / allocation agreements concluded", "Members' resolutions approving any disposal"],
+    ready: () => {
+      const n = (DATA.assets.leases || []).length, m = (DATA.assets.allocations || []).length;
+      if (n + m) return { ratio: 1, gaps: [], note: `${n} lease(s) and ${m} allocation(s) are on record — confirm which fall in this reporting year.` };
+      return { ratio: 0.5, gaps: ["No leases or allocations recorded — if there were none this year, file a nil return"] };
+    } },
+  { type: "membership", title: "Membership list update", category: "Statutory", annual: true,
+    basis: "The membership list must be updated and furnished to the Director-General every year (CPA Act regulations).",
+    enclosures: ["Updated membership register (name, ID number, household, status)", "Changes since the last return (new, deceased, resigned, succession)"],
+    ready: () => {
+      const reg = DATA.beneficiaryCentre?.register || [];
+      if (!reg.length) return { ratio: 0, gaps: ["No members on the register — build it under Beneficiaries"] };
+      const ver = reg.filter((r) => /^verified$/i.test(r[9] || "")).length;
+      const gaps = ver < reg.length ? [`${reg.length - ver} of ${reg.length} members not yet verified`] : [];
+      return { ratio: 0.5 + 0.5 * (ver / reg.length), gaps };
+    } },
+  { type: "constitution", title: "Constitution amendment lodgement", category: "Statutory", event: true,
+    basis: "Changes to the constitution need a special resolution of members (the 2024 Amendment Act sets a 60% majority) and must be lodged with the Registrar. Confirm the prescribed form with the CPA Office.",
+    enclosures: ["Amended constitution (clean and track-changes copies)", "Minutes and attendance register of the meeting that adopted it", "Special resolution and voting result (60% threshold)"] },
+  { type: "land_disposal", title: "Land disposal / encumbrance notice", category: "Statutory", event: true,
+    basis: "Disposing of or encumbering association land needs members' special resolution (60% majority under the 2024 Amendment Act) and the Registrar's involvement as your constitution requires. Confirm the process before signing anything.",
+    enclosures: ["Members' special resolution and voting result", "Draft agreement of sale / lease / mortgage", "Valuation or business case supporting the transaction"] },
+  { type: "committee_change", title: "Change of office bearers (mid-term)", category: "Statutory", event: true,
+    basis: "When office bearers change between AGMs, notify the Registrar of the new governing body members.",
+    enclosures: ["Minutes recording the change", "Updated list of governing body members (name, ID number, address)"] },
+  { type: "address_change", title: "Change of address / contact details", category: "Statutory", event: true,
+    basis: "Keep the Registrar's record of the CPA's address and contact persons current.",
+    enclosures: ["Letter / resolution recording the new address and contact persons"] },
+  { type: "registrar_query", title: "Response to Registrar query / compliance notice", category: "Registrar-directed", event: true,
+    basis: "Reply to any query, compliance notice or intervention request from the CPA Office within the period it sets.",
+    enclosures: ["The Registrar's letter or notice", "Written response from the committee", "Supporting records requested"] },
+  { type: "programme_progress", title: "Land-reform support programme progress report", category: "Programme", event: true,
+    basis: "Required by your support / lease / funding agreement with the Department (e.g. RECAP or land development support). Check the agreement for frequency and format.",
+    enclosures: ["Progress report against the approved business plan", "Financial report / expenditure schedule", "Photographs and supporting evidence"] },
+];
+const govType = (r) => GOV_REPORT_TYPES.find((t) => t.type === r[0]);
+function govReadiness(r) {
+  const t = govType(r);
+  if (!t || !t.ready) return null;
+  try { return t.ready(); } catch (e) { return null; }
+}
+function govEff(r) {
+  if (GOV_DONE.includes(r[5])) return r[5];
+  if (r[4] && new Date(r[4] + "T23:59:59") < new Date()) return "Overdue";
+  return r[5];
+}
+function govLog(r, what) {
+  if (!Array.isArray(r[13])) r[13] = [];
+  r[13].push({ at: new Date().toISOString(), what });
+}
+function govModal(title, bodyHtml, foot, width) {
+  const scrim = document.createElement("div");
+  scrim.className = "modal-scrim cpa-dash";
+  scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}" style="width:min(${width || 600}px,100%);">
+    <h3>${esc(title)}</h3><div class="modal-body" style="display:block;">${bodyHtml}</div>
+    <div class="modal-foot">${foot || '<button class="btn primary" data-act="close" type="button">Close</button>'}</div></div>`;
+  document.body.appendChild(scrim);
+  const close = () => { scrim.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  scrim.addEventListener("click", (e) => { if (e.target === scrim) close(); });
+  scrim.querySelectorAll('[data-act="close"]').forEach((b) => (b.onclick = close));
+  return { scrim, close };
+}
+async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; } }
+function openMailto(to, subject, body, cc) {
+  const mk = (b) => `mailto:${encodeURIComponent(to || "").replace(/%2C/g, ",").replace(/%40/g, "@")}?subject=${encodeURIComponent(subject)}${cc ? `&cc=${encodeURIComponent(cc)}` : ""}&body=${encodeURIComponent(b)}`;
+  let url = mk(body);
+  if (url.length > 1900) {
+    copyText(body).then((ok) => toast(ok ? "Long message — full text copied; paste it into the e-mail." : "Long message — use \u201CCopy e-mail text\u201D and paste it in.", false));
+    url = mk("(Full text copied to your clipboard — paste it here.)");
+  }
+  window.location.href = url;
+}
+function govLetterHead(r) {
+  const c = (DATA.governance.contacts || []).find((x) => x[2] === (r && r[9])) || (DATA.governance.contacts || [])[0];
+  return `<p>${new Date().toLocaleDateString("en-ZA", { day: "2-digit", month: "long", year: "numeric" })}</p>
+    <p><b>The Registrar of Communal Property Associations</b><br>CPA Office<br>${esc(GOV_DEPT)}${c && c[0] ? `<br>Attention: ${esc(c[0])}${c[1] ? ", " + esc(c[1]) : ""}` : ""}${c && c[2] ? `<br>${esc(c[2])}` : ""}</p>`;
+}
+function govEnclosureTable(rows) {
+  let n = 0;
+  return `<table><tr><th style="width:8%;">No.</th><th>Document</th><th style="width:14%;">Enclosed</th></tr>${rows.map((r) => {
+    const t = govType(r);
+    const list = t ? t.enclosures : ["Supporting documents"];
+    return `${rows.length > 1 ? `<tr><td colspan="3" style="background:#eef2f7;"><b>${esc(r[1])}${r[3] ? " — " + esc(r[3]) : ""}</b></td></tr>` : ""}${list.map((e) => `<tr><td>${++n}</td><td>${esc(e)}</td><td>&#9744;</td></tr>`).join("")}`;
+  }).join("")}</table>`;
+}
+function govPackBody(rows) {
+  const single = rows.length === 1 ? rows[0] : null;
+  const subject = single ? `${single[1]}${single[3] ? " — " + single[3] : ""}` : `Annual return — ${rows[0][3] || "current year"}`;
+  const dues = rows.map((r) => r[4]).filter(Boolean).sort();
+  return `${govLetterHead(single)}
+    <p><b>Re: ${esc(subject)} — ${esc(DATA.cpa.name)}${DATA.cpa.reg ? ` (${esc(DATA.cpa.reg)})` : ""}</b></p>
+    <p>Dear Registrar,</p>
+    <p>${esc(DATA.cpa.name)} hereby submits ${single ? `its <b>${esc(single[1])}</b>${single[3] ? ` for <b>${esc(single[3])}</b>` : ""}` : `its <b>annual return</b>${rows[0][3] ? ` for <b>${esc(rows[0][3])}</b>` : ""}`},
+      in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), as amended, and its regulations.${dues.length ? ` The return falls due on ${esc(fmtDay(dues[0]))}.` : ""}</p>
+    <h2>Enclosures</h2>${govEnclosureTable(rows)}
+    <p>Kindly acknowledge receipt and quote your reference number in future correspondence.</p>
+    <p>Yours faithfully,</p>
+    <table class="sig"><tr><th>Chairperson — signature</th><th>Secretary — signature</th><th>Date</th></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>
+    <p class="note">Department reference no.: ________________________</p>`;
+}
+function govDownloadPack(rows, filename) {
+  const html = permitDocShell("Submission to the Department", `${DATA.cpa.name}${DATA.cpa.reg ? " · " + DATA.cpa.reg : ""}`, govPackBody(rows));
+  downloadFile(filename, html, "application/msword");
+}
+const govSafe = (s) => String(s || "").replace(/[^\w\- ]+/g, "_");
+function govPrepare(i) {
+  const r = DATA.governance.reports[i];
+  govDownloadPack([r], `Dept-submission-${govSafe(r[1])}${r[3] ? "-" + govSafe(r[3]) : ""}.doc`);
+  if (r[5] === "Not Started") r[5] = "In Preparation";
+  govLog(r, "Submission pack (cover letter & enclosure schedule) generated");
+  commit("gov_reports");
+}
+function govAnnualPack() {
+  const annual = (DATA.governance.reports || []).filter((r) => govType(r)?.annual);
+  if (!annual.length) { toast("Generate this year's returns first.", true); return; }
+  const period = [...annual].sort((a, b) => String(b[4]).localeCompare(String(a[4])))[0][3];
+  const rows = annual.filter((r) => r[3] === period);
+  govDownloadPack(rows, `Annual-return-pack-${govSafe(period || "current")}.doc`);
+  rows.forEach((r) => { if (r[5] === "Not Started") r[5] = "In Preparation"; govLog(r, "Included in the compiled annual return pack"); });
+  commit("gov_reports");
+}
+function govSubject(r) {
+  return `${DATA.cpa.name}${DATA.cpa.reg ? ` (${DATA.cpa.reg})` : ""} — ${r ? r[1] + (r[3] ? " — " + r[3] : "") : "Enquiry"}`;
+}
+function govEmailBody(r) {
+  const t = r && govType(r);
+  const lines = ["Dear Registrar of Communal Property Associations,", ""];
+  if (r) {
+    lines.push(`Please find attached the ${r[1]}${r[3] ? " for " + r[3] : ""} of ${DATA.cpa.name}${DATA.cpa.reg ? " (" + DATA.cpa.reg + ")" : ""}, submitted in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), as amended.`);
+    if (t) { lines.push("", "Enclosures:"); t.enclosures.forEach((e, k) => lines.push(`${k + 1}. ${e}`)); }
+    lines.push("", "Kindly acknowledge receipt and quote your reference number in future correspondence.");
+  } else {
+    lines.push(`We write on behalf of ${DATA.cpa.name}${DATA.cpa.reg ? " (" + DATA.cpa.reg + ")" : ""} regarding: `);
+  }
+  lines.push("", "Yours faithfully,", "", "Chairperson / Secretary", DATA.cpa.name + (DATA.cpa.reg ? " | " + DATA.cpa.reg : ""), DATA.cpa.region || "");
+  return lines.join("\r\n");
+}
+function govEmailModal(i) {
+  const r = i == null ? null : DATA.governance.reports[i];
+  const contacts = (DATA.governance.contacts || []).filter((c) => c[2]);
+  const to0 = (r && r[9]) || (contacts[0] && contacts[0][2]) || "";
+  const { scrim, close } = govModal("Email the Department" + (r ? " — " + r[1] : ""), `
+    <p class="hint" style="margin:0 0 10px;">Opens a ready-written e-mail in your own e-mail app (nothing is sent from here). Attach the downloaded pack and any proof documents, then send.</p>
+    <div class="field"><label for="ge-to">To</label><input id="ge-to" type="text" list="ge-dl" value="${esc(to0)}" placeholder="Registrar / CPA Office e-mail"><datalist id="ge-dl">${contacts.map((c) => `<option value="${esc(c[2])}">${esc(c[0])}</option>`).join("")}</datalist></div>
+    <div class="field"><label for="ge-cc">Cc (optional)</label><input id="ge-cc" type="text" placeholder="e.g. your provincial CPA office"></div>
+    <div class="field"><label for="ge-sub">Subject</label><input id="ge-sub" type="text" value="${esc(govSubject(r))}"></div>
+    <div class="field"><label for="ge-body">Message</label><textarea id="ge-body" rows="11">${esc(govEmailBody(r))}</textarea></div>
+    ${contacts.length ? "" : `<p class="hint">No department contact saved yet — add the Registrar / provincial office e-mail under <b>Contacts</b> (find it at <a href="${GOV_DEPT_SITE}" target="_blank" rel="noopener">dlrrd.gov.za</a>).</p>`}`,
+    `<button class="btn" data-act="close" type="button">Close</button>
+     ${r ? '<button class="btn" data-ge="pack" type="button">Download pack (.doc)</button>' : ""}
+     <button class="btn" data-ge="copy" type="button">Copy e-mail text</button>
+     <button class="btn primary" data-ge="open" type="button">Open in my e-mail app</button>
+     ${r ? '<button class="btn good" data-ge="sent" type="button">I\'ve sent it — mark Submitted</button>' : ""}`, 640);
+  const v = (id) => scrim.querySelector("#" + id).value;
+  scrim.querySelector('[data-ge="open"]').onclick = () => {
+    openMailto(v("ge-to").trim(), v("ge-sub"), v("ge-body"), v("ge-cc").trim());
+    if (r) { if (v("ge-to").trim()) r[9] = v("ge-to").trim(); if (r[5] === "Not Started") r[5] = "In Preparation"; govLog(r, `E-mail drafted to ${v("ge-to").trim() || "(no address)"}`); commit("gov_reports"); }
+  };
+  scrim.querySelector('[data-ge="copy"]').onclick = async () => toast((await copyText(`Subject: ${v("ge-sub")}\r\n\r\n${v("ge-body")}`)) ? "E-mail text copied." : "Couldn't copy — select the text and copy it manually.", false);
+  const pk = scrim.querySelector('[data-ge="pack"]');
+  if (pk) pk.onclick = () => govDownloadPack([r], `Dept-submission-${govSafe(r[1])}${r[3] ? "-" + govSafe(r[3]) : ""}.doc`);
+  const sent = scrim.querySelector('[data-ge="sent"]');
+  if (sent) sent.onclick = () => {
+    r[5] = "Submitted"; r[6] = isoDay(new Date()); r[7] = "Email"; if (v("ge-to").trim()) r[9] = v("ge-to").trim();
+    govLog(r, `Submitted by e-mail to ${r[9] || "the Department"}`);
+    commit("gov_reports"); close(); toast("Marked as submitted — add the Department's reference when it replies.");
+  };
+}
+function govAgenda(r) {
+  const who = `${DATA.cpa.name}${DATA.cpa.reg ? " (" + DATA.cpa.reg + ")" : ""}`;
+  return (r
+    ? [`Purpose: discuss the ${r[1]}${r[3] ? " (" + r[3] + ")" : ""} for ${who}.`, "", "1. Introductions and purpose", `2. Status of the return${r[4] ? " (due " + fmtDay(r[4]) + ")" : ""}`, "3. Documents submitted and outstanding", "4. The Department's queries and requirements", "5. Way forward and dates"]
+    : [`Purpose: engage the CPA Office on compliance matters for ${who}.`, "", "1. Introductions", "2. Compliance status and upcoming returns", "3. Queries and support needed", "4. Way forward and dates"]).join("\n");
+}
+function govMeetModal(i) {
+  const r = i == null ? null : DATA.governance.reports[i];
+  const emails = [...new Set([r && r[9], ...(DATA.governance.contacts || []).map((c) => c[2])].filter(Boolean))];
+  const [sd, st] = r && r[11] ? String(r[11]).split("T") : ["", ""];
+  const { scrim, close } = govModal("Collaborate with the Department" + (r ? " — " + r[1] : ""), `
+    <p class="hint" style="margin:0 0 10px;">Propose a meeting and create it on Teams, Zoom or Google Meet in one click — the invite opens pre-filled (nothing is created until you confirm it there). Paste the join link back here to keep it with the report.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="field" style="flex:1 1 170px;"><label for="gm-plat">Platform</label><select id="gm-plat">${GOV_PLATFORMS.map((p) => `<option${p === ((r && r[10]) || GOV_PLATFORMS[0]) ? " selected" : ""}>${p}</option>`).join("")}</select></div>
+      <div class="field" style="flex:1 1 140px;"><label for="gm-date">Date</label><input id="gm-date" type="date" value="${esc(sd)}"></div>
+      <div class="field" style="flex:1 1 110px;"><label for="gm-time">Time</label><input id="gm-time" type="time" value="${esc(st || "10:00")}"></div>
+      <div class="field" style="flex:1 1 110px;"><label for="gm-dur">Length</label><select id="gm-dur">${[30, 45, 60, 90].map((m) => `<option value="${m}"${m === 60 ? " selected" : ""}>${m} min</option>`).join("")}</select></div>
+    </div>
+    <div class="field"><label for="gm-att">Invite (department e-mails, comma-separated)</label><input id="gm-att" type="text" value="${esc(emails.join(", "))}"></div>
+    <div class="field"><label for="gm-agenda">Agenda</label><textarea id="gm-agenda" rows="7">${esc(govAgenda(r))}</textarea></div>
+    <div class="field"><label for="gm-url">Meeting link (paste after creating it)</label><input id="gm-url" type="url" value="${esc((r && r[12]) || "")}" placeholder="https://…"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn primary" data-gm="create" type="button"></button>
+      <button class="btn" data-gm="meetnew" type="button">New Google Meet link</button>
+      <button class="btn" data-gm="mail" type="button">Email the invitation</button>
+      <button class="btn" data-gm="ics" type="button">Add to calendar (.ics)</button>
+      <button class="btn" data-gm="join" type="button">Join</button>
+    </div>
+    <p class="hint" id="gm-hint" style="margin-top:8px;"></p>`,
+    `<button class="btn" data-act="close" type="button">Close</button>${r ? '<button class="btn primary" data-gm="save" type="button">Save to this report</button>' : ""}`, 680);
+  const $q = (s) => scrim.querySelector(s);
+  const v = (id) => $q("#" + id).value.trim();
+  const sync = () => {
+    const p = v("gm-plat");
+    $q('[data-gm="create"]').textContent = p === "Google Meet" ? "Schedule in Google Calendar" : `Create in ${p}`;
+    $q('[data-gm="meetnew"]').hidden = p !== "Google Meet";
+    $q('[data-gm="join"]').hidden = !v("gm-url");
+    $q("#gm-hint").textContent = p === "Zoom" ? "Zoom can't pre-fill an invite — the agenda is copied to your clipboard so you can paste it into the description."
+      : p === "Google Meet" ? "In Google Calendar choose \u201CAdd Google Meet video conferencing\u201D (or use \u201CNew Google Meet link\u201D for an instant link), then paste the link above."
+      : "Teams opens its scheduling form with the title, time, invitees and agenda filled in.";
+  };
+  scrim.querySelector("#gm-plat").onchange = sync;
+  scrim.querySelector("#gm-url").oninput = sync;
+  sync();
+  const times = () => {
+    if (!v("gm-date") || !v("gm-time")) { toast("Pick a date and time first.", true); return null; }
+    const s = new Date(`${v("gm-date")}T${v("gm-time")}`);
+    return { s, e: new Date(s.getTime() + (+v("gm-dur") || 60) * 60000) };
+  };
+  const subject = () => `${r ? r[1] : "Compliance"} — ${DATA.cpa.name} / CPA Office`;
+  const when = (t) => t.s.toLocaleString("en-ZA", { dateStyle: "full", timeStyle: "short" });
+  const logMeet = (what) => { if (r) { r[10] = v("gm-plat"); if (v("gm-date")) r[11] = `${v("gm-date")}T${v("gm-time")}`; r[12] = v("gm-url"); if (v("gm-att")) r[9] = r[9] || v("gm-att").split(",")[0].trim(); govLog(r, what); commit("gov_reports"); } };
+  $q('[data-gm="create"]').onclick = async () => {
+    const t = times(); if (!t) return;
+    const p = v("gm-plat"), enc = encodeURIComponent, att = v("gm-att").replace(/\s+/g, "");
+    let url;
+    if (p === "Microsoft Teams") url = `https://teams.microsoft.com/l/meeting/new?subject=${enc(subject())}&attendees=${enc(att)}&startTime=${enc(isoOffset(t.s))}&endTime=${enc(isoOffset(t.e))}&content=${enc(v("gm-agenda"))}`;
+    else if (p === "Google Meet") url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(subject())}&details=${enc(v("gm-agenda"))}&dates=${utcStamp(t.s)}/${utcStamp(t.e)}&add=${enc(att)}`;
+    else { await copyText(v("gm-agenda")); url = "https://zoom.us/meeting/schedule"; toast("Agenda copied — paste it into the Zoom description."); }
+    window.open(url, "_blank", "noopener");
+  };
+  $q('[data-gm="meetnew"]').onclick = () => window.open("https://meet.google.com/new", "_blank", "noopener");
+  $q('[data-gm="join"]').onclick = () => { if (v("gm-url")) window.open(v("gm-url"), "_blank", "noopener"); };
+  $q('[data-gm="mail"]').onclick = () => {
+    const t = times(); if (!t) return;
+    const body = ["Dear Registrar / CPA Office,", "", `We would like to meet to discuss${r ? ` the ${r[1]}${r[3] ? " (" + r[3] + ")" : ""}` : " our CPA's compliance"}.`, "",
+      `Proposed: ${when(t)} (${v("gm-dur")} min)`, `Platform: ${v("gm-plat")}`, v("gm-url") ? `Join link: ${v("gm-url")}` : "Join link: to follow", "", "Agenda:", v("gm-agenda"), "",
+      "Please let us know if the time suits, or propose another.", "", "Kind regards,", `${DATA.cpa.name}${DATA.cpa.reg ? " | " + DATA.cpa.reg : ""}`].join("\r\n");
+    openMailto(v("gm-att").split(",")[0].trim(), `Meeting request — ${subject()}`, body, v("gm-att").split(",").slice(1).join(",").trim());
+    logMeet(`Meeting requested by e-mail (${v("gm-plat")}, ${when(t)})`);
+  };
+  $q('[data-gm="ics"]').onclick = () => {
+    const t = times(); if (!t) return;
+    const ics = (s) => String(s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CPA360//Government Reports//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
+      `UID:${crypto.randomUUID ? crypto.randomUUID() : Date.now()}@cpa360`, `DTSTAMP:${utcStamp(new Date())}`, `DTSTART:${utcStamp(t.s)}`, `DTEND:${utcStamp(t.e)}`,
+      `SUMMARY:${ics(subject())}`, `DESCRIPTION:${ics(v("gm-agenda") + (v("gm-url") ? "\n\nJoin: " + v("gm-url") : ""))}`, `LOCATION:${ics(v("gm-url") || v("gm-plat"))}`,
+      ...(v("gm-url") ? [`URL:${v("gm-url")}`] : []),
+      ...v("gm-att").split(",").map((a) => a.trim()).filter(Boolean).map((a) => `ATTENDEE;CN=${ics(a)};RSVP=TRUE:mailto:${a}`),
+      "END:VEVENT", "END:VCALENDAR"];
+    downloadFile(`Meeting-${govSafe(r ? r[1] : "Department")}.ics`, lines.join("\r\n"), "text/calendar");
+  };
+  const sv = $q('[data-gm="save"]');
+  if (sv) sv.onclick = () => { logMeet(`Meeting details saved (${v("gm-plat")}${v("gm-date") ? ", " + v("gm-date") + " " + v("gm-time") : ""}${v("gm-url") ? ", link stored" : ""})`); close(); toast("Meeting saved to this report."); };
+}
+function govDetailModal(i) {
+  const r = DATA.governance.reports[i];
+  const t = govType(r), rd = govReadiness(r), eff = govEff(r);
+  const act = (Array.isArray(r[13]) ? r[13] : []).slice().reverse();
+  const pct = rd ? Math.round(rd.ratio * 100) : null;
+  const { scrim } = govModal(r[1], `
+    <p style="margin:0 0 8px;">${pill(esc(r[2]), "neutral")} ${statusPill(eff)} ${r[3] ? `<span class="mono">${esc(r[3])}</span>` : ""} ${r[4] ? `<span class="mono" style="margin-left:6px;">due ${esc(fmtDay(r[4]))}</span>` : ""}</p>
+    ${t ? `<p class="hint" style="margin:0 0 12px;"><b>Basis:</b> ${esc(t.basis)}</p>` : ""}
+    ${rd ? `<div class="field"><label>Readiness — ${pct}%</label><div class="bar-track"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div>
+      ${rd.gaps.length ? `<ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${rd.gaps.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>` : `<p class="hint" style="margin-top:6px;">Everything the register can check is in place.</p>`}
+      ${rd.note ? `<p class="hint" style="margin-top:6px;">${esc(rd.note)}</p>` : ""}</div>` : ""}
+    ${t ? `<div class="field"><label>What goes in the pack</label><ul style="margin:4px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${t.enclosures.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></div>` : ""}
+    ${r[12] ? `<div class="field"><label>Meeting</label><div class="hint">${esc(r[10] || "Meeting")}${r[11] ? " · " + esc(String(r[11]).replace("T", " ")) : ""} — <a href="${esc(r[12])}" target="_blank" rel="noopener">Join</a></div></div>` : ""}
+    ${r[8] ? `<div class="field"><label>Department reference</label><div class="mono">${esc(r[8])}</div></div>` : ""}
+    <div class="field"><label>Activity log (proof of what was done, and when)</label>
+      ${act.length ? `<ul style="margin:4px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${act.map((a) => `<li><span class="mono">${esc(new Date(a.at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" }))}</span> — ${esc(a.what)}</li>`).join("")}</ul>` : `<p class="hint">Nothing logged yet.</p>`}</div>`, undefined, 620);
+  return scrim;
+}
+function govUpdate(i) {
+  const r = DATA.governance.reports[i];
+  openModal("Update — " + r[1], [
+    { key: "status", label: "Status", type: "select", options: GOV_REPORT_STATUSES, value: r[5] },
+    { key: "on", label: "Submitted on", type: "date", value: r[6] },
+    { key: "via", label: "Submitted via", type: "select", options: ["", ...GOV_REPORT_VIA], value: r[7] },
+    { key: "ref", label: "Department reference no. (from their acknowledgement)", type: "text", value: r[8] },
+    { key: "email", label: "Department e-mail used", type: "text", value: r[9] },
+    { key: "due", label: "Due date", type: "date", value: r[4] },
+    { key: "notes", label: "Notes", type: "textarea", value: r[14] },
+  ], (o) => {
+    const changed = o.status !== r[5];
+    r[5] = o.status; r[6] = o.on || (GOV_DONE.includes(o.status) && !r[6] ? isoDay(new Date()) : o.on); r[7] = o.via; r[8] = o.ref; r[9] = o.email; r[4] = o.due; r[14] = o.notes;
+    if (changed) govLog(r, `Status set to ${o.status}${o.ref ? " (ref " + o.ref + ")" : ""}`);
+    commit("gov_reports");
+  });
+}
+function govGenerate() {
+  const agm = latestAgm();
+  const afs = [...(DATA.finProc?.afs || [])].sort((a, b) => String(b[0]).localeCompare(String(a[0])))[0];
+  openModal("Generate this year's returns", [
+    { key: "i", label: "How it works", type: "info", value: "Creates the five annual returns the Department expects after each AGM, due two months after the AGM. Existing ones for the same period are left alone." },
+    { key: "agm", label: "AGM date (held or planned)", type: "date", value: agm ? agm[1] : "" },
+    { key: "period", label: "Reporting period / financial year", type: "text", value: afs ? "FY " + afs[0] : "" },
+  ], (o) => {
+    if (!o.period) { toast("Enter the reporting period, e.g. FY 2025/26.", true); return false; }
+    const due = o.agm ? addMonthsISO(o.agm, 2) : "";
+    const reports = DATA.governance.reports ||= [];
+    let n = 0;
+    GOV_REPORT_TYPES.filter((t) => t.annual).forEach((t) => {
+      if (reports.some((r) => r[0] === t.type && r[3] === o.period)) return;
+      const row = [t.type, t.title, t.category, o.period, due, "Not Started", "", "", "", "", "", "", "", [], ""];
+      govLog(row, `Generated for ${o.period}${due ? ", due " + fmtDay(due) : ""}`);
+      reports.push(row); n++;
+    });
+    toast(n ? `${n} return${n > 1 ? "s" : ""} added.` : "Those returns already exist for this period.");
+    if (n) commit("gov_reports");
+  });
+}
+function govReportsEditor() {
+  return {
+    title: "Government reports", arr: DATA.governance.reports, section: "gov_reports",
+    rowLabel: (r) => `${r[1] || "—"}${r[3] ? " — " + r[3] : ""}`,
+    blank: () => ["custom", "", "Statutory", "", "", "Not Started", "", "", "", "", "", "", "", [], ""],
+    fields: (r) => [
+      { key: "kind", label: "Report type", type: "select", options: [...GOV_REPORT_TYPES.map((t) => t.title), "Other (custom)"], value: (govType(r) || {}).title || "Other (custom)" },
+      { key: "title", label: "Title", type: "text", value: r[1], required: true },
+      { key: "cat", label: "Category", type: "select", options: GOV_REPORT_CATS, value: r[2] },
+      { key: "period", label: "Period", type: "text", value: r[3] },
+      { key: "due", label: "Due date", type: "date", value: r[4] },
+      { key: "status", label: "Status", type: "select", options: GOV_REPORT_STATUSES, value: r[5] },
+      { key: "email", label: "Department e-mail", type: "text", value: r[9] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[14] },
+    ],
+    write: (r, o) => {
+      const t = GOV_REPORT_TYPES.find((x) => x.title === o.kind);
+      r[0] = t ? t.type : "custom"; r[1] = o.title; r[2] = o.cat; r[3] = o.period; r[4] = o.due; r[5] = o.status; r[9] = o.email; r[14] = o.notes;
+      if (!Array.isArray(r[13])) r[13] = [];
+    },
+  };
+}
+function govContactsEditor() {
+  return {
+    title: "Department contacts", arr: (DATA.governance.contacts ||= []), section: "gov_contacts",
+    rowLabel: (r) => `${r[0] || "—"}${r[2] ? " — " + r[2] : ""}`,
+    blank: () => ["", "", "", "", ""],
+    fields: (r) => [
+      { key: "name", label: "Name / office", type: "text", value: r[0], required: true },
+      { key: "office", label: "Role / province", type: "text", value: r[1] },
+      { key: "email", label: "E-mail", type: "text", value: r[2] },
+      { key: "phone", label: "Phone", type: "text", value: r[3] },
+      { key: "notes", label: "Notes", type: "textarea", value: r[4] },
+    ],
+    write: (r, o) => { r[0] = o.name; r[1] = o.office; r[2] = o.email; r[3] = o.phone; r[4] = o.notes; },
+  };
+}
+function renderGovReports(host) {
+  DATA.governance.reports ||= [];
+  DATA.governance.contacts ||= [];
+  const all = DATA.governance.reports, contacts = DATA.governance.contacts;
+  const today = new Date();
+  const done = all.filter((r) => GOV_DONE.includes(r[5])).length;
+  const overdue = all.filter((r) => govEff(r) === "Overdue").length;
+  const next = all.filter((r) => !GOV_DONE.includes(r[5]) && r[4] && new Date(r[4] + "T23:59:59") >= today).sort((a, b) => String(a[4]).localeCompare(String(b[4])))[0];
+  const nextDays = next ? Math.ceil((new Date(next[4] + "T23:59:59") - today) / 86400000) : null;
+  host.innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-head"><div><h3>Department desk</h3>
+        <span class="hint">${esc(GOV_DEPT)} — CPA Office (Registrar of Communal Property Associations). Under the CPA Act regulations your annual return goes to the Department within two months of the AGM. Guidance only, not legal advice — confirm prescribed forms with the CPA Office.</span></div>
+        <span style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${CAN_EDIT ? '<button class="btn" data-gr-mail type="button">Email the department</button><button class="btn" data-gr-meet type="button">Collaborate</button>' : ""}
+          <button class="btn" data-gr-contacts type="button">Contacts (${contacts.length})</button>
+        </span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+        ${contacts.length ? contacts.map((c) => `<div class="pill neutral" style="padding:6px 10px;"><b>${esc(c[0])}</b>${c[1] ? " · " + esc(c[1]) : ""}${c[2] ? ` · <a href="mailto:${esc(c[2])}">${esc(c[2])}</a>` : ""}${c[3] ? " · " + esc(c[3]) : ""}</div>`).join("")
+          : `<span class="hint">No department contact saved yet. Add the Registrar / provincial CPA office from <a href="${GOV_DEPT_SITE}" target="_blank" rel="noopener">dlrrd.gov.za</a> so the e-mail and meeting buttons know who to address.</span>`}
+      </div>
+    </div>
+    <div id="gr-reg"></div>`;
+  const reg = host.querySelector("#gr-reg");
+  mountRegister(reg, {
+    title: "Government reports & returns", hint: "Every report the Department expects from this CPA — prepared, sent, discussed and acknowledged, with proof.",
+    stats: () => [
+      statTile("Returns tracked", all.length, `${all.filter((r) => govType(r)?.annual).length} annual · ${all.filter((r) => !govType(r)?.annual).length} event / programme`, ""),
+      statTile("Filed", `${done} / ${all.length}`, "Submitted or acknowledged", all.length && done === all.length ? "good" : ""),
+      statTile("Overdue", overdue, "Past the due date", overdue ? "critical" : "good"),
+      statTile("Next due", next ? fmtDay(next[4]) : "—", next ? `${next[1]} · in ${nextDays} day${nextDays === 1 ? "" : "s"}` : "Nothing scheduled", next && nextDays <= 30 ? "warning" : ""),
+    ],
+    columns: [{ label: "Report" }, { label: "Category" }, { label: "Due" }, { label: "Readiness" }, { label: "Status" }, { label: "Proof" }, { label: "Actions" }],
+    rows: () => [...all].sort((a, b) => (GOV_DONE.includes(a[5]) - GOV_DONE.includes(b[5])) || String(a[4] || "9999").localeCompare(String(b[4] || "9999"))),
+    empty: "No reports tracked yet — use \u201CGenerate this year's returns\u201D.",
+    extraTools: ['<button class="btn" data-gr-gen type="button">Generate this year\'s returns</button>', '<button class="btn" data-gr-annual type="button">Compile annual pack</button>'],
+    cell: (r) => {
+      const i = all.indexOf(r), eff = govEff(r), rd = govReadiness(r), pct = rd ? Math.round(rd.ratio * 100) : null;
+      const late = eff === "Overdue";
+      return [
+        `<button type="button" class="linkbtn" data-gr-open="${i}" style="font-weight:600;text-align:left;">${esc(r[1])}</button>${r[3] ? `<div class="hint">${esc(r[3])}</div>` : ""}`,
+        `<span class="pill neutral">${esc(r[2])}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(fmtDay(r[4]) || "—")}</span>`,
+        GOV_DONE.includes(r[5]) ? '<span class="hint">Filed</span>' : rd
+          ? `<div class="bar-track" title="${esc(rd.gaps.join("; "))}"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div><span class="hint">${pct}%${rd.gaps[0] ? " · " + esc(rd.gaps[0]) : ""}</span>`
+          : '<span class="hint">Event-driven</span>',
+        statusPill(eff),
+        docChip("gov_report", r._id, "Proof of submission / acknowledgement"),
+        CAN_EDIT ? `<span style="display:flex;flex-wrap:wrap;gap:4px;"><button class="btn small" data-gr-prep="${i}" type="button">Pack</button><button class="btn small" data-gr-mail="${i}" type="button">Email</button><button class="btn small" data-gr-meet="${i}" type="button">Meet</button><button class="btn small" data-gr-upd="${i}" type="button">Update</button></span>` : "",
+      ];
+    },
+    manage: () => listEditor(govReportsEditor()),
+    afterRender: (h) => {
+      h.querySelectorAll("[data-gr-open]").forEach((b) => (b.onclick = () => govDetailModal(+b.dataset.grOpen)));
+      h.querySelectorAll("[data-gr-prep]").forEach((b) => (b.onclick = () => govPrepare(+b.dataset.grPrep)));
+      h.querySelectorAll("button[data-gr-mail]").forEach((b) => (b.onclick = () => govEmailModal(+b.dataset.grMail)));
+      h.querySelectorAll("button[data-gr-meet]").forEach((b) => (b.onclick = () => govMeetModal(+b.dataset.grMeet)));
+      h.querySelectorAll("[data-gr-upd]").forEach((b) => (b.onclick = () => govUpdate(+b.dataset.grUpd)));
+      const g = h.querySelector("[data-gr-gen]"); if (g) g.onclick = govGenerate;
+      const a = h.querySelector("[data-gr-annual]"); if (a) a.onclick = govAnnualPack;
+      h.querySelectorAll("[data-doc-chip]").forEach((b) => (b.onclick = () => {
+        const sep = b.dataset.docChip.indexOf("::");
+        const r = all.find((x) => String(x._id) === b.dataset.docChip.slice(sep + 2));
+        if (r) attachmentsModal("gov_report", r._id, `Proof — ${r[1]}${r[3] ? " " + r[3] : ""}`, {
+          accept: "application/pdf,.pdf,.doc,.docx,image/*", label: "Upload (PDF, Word or photo)",
+          match: /\.(pdf|docx?|jpe?g|png|heic|webp)$|^(application\/(pdf|msword|vnd\.openxmlformats)|image\/)/i, matchMsg: "Please choose a PDF, Word file or image.",
+        });
+      }));
+    },
+  });
+  const dm = host.querySelector(".card [data-gr-mail]"), dc = host.querySelector(".card [data-gr-meet]"), dk = host.querySelector("[data-gr-contacts]");
+  if (dm) dm.onclick = () => govEmailModal(null);
+  if (dc) dc.onclick = () => govMeetModal(null);
+  if (dk) dk.onclick = () => listEditor(govContactsEditor());
 }
 
 function renderActions() {
@@ -4059,6 +4566,14 @@ const AUTO_SCORE_RULES = {
       return { ratio: valid / p.length, detail: `${valid}/${p.length} permit(s) valid` };
     },
     "Reporting to DALRRD": (D) => {
+      // the Gov. Reports register is the source of truth once the CPA uses it
+      const gr = (D.governance.reports || []).filter((r) => r[2] !== "Programme"
+        && (GOV_DONE.includes(r[5]) || (r[4] && new Date(r[4] + "T00:00:00") <= new Date(Date.now() + 60 * 86400000))));
+      if (gr.length) {
+        const filed = gr.filter((r) => GOV_DONE.includes(r[5])).length;
+        const late = gr.filter((r) => govEff(r) === "Overdue").length;
+        return { ratio: filed / gr.length, detail: `${filed}/${gr.length} Department return(s) filed${late ? `, ${late} overdue` : ""} (Governance → Gov. Reports)` };
+      }
       const c = (D.governance.calendar || []).filter((r) => /dalrrd/i.test(r[0] || "") || r[1] === "Reporting");
       if (!c.length) return { ratio: 0, detail: "No DALRRD/reporting items tracked on the governance calendar" };
       const done = c.filter((r) => r[5] === "Done").length;
@@ -5527,6 +6042,11 @@ function computeAlerts() {
   if (soon.length) a.push({ tone: "warning", text: `${soon.length} action${soon.length > 1 ? "s" : ""} due within 14 days`, goto: "#/v/actions" });
   const gcOver = (DATA.governance?.calendar || []).filter((r) => r[2] && new Date(r[2]) < now && r[5] !== "Done").length;
   if (gcOver) a.push({ tone: "critical", text: `${gcOver} governance-calendar item${gcOver > 1 ? "s" : ""} past due`, goto: "#/v/profile" });
+  const grAll = DATA.governance?.reports || [];
+  const grLate = grAll.filter((r) => govEff(r) === "Overdue").length;
+  if (grLate) a.push({ tone: "critical", text: `${grLate} Department return${grLate > 1 ? "s" : ""} overdue`, goto: "#/v/profile/reports" });
+  const grSoon = grAll.filter((r) => !GOV_DONE.includes(r[5]) && r[4] && (new Date(r[4] + "T23:59:59") - now) / 86400000 >= 0 && (new Date(r[4] + "T23:59:59") - now) / 86400000 <= 30).length;
+  if (grSoon) a.push({ tone: "warning", text: `${grSoon} Department return${grSoon > 1 ? "s" : ""} due within 30 days`, goto: "#/v/profile/reports" });
   const lease = (DATA.assets.leases || []).filter((r) => ["Expiring Soon", "Expired"].includes(r[7])).length;
   if (lease) a.push({ tone: "warning", text: `${lease} land lease${lease > 1 ? "s" : ""} expiring or expired`, goto: "#/v/assets" });
   const unrec = (DATA.finProc?.transactions || []).filter((r) => !r[7]).length;

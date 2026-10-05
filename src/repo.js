@@ -50,6 +50,8 @@ export async function loadOrg(orgId) {
     sel("gov_meetings", "sort"),
     sel("gov_coi", "sort"),
     sel("gov_calendar", "sort"),
+    sel("gov_reports", "sort"),
+    sel("gov_contacts", "sort"),
     sel("admin_correspondence", "sort"),
     sel("admin_doa", "sort"),
     sel("admin_policies", "sort"),
@@ -99,7 +101,7 @@ export async function loadOrg(orgId) {
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
   const [org, gates, stageReviews, domains, criteria, committee, govComm, govRes, govMeet, govCoi,
-         govCal, adCorr, adDoa, adPol, adRec, hrStaff, hrPos, hrPay,
+         govCal, govReports, govContacts, adCorr, adDoa, adPol, adRec, hrStaff, hrPos, hrPay,
          actions, mf, bene, beneReg, households, succession, beneDisputes,
          land, leases,
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
@@ -171,6 +173,12 @@ export async function loadOrg(orgId) {
         [r.member, r.position || "", r.interest || "", r.nature || "", r.declared_on || "", r.status], r)),
       calendar: (govCal || []).map((r) => tagArr(
         [r.item, r.category, r.due_date || "", r.recurrence || "", r.responsible || "", r.status], r)),
+      reports: (govReports || []).map((r) => tagArr(
+        [r.report_type || "custom", r.title, r.category || "Statutory", r.period || "", r.due_date || "", r.status || "Not Started",
+         r.submitted_on || "", r.submitted_via || "", r.reference_no || "", r.dept_email || "", r.meeting_platform || "",
+         r.meeting_at || "", r.meeting_url || "", Array.isArray(r.activity) ? r.activity : [], r.notes || ""], r)),
+      contacts: (govContacts || []).map((r) => tagArr(
+        [r.name, r.office || "", r.email || "", r.phone || "", r.notes || ""], r)),
     },
     actions: (actions || []).map((r) =>
       tagArr([r.ref || "", r.category || "", r.description || "", r.owner || "", r.due_date || "", r.status], r)),
@@ -491,6 +499,17 @@ export async function saveSection(orgId, section, D) {
     case "gov_calendar":
       return reconcile("gov_calendar", orgId, D.governance.calendar, (r, i) => ({
         item: r[0], category: r[1], due_date: nn(r[2]), recurrence: nn(r[3]), responsible: nn(r[4]), status: r[5], sort: i,
+      }));
+    case "gov_reports":
+      return reconcile("gov_reports", orgId, D.governance.reports, (r, i) => ({
+        report_type: r[0] || "custom", title: r[1], category: r[2] || "Statutory", period: nn(r[3]), due_date: nn(r[4]),
+        status: r[5] || "Not Started", submitted_on: nn(r[6]), submitted_via: nn(r[7]), reference_no: nn(r[8]), dept_email: nn(r[9]),
+        meeting_platform: nn(r[10]), meeting_at: nn(r[11]), meeting_url: nn(r[12]), activity: Array.isArray(r[13]) ? r[13] : [],
+        notes: nn(r[14]), sort: i,
+      }));
+    case "gov_contacts":
+      return reconcile("gov_contacts", orgId, D.governance.contacts, (r, i) => ({
+        name: r[0], office: nn(r[1]), email: nn(r[2]), phone: nn(r[3]), notes: nn(r[4]), sort: i,
       }));
 
     case "admin_correspondence":
