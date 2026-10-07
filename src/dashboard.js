@@ -2672,6 +2672,11 @@ function renderBeneDeceased(host) {
   const dead = reg.filter((r) => r[8] === "Deceased");
   const sMap = {};
   (DATA.beneficiaryCentre.succession || []).forEach((s) => { if (s[0]) sMap[s[0]] = s[6]; });
+  const ss = bulkState("bene-deceased");
+  const q = (ss.q || "").trim().toLowerCase();
+  const shown = q
+    ? dead.filter((r) => { const hay = [...r, sMap[r[0]] || ""].filter((v) => typeof v === "string" || typeof v === "number").join(" ").toLowerCase(); return q.split(/\s+/).every((w) => hay.includes(w)); })
+    : dead;
   host.innerHTML = `
     <div class="grid grid-4">
       ${statTile("Deceased on register", dead.length, "Status = Deceased", "")}
@@ -2680,17 +2685,30 @@ function renderBeneDeceased(host) {
       ${statTile("Registered successions", Object.values(sMap).filter((v) => v === "Registered").length, "Completed transfers", "good")}
     </div>
     <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Deceased Members</h3>
-      <span class="hint">Set a member's status to "Deceased" in the Master Register; open a case in Succession.</span></div></div>
+      <span class="hint">Set a member's status to "Deceased" in the Master Register; open a case in Succession.</span></div>
+      <span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off" placeholder="Search name, ref, household…" value="${esc(ss.q || "")}" aria-label="Search Deceased Members">${q ? `<span class="hint reg-search-n">${shown.length} of ${dead.length}</span>` : ""}</span></div>
     <div class="table-wrap"><table>
       <thead><tr><th>Ref.</th><th>Full name</th><th>Household</th><th>Joined</th><th>Succession case</th></tr></thead>
-      <tbody>${dead.length ? dead.map((r) => `<tr>
+      <tbody>${shown.length ? shown.map((r) => `<tr>
         <td class="mono" style="color:var(--ink-muted);">${esc(r[0])}</td>
         <td style="font-weight:600;">${esc(r[1])}</td>
         <td class="mono">${esc(r[5])}</td>
         <td class="mono">${esc(r[7])}</td>
         <td>${sMap[r[0]] ? statusPill(sMap[r[0]]) : `<span class="pill critical">None</span>`}</td>
-      </tr>`).join("") : emptyRow(5, "No members marked deceased.")}</tbody>
+      </tr>`).join("") : emptyRow(5, q ? `No match for “${ss.q.trim()}” — try fewer or shorter words.` : "No members marked deceased.")}</tbody>
     </table></div>`;
+  const si = host.querySelector("[data-reg-search]");
+  si.oninput = () => {
+    ss.q = si.value;
+    clearTimeout(ss.timer);
+    ss.timer = setTimeout(() => {
+      const pos = si.selectionStart;
+      renderBeneDeceased(host);
+      const n = host.querySelector("[data-reg-search]");
+      if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+    }, 150);
+  };
+  si.onkeydown = (e) => { if (e.key === "Escape" && si.value) { si.value = ""; si.oninput(); } };
 }
 const DISPUTE_TYPES = ["Duplicate", "Identity", "Membership", "Boundary", "Other"];
 function renderBeneDisputes(host) {
