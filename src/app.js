@@ -135,10 +135,19 @@ async function enterApp() {
   root.className = "";
   root.innerHTML = `<div class="booting">Loading your workspaces…</div>`;
   try {
-    const [orgs, isAdmin] = await Promise.all([
-      myOrgs(),
-      supabase.rpc("is_platform_admin").then((r) => !!r.data).catch(() => false),
-    ]);
+    // Right after a fresh sign-in this call can leave before the new session token is
+    // attached and come back 401 — that must not read as "not staff", so retry on error.
+    const checkAdmin = async () => {
+      for (let i = 0; i < 3; i++) {
+        try {
+          const r = await supabase.rpc("is_platform_admin");
+          if (!r.error) return !!r.data;
+        } catch (e) { /* retry */ }
+        await new Promise((res) => setTimeout(res, 300 * (i + 1)));
+      }
+      return false;
+    };
+    const [orgs, isAdmin] = await Promise.all([myOrgs(), checkAdmin()]);
     state.orgs = orgs;
     state.isPlatformAdmin = isAdmin;
   } catch (e) {
