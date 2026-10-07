@@ -620,7 +620,10 @@ async function renderDashboardView(view, viewId, tab) {
     try {
       await dash.initDashboard({ orgId: state.active.id, role: state.active.role });
     } catch (e) {
-      view.innerHTML = `<div class="msg err">Couldn't load this CPA — ${esc(e.message)}</div>`;
+      view.innerHTML = `<div class="msg err">Couldn't load this CPA — ${esc(e.message || "the connection was interrupted")}.
+        <button class="btn" id="retry-load" type="button" style="margin-left:10px">Try again</button></div>`;
+      const rb = view.querySelector("#retry-load");
+      if (rb) rb.onclick = () => renderView();
       return;
     }
     state.dashOrgId = state.active.id;
