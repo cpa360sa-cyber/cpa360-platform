@@ -12,7 +12,27 @@ const nn = (v) => (v == null || v === "" ? null : v);
 
 /* Carry the DB row id on the array/object the dashboard hands back, so
    saveSection() can tell an edit from an insert. The dashboard ignores it. */
-function tagArr(arr, row) { arr._id = row.id; return arr; }
+function tagArr(arr, row) {
+  arr._id = row.id;
+  // fingerprint of the row as loaded/saved — reconcile() skips rows that haven't changed
+  Object.defineProperty(arr, "_orig", { value: JSON.stringify(arr), writable: true, configurable: true, enumerable: false });
+  return arr;
+}
+
+/* PostgREST returns at most 1000 rows per request (Supabase's default), silently — so a CPA
+   with more than 1000 members only ever saw the first 1000. pageAll() keeps asking for the
+   next 1000 until a short page comes back. `make(from, to)` must return a query ordered by a
+   unique key so pages never overlap. */
+const PAGE = 1000;
+async function pageAll(make) {
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await make(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) return { data: out, error: null };
+  }
+}
 function tagObj(obj, row) { return Object.defineProperty(obj, "_id", { value: row.id, enumerable: false }); }
 
 /* Maturity bands are methodology, not per-org data — kept with the dashboard. */
@@ -36,8 +56,13 @@ const EMPTY_IMPACT = {
 
 /* ---------------------------------------------------------------- load ---- */
 export async function loadOrg(orgId) {
-  const sel = (t, order) =>
-    supabase.from(t).select("*").eq("org_id", orgId).order(order, { ascending: true });
+  const sel = async (t, order) => {
+    const first = await supabase.from(t).select("*").eq("org_id", orgId).order(order, { ascending: true }).range(0, PAGE - 1);
+    if (first.error || !first.data || first.data.length < PAGE) return first;
+    // a full page means there may be more: re-read everything with a unique tie-break so pages can't overlap
+    return pageAll((a, b) => supabase.from(t).select("*").eq("org_id", orgId)
+      .order(order, { ascending: true }).order("id", { ascending: true }).range(a, b));
+  };
   const results = await Promise.all([
     supabase.from("orgs").select("*").eq("id", orgId).single(),
     sel("gates", "n"),
@@ -96,7 +121,7 @@ export async function loadOrg(orgId) {
     sel("partnerships", "sort"),
     sel("revenue_streams", "sort"),
     supabase.from("impact_figures").select("*").eq("org_id", orgId).maybeSingle(),
-    supabase.from("documents").select("section, ref_id").eq("org_id", orgId),
+    pageAll((a, b) => supabase.from("documents").select("section, ref_id").eq("org_id", orgId).order("id", { ascending: true }).range(a, b)),
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
@@ -307,8 +332,9 @@ export async function listDocs(orgId, section, refId) {
 
 /** Every document in a section across all its ref_ids, newest first (e.g. all member photos in one request). */
 export async function listDocsBySection(orgId, section) {
-  const { data, error } = await supabase.from("documents").select("*")
-    .eq("org_id", orgId).eq("section", section).order("uploaded_at", { ascending: false }).limit(5000);
+  const { data, error } = await pageAll((a, b) => supabase.from("documents").select("*")
+    .eq("org_id", orgId).eq("section", section)
+    .order("uploaded_at", { ascending: false }).order("id", { ascending: true }).range(a, b));
   if (error) throw error;
   return data || [];
 }
@@ -417,21 +443,27 @@ export async function deleteDoc(doc) {
 /* Reconcile a whole collection: update tagged rows, insert new ones (writing
    the id back onto the array so the next save updates), delete what's gone. */
 async function reconcile(table, orgId, rows, toDb) {
-  const { data: existing, error: exErr } = await supabase.from(table).select("id").eq("org_id", orgId);
+  const { data: existing, error: exErr } = await pageAll((a, b) =>
+    supabase.from(table).select("id").eq("org_id", orgId).order("id", { ascending: true }).range(a, b));
   if (exErr) throw exErr;
   const keep = new Set();
+  const stamp = (row) => Object.defineProperty(row, "_orig", { value: JSON.stringify(row), writable: true, configurable: true, enumerable: false });
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const body = toDb(row, i);
     if (row._id) {
       keep.add(row._id);
-      const { error } = await supabase.from(table).update(body).eq("id", row._id);
+      // Unchanged since it was loaded/last saved → nothing to send. Without this, editing one
+      // member re-sent an UPDATE for every row in the register, one at a time (~25 min for 1,608).
+      if (row._orig !== undefined && row._orig === JSON.stringify(row)) continue;
+      const { error } = await supabase.from(table).update(toDb(row, i)).eq("id", row._id);
       if (error) throw error;
+      stamp(row);
     } else {
-      const { data, error } = await supabase.from(table).insert({ ...body, org_id: orgId }).select("id").single();
+      const { data, error } = await supabase.from(table).insert({ ...toDb(row, i), org_id: orgId }).select("id").single();
       if (error) throw error;
       row._id = data.id;
       keep.add(data.id);
+      stamp(row);
     }
   }
   const gone = (existing || []).map((r) => r.id).filter((id) => !keep.has(id));
