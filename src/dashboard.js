@@ -736,10 +736,25 @@ function mountRegister(host, cfg) {
     rows = allRows.filter((r) => bulk.filter.has(r[cfg.filterCol]));
   }
 
+  // Free-text search (opt-in via cfg.search): every word typed must appear somewhere in the
+  // row's data — names, refs, masked IDs, household, contact, notes — in any order.
+  const sstate = cfg.search ? bulkState(cfg.bulkKey || "search:" + cfg.title) : null;
+  const q = sstate ? (sstate.q || "").trim().toLowerCase() : "";
+  const pool = rows;
+  if (q) {
+    const words = q.split(/\s+/);
+    rows = pool.filter((r) => {
+      const hay = (Array.isArray(r) ? r : Object.values(r)).filter((v) => typeof v === "string" || typeof v === "number").join(" ").toLowerCase();
+      return words.every((w) => hay.includes(w));
+    });
+  }
+
   const selectedCount = canDelete ? [...bulk.selected].filter((id) => rows.some((r) => String(rid(r)) === id)).length : 0;
   const allChecked = canDelete && rows.length > 0 && rows.every((r) => bulk.selected.has(String(rid(r))));
 
   const tools = [];
+  if (sstate) tools.push(`<span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off"
+      placeholder="${esc(cfg.search === true ? "Search this list…" : cfg.search)}" value="${esc(sstate.q || "")}" aria-label="Search ${esc(cfg.title)}">${q ? `<span class="hint reg-search-n">${rows.length} of ${pool.length}</span>` : ""}</span>`);
   if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV / Excel</button>`);
   if (bulk && distinctVals.length > 1) {
     const on = bulk.filter.size < distinctVals.length;
@@ -753,7 +768,7 @@ function mountRegister(host, cfg) {
     ${cfg.stats ? `<div class="grid grid-4">${cfg.stats().join("")}</div>` : ""}
     <div class="card-head" style="margin:${cfg.stats ? "18px" : "2px"} 0 10px;">
       <div><h3 style="font-size:13px;">${esc(cfg.title)}</h3>${cfg.hint ? `<span class="hint">${esc(cfg.hint)}</span>` : ""}</div>
-      <span style="display:flex;gap:6px;position:relative;">${tools.join("")}
+      <span style="display:flex;gap:6px;position:relative;flex-wrap:wrap;justify-content:flex-end;align-items:center;">${tools.join("")}
         ${bulk && distinctVals.length > 1 && bulk.filterOpen ? filterPopoverHtml(distinctVals, bulk.filter, cfg.filterLabel || "Filter") : ""}
       </span>
     </div>
@@ -768,8 +783,22 @@ function mountRegister(host, cfg) {
             const chk = canDelete ? `<td class="chk"><input type="checkbox" data-reg-sel="${esc(id)}" ${bulk.selected.has(id) ? "checked" : ""} aria-label="Select row"></td>` : "";
             return `<tr>${chk}${cfg.cell(r).map((cell, i) => `<td class="${cfg.columns[i].cls || ""}">${cell}</td>`).join("")}</tr>`;
           }).join("")
-        : emptyRow(cfg.columns.length + (canDelete ? 1 : 0), cfg.empty || "Nothing recorded yet.")}</tbody>
+        : emptyRow(cfg.columns.length + (canDelete ? 1 : 0), q ? `No match for “${sstate.q.trim()}” — try fewer or shorter words.` : (cfg.empty || "Nothing recorded yet."))}</tbody>
     </table></div>`;
+  const si = host.querySelector("[data-reg-search]");
+  if (si) {
+    si.oninput = () => {
+      sstate.q = si.value;
+      clearTimeout(sstate.timer);
+      sstate.timer = setTimeout(() => {
+        const pos = si.selectionStart;
+        if (cfg.rerender) cfg.rerender(); else mountRegister(host, cfg);
+        const n = host.querySelector("[data-reg-search]");
+        if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+      }, 150);
+    };
+    si.onkeydown = (e) => { if (e.key === "Escape" && si.value) { si.value = ""; si.oninput(); } };
+  }
   const mb = host.querySelector("[data-reg-manage]");
   if (mb) mb.onclick = cfg.manage;
   const ib = host.querySelector("[data-reg-import]");
@@ -2488,6 +2517,7 @@ function renderBeneRegister(host) {
       statusPill(r[8]), statusPill(r[9])],
     manage: () => listEditor(BENE_EDITORS.register()),
     bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
+    search: "Search name, ref, ID, household, contact…",
     rerender: () => renderBeneRegister(host),
   });
 }
@@ -2605,6 +2635,7 @@ function renderBeneHouseholds(host) {
     },
     manage: () => listEditor(BENE_EDITORS.households()),
     bulkKey: "bene-households", filterCol: 12, filterLabel: "Status", section: "households",
+    search: "Search ODI, representative, descendants, ref…",
     rerender: () => renderBeneHouseholds(host),
     extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} → Beneficiaries</button>`],
     afterRender: (h) => {
@@ -2632,6 +2663,7 @@ function renderBeneSuccession(host) {
       `<span class="mono">${esc(r[2])}</span>`, esc(r[3]), esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
     manage: () => listEditor(BENE_EDITORS.succession()),
     bulkKey: "bene-succession", filterCol: 6, filterLabel: "Status", section: "succession_cases",
+    search: "Search deceased, successor, ref…",
     rerender: () => renderBeneSuccession(host),
   });
 }
@@ -2681,6 +2713,7 @@ function renderBeneDisputes(host) {
       `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
     manage: () => listEditor(BENE_EDITORS.disputes()),
     bulkKey: "bene-disputes", filterCol: 5, filterLabel: "Status", section: "beneficiary_disputes",
+    search: "Search parties, description, ref…",
     rerender: () => renderBeneDisputes(host),
   });
 }
