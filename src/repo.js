@@ -305,6 +305,14 @@ export async function listDocs(orgId, section, refId) {
   return data || [];
 }
 
+/** Every document in a section across all its ref_ids, newest first (e.g. all member photos in one request). */
+export async function listDocsBySection(orgId, section) {
+  const { data, error } = await supabase.from("documents").select("*")
+    .eq("org_id", orgId).eq("section", section).order("uploaded_at", { ascending: false }).limit(5000);
+  if (error) throw error;
+  return data || [];
+}
+
 export async function uploadDoc(orgId, section, refId, file, extra) {
   const safe = (file.name || "file").replace(/[^\w.\- ]+/g, "_").slice(0, 120);
   const path = `${orgId}/${section}/${crypto.randomUUID()}-${safe}`;

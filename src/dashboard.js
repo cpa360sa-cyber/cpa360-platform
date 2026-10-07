@@ -11,6 +11,7 @@
    Everything else — renderers, charts, editors, modals, print — is unchanged.
    ============================================================================ */
 import * as repo from "./repo.js";
+import { qrSvg } from "./qr.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -2502,23 +2503,311 @@ function beneStats() {
     statTile("Disputed / Rejected", (b.disputed || 0).toLocaleString(), fmtPct(b.disputed / t * 100) + " of active", b.disputed ? "critical" : "good"),
   ];
 }
+/* ============ Membership cards (Master Register → Card) ============
+   A credit-card-sized (85.6 × 54 mm) member card, designed on screen and printed from the
+   browser (single card, a selection, or all active members, 4 front+back pairs per A4 page).
+   Uses the CPA's own Brand Box logo/colours. Shows only the masked ID (last 4), never the
+   date of birth. The QR encodes "CPA360|<reg>|<member no>|<check code>" — scan it with any
+   phone and search the member no. in the register. The check code is a short fingerprint of
+   reg + member no. + name: if the name on the register changes, an old card's code no longer
+   matches, which flags a stale or altered card. Member photos live in the documents store
+   (section "member-photo"), resized to ≤480px on upload. */
+const IDCARD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16.2c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M15 10h3.5M15 13h3.5"/></svg>';
+const CARD_STYLES = [["brand", "Brand band"], ["dark", "Dark"], ["clean", "Clean"]];
+const CARD_CSS = `
+.mc{--p:#1c3a68;--s:#2f7d4f;--g:#b98a2e;position:relative;box-sizing:border-box;width:85.6mm;height:54mm;border-radius:3.2mm;overflow:hidden;background:#fff;color:#14203a;font-family:"Public Sans","Segoe UI",Arial,sans-serif;line-height:1.2;box-shadow:0 0 0 .2mm rgba(0,0,0,.2);-webkit-print-color-adjust:exact;print-color-adjust:exact;flex:none;}
+.mc *{box-sizing:border-box;margin:0;}
+.mc-head{position:absolute;left:0;right:0;top:0;height:14mm;background:linear-gradient(100deg,var(--p),var(--s));color:#fff;display:flex;align-items:center;gap:2.4mm;padding:0 4mm;}
+.mc-logo{width:9mm;height:9mm;border-radius:2mm;background:#fff;display:grid;place-items:center;overflow:hidden;flex:none;font-weight:800;font-size:4.4mm;color:var(--p);}
+.mc-logo img{width:100%;height:100%;object-fit:contain;padding:.6mm;}
+.mc-org{min-width:0;flex:1;}
+.mc-org b{display:block;font-size:3.2mm;font-weight:800;letter-spacing:.1mm;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.mc-org span{display:block;font-size:1.9mm;letter-spacing:.45mm;text-transform:uppercase;opacity:.88;margin-top:.5mm;}
+.mc-acc{position:absolute;left:0;right:0;top:14mm;height:.9mm;background:var(--g);}
+.mc-body{position:absolute;left:4mm;right:4mm;top:17.4mm;bottom:8.8mm;display:flex;gap:3.6mm;}
+.mc-photo{width:21mm;height:26mm;border-radius:1.8mm;background:color-mix(in srgb,var(--p) 12%,#fff);border:.3mm solid color-mix(in srgb,var(--p) 30%,#fff);display:grid;place-items:center;overflow:hidden;flex:none;color:var(--p);font-weight:800;font-size:8mm;}
+.mc-photo img{width:100%;height:100%;object-fit:cover;object-position:center 20%;}
+.mc-info{min-width:0;flex:1;display:flex;flex-direction:column;}
+.mc-name{font-size:4.2mm;font-weight:800;line-height:1.12;color:var(--p);margin-bottom:1.8mm;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.mc-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.3mm 2.4mm;}
+.mc-k{font-size:1.8mm;letter-spacing:.35mm;text-transform:uppercase;color:#6b7386;}
+.mc-v{font-size:2.8mm;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.mc-v.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:2.7mm;}
+.mc-foot{position:absolute;left:0;right:0;bottom:0;height:7mm;background:color-mix(in srgb,var(--p) 8%,#fff);border-top:.25mm solid color-mix(in srgb,var(--p) 18%,#fff);display:flex;align-items:center;justify-content:space-between;gap:2mm;padding:0 4mm;font-size:2.2mm;color:#4d5871;}
+.mc-foot .mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;}
+.mc-chip{display:inline-block;padding:.45mm 1.7mm;border-radius:99px;font-size:2mm;font-weight:800;letter-spacing:.2mm;text-transform:uppercase;background:#e2f4e6;color:#0f6b30;white-space:nowrap;}
+.mc-chip.warn{background:#fdf0d6;color:#8a5a00;} .mc-chip.bad{background:#fbe1e1;color:#a02a2a;}
+.mc-wm{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;}
+.mc-wm span{transform:rotate(-22deg);font-size:8.5mm;font-weight:900;letter-spacing:1mm;color:rgba(192,52,52,.26);border:.8mm solid rgba(192,52,52,.26);padding:.6mm 3mm;border-radius:1.5mm;white-space:nowrap;}
+.mc-stripe{position:absolute;left:0;right:0;top:4.5mm;height:7.2mm;background:var(--p);display:flex;align-items:center;padding:0 4mm;color:#fff;font-size:2mm;letter-spacing:.25mm;text-transform:uppercase;font-weight:700;}
+.mc-stripe span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.mc-qr{position:absolute;left:4mm;top:14.4mm;width:24mm;}
+.mc-qr svg{width:24mm;height:24mm;display:block;border-radius:.6mm;}
+.mc-qr small{display:block;text-align:center;font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:2.2mm;margin-top:.7mm;letter-spacing:.3mm;}
+.mc-terms{position:absolute;left:31mm;right:4mm;top:13.8mm;font-size:2mm;line-height:1.3;color:#3b465c;}
+.mc-sig{position:absolute;left:31mm;right:4mm;bottom:9.6mm;display:flex;gap:3mm;}
+.mc-sig div{flex:1;border-top:.25mm solid #8890a3;padding-top:.5mm;font-size:1.8mm;color:#6b7386;text-transform:uppercase;letter-spacing:.2mm;}
+.mc.dark{background:linear-gradient(135deg,var(--p) 0%,color-mix(in srgb,var(--p) 62%,#000) 100%);color:#fff;}
+.mc.dark .mc-head{background:transparent;} .mc.dark .mc-acc{height:.6mm;}
+.mc.dark .mc-name{color:#fff;} .mc.dark .mc-k{color:rgba(255,255,255,.62);}
+.mc.dark .mc-photo{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.35);color:#fff;}
+.mc.dark .mc-foot{background:rgba(0,0,0,.28);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.88);}
+.mc.dark .mc-stripe{background:rgba(0,0,0,.35);} .mc.dark .mc-terms{color:rgba(255,255,255,.82);}
+.mc.dark .mc-sig div{border-color:rgba(255,255,255,.5);color:rgba(255,255,255,.7);} .mc.dark .mc-qr small{color:#fff;}
+.mc.dark .mc-chip{background:rgba(255,255,255,.92);}
+.mc.clean{box-shadow:0 0 0 .5mm var(--p);}
+.mc.clean .mc-head{background:#fff;color:var(--p);} .mc.clean .mc-logo{box-shadow:0 0 0 .3mm var(--p);}
+.mc.clean .mc-acc{background:var(--p);height:.5mm;} .mc.clean .mc-stripe{background:var(--p);}
+`;
+function ensureCardCss() {
+  if (document.getElementById("mc-css")) return;
+  const s = document.createElement("style");
+  s.id = "mc-css"; s.textContent = CARD_CSS;
+  document.head.appendChild(s);
+}
+function fnv1a(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; }
+const cardCode = (r) => fnv1a(`${DATA.cpa.reg || ""}|${r[0] || ""}|${r[1] || ""}`).toString(36).toUpperCase().padStart(6, "0").slice(0, 6);
+function cardPayload(r) { return `CPA360|${DATA.cpa.reg || ""}|${r[0] || ""}|${cardCode(r)}`.slice(0, 100); }
+function cardPrefs() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem("cpa360.card." + orgId) || "{}"); } catch (e) {}
+  const y = new Date().getFullYear() + 2;
+  return { style: CARD_STYLES.some((s) => s[0] === p.style) ? p.style : "brand", valid: p.valid || `${y}-12-31` };
+}
+function saveCardPrefs(p) { try { localStorage.setItem("cpa360.card." + orgId, JSON.stringify(p)); } catch (e) {} }
+function cardState(r) {
+  if (r[8] !== "Active") return { wm: r[8] === "Deceased" ? "NOT VALID" : "NOT ACTIVE", chip: ["bad", r[8] || "Inactive"] };
+  if (r[9] === "Verified") return { chip: ["", "Verified"] };
+  return { chip: [r[9] === "Disputed" || r[9] === "Rejected" ? "bad" : "warn", (r[9] || "Unverified") + " verification"] };
+}
+function cardIssues(r) {
+  const w = [];
+  if (!(r[0] || "").trim()) w.push("This member has no register / member number — add one so the card and QR code identify them.");
+  if (r[8] !== "Active") w.push(`Status is “${r[8]}” — the card prints with a NOT ACTIVE watermark.`);
+  else if (r[9] !== "Verified") w.push(`Verification is “${r[9] || "not set"}” — cards are normally issued to verified members.`);
+  return w;
+}
+const cardMonth = (s) => (s ? new Date(String(s).slice(0, 10) + "T00:00:00").toLocaleDateString("en-ZA", { month: "short", year: "numeric" }) : "—");
+function cardVars() { return `--p:${esc(DATA.cpa.brandPrimary || "#1c3a68")};--s:${esc(DATA.cpa.brandSecondary || "#2f7d4f")};`; }
+function cardFrontHtml(r, o) {
+  const st = cardState(r), name = (r[1] || "").trim();
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+  const logo = DATA.cpa.logoDataUrl ? `<img src="${DATA.cpa.logoDataUrl}" alt="">` : esc((DATA.cpa.name || "C")[0].toUpperCase());
+  return `<div class="mc ${esc(o.style)}" style="${cardVars()}">
+    <div class="mc-head"><div class="mc-logo">${logo}</div><div class="mc-org"><b>${esc(DATA.cpa.name || "")}</b><span>Membership card${DATA.cpa.reg ? " · " + esc(DATA.cpa.reg) : ""}</span></div></div>
+    <div class="mc-acc"></div>
+    <div class="mc-body">
+      <div class="mc-photo">${o.photoUrl ? `<img src="${esc(o.photoUrl)}" alt="">` : esc(initials)}</div>
+      <div class="mc-info"><div class="mc-name">${esc(name || "—")}</div>
+        <div class="mc-grid">
+          <div><div class="mc-k">Member no.</div><div class="mc-v mono">${esc(r[0] || "—")}</div></div>
+          <div><div class="mc-k">Household</div><div class="mc-v mono">${esc(r[5] || "—")}</div></div>
+          <div><div class="mc-k">Member since</div><div class="mc-v">${esc(cardMonth(r[7]))}</div></div>
+          <div><div class="mc-k">Position</div><div class="mc-v">${esc(r[11] || "Member")}</div></div>
+        </div></div>
+    </div>
+    <div class="mc-foot"><span class="mono">${r[4] ? "ID " + esc(r[4]) + " · " : ""}Valid to ${esc(cardMonth(o.valid))}</span><span class="mc-chip ${st.chip[0]}">${esc(st.chip[1])}</span></div>
+    ${st.wm ? `<div class="mc-wm"><span>${esc(st.wm)}</span></div>` : ""}
+  </div>`;
+}
+function cardBackHtml(r, o) {
+  const cpa = DATA.cpa.name || "the association";
+  let qr = "";
+  try { qr = qrSvg(cardPayload(r), { dark: "#111", light: "#fff", quiet: 1 }); } catch (e) {}
+  return `<div class="mc ${esc(o.style)}" style="${cardVars()}">
+    <div class="mc-stripe"><span>Property of ${esc(cpa)}</span></div>
+    <div class="mc-qr">${qr}<small>${esc(cardCode(r))}</small></div>
+    <div class="mc-terms">This card identifies the holder as a member of ${esc(cpa)}${DATA.cpa.reg ? " (" + esc(DATA.cpa.reg) + ")" : ""}. It remains the property of the association, is not transferable, and is valid only while membership is in good standing. If found, please return it to ${esc(cpa)}${DATA.cpa.region ? ", " + esc(DATA.cpa.region) : ""}.</div>
+    <div class="mc-sig"><div>Holder's signature</div><div>Chairperson</div></div>
+    <div class="mc-foot" style="height:6mm;font-size:2mm;"><span>Issued with CPA360&trade;</span><span class="mono">${esc(r[0] || "")}</span></div>
+  </div>`;
+}
+async function cardPhotoUrl(r) {
+  if (!r._id) return "";
+  try {
+    const docs = await repo.listDocs(orgId, "member-photo", r._id);
+    return docs[0] ? await repo.docPreviewUrl(docs[0].path) : "";
+  } catch (e) { return ""; }
+}
+async function cardPhotoMap() {
+  const out = new Map();
+  try {
+    const docs = await repo.listDocsBySection(orgId, "member-photo");
+    const latest = new Map();
+    docs.forEach((d) => { if (!latest.has(String(d.ref_id))) latest.set(String(d.ref_id), d); });
+    const urls = await repo.docPreviewUrls([...latest.values()].map((d) => d.path));
+    latest.forEach((d, id) => { const u = urls.get(d.path); if (u) out.set(id, u); });
+  } catch (e) {}
+  return out;
+}
+async function resizeMemberPhoto(file, max = 480) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.86));
+  return new File([blob], `member-${Date.now()}.jpg`, { type: "image/jpeg" });
+}
+async function printMemberCards(rows, o) {
+  if (!rows.length) { toast("No members to print.", true); return; }
+  toast(`Preparing ${rows.length} card${rows.length > 1 ? "s" : ""}…`);
+  const photos = rows.length === 1 ? new Map(o.photoUrl ? [[String(rows[0]._id), o.photoUrl]] : []) : await cardPhotoMap();
+  const pairs = rows.map((r) => `<div class="pair">${cardFrontHtml(r, { ...o, photoUrl: photos.get(String(r._id)) || "" })}${cardBackHtml(r, o)}</div>`).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Membership cards — ${esc(DATA.cpa.name || "")}</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+    <style>${CARD_CSS}
+      @page{size:A4;margin:10mm}
+      body{margin:0;font-family:"Public Sans","Segoe UI",Arial,sans-serif;background:#fff;color:#14203a;}
+      .bar{position:sticky;top:0;background:#14203a;color:#fff;padding:10px 16px;display:flex;gap:14px;align-items:center;font-size:13px;z-index:9;}
+      .bar button{background:#b98a2e;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-size:13px;}
+      .sheet{display:flex;flex-direction:column;gap:6mm;align-items:center;padding:10mm 0;}
+      .pair{display:flex;gap:6mm;break-inside:avoid;page-break-inside:avoid;}
+      @media print{.bar{display:none}.sheet{padding:0}}
+    </style></head><body>
+    <div class="bar"><button onclick="window.print()">Print</button><span>${rows.length} card${rows.length > 1 ? "s" : ""} · front + back side by side · 4 per A4 page · tick “Background graphics” if colours look washed out · cut along the card edges</span></div>
+    <div class="sheet">${pairs}</div></body></html>`;
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  const w = window.open(url, "_blank");
+  if (!w) { toast("Please allow pop-ups to print the cards.", true); URL.revokeObjectURL(url); return; }
+  w.opener = null;
+  w.addEventListener("load", () => { setTimeout(() => { try { w.print(); } catch (e) {} }, 500); setTimeout(() => URL.revokeObjectURL(url), 60000); });
+}
+function editBeneficiaryRow(r, after) {
+  const cfg = BENE_EDITORS.register();
+  openModal("Edit member — " + (r[1] || "(no name)"), cfg.fields(r), (o) => {
+    cfg.write(r, o);
+    if (after) after();
+    const p = commit(cfg.section);
+    if (after) p.then(after);
+  });
+}
+function printCardsDialog(rows, title) {
+  const pf = cardPrefs();
+  openModal(title, [
+    { key: "i", label: `${rows.length} card${rows.length === 1 ? "" : "s"}`, type: "info", value: "Each card prints front and back side by side — four per A4 page. Check the preview in the browser's print window, then print or save as PDF." },
+    { key: "style", label: "Card style", type: "select", options: CARD_STYLES.map((s) => s[1]), value: (CARD_STYLES.find((s) => s[0] === pf.style) || CARD_STYLES[0])[1] },
+    { key: "valid", label: "Valid until", type: "date", value: pf.valid },
+  ], (o) => {
+    const style = (CARD_STYLES.find((s) => s[1] === o.style) || CARD_STYLES[0])[0];
+    saveCardPrefs({ style, valid: o.valid || pf.valid });
+    printMemberCards(rows, { style, valid: o.valid || pf.valid });
+  }, "Open print view");
+}
+function openMemberCard(startIdx, navIdx) {
+  ensureCardCss();
+  const reg = () => DATA.beneficiaryCentre.register;
+  let pos = Math.max(0, navIdx.indexOf(startIdx));
+  const pf = cardPrefs();
+  let style = pf.style, valid = pf.valid, photoUrl = "", seq = 0;
+  const row = () => reg()[navIdx[pos]];
+  const { scrim, close } = govModal("Membership card", `
+    <div class="mc-stage"><div class="mc-side"><div class="mc-lbl">Front</div><div id="mcf"></div></div><div class="mc-side"><div class="mc-lbl">Back</div><div id="mcb"></div></div></div>
+    <div id="mc-warn"></div>
+    <div class="mc-ctl">
+      <span class="mc-lbl" style="margin:0;">Style</span>${CARD_STYLES.map((s) => `<button type="button" class="btn small" data-mc-style="${s[0]}">${s[1]}</button>`).join("")}
+      <span class="mc-lbl" style="margin:0 0 0 8px;">Valid until</span><input type="date" id="mc-valid" class="mc-date" value="${esc(valid)}">
+    </div>
+    ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:8px;"><label class="btn small" style="cursor:pointer;">Upload photo<input type="file" id="mc-file" accept="image/*" hidden></label>
+      <button type="button" class="btn small" id="mc-rm-photo" hidden>Remove photo</button><span class="hint" id="mc-msg"></span></div>` : ""}`,
+    `<span class="hint" id="mc-pos" style="margin-right:auto;"></span>
+     <button class="btn" data-mc="prev" type="button">&lsaquo; Prev</button><button class="btn" data-mc="next" type="button">Next &rsaquo;</button>
+     ${CAN_EDIT ? '<button class="btn" data-mc="edit" type="button">Edit member</button>' : ""}
+     <button class="btn" data-act="close" type="button">Close</button>
+     <button class="btn primary" data-mc="print" type="button">Print card</button>`, 780);
+  const $q = (s) => scrim.querySelector(s);
+  async function paint() {
+    const r = row(), my = ++seq;
+    $q("#mcf").innerHTML = cardFrontHtml(r, { style, valid, photoUrl });
+    $q("#mcb").innerHTML = cardBackHtml(r, { style, valid });
+    $q("#mc-warn").innerHTML = cardIssues(r).map((w) => `<p class="mc-note">&#9888; ${esc(w)}</p>`).join("");
+    $q("#mc-pos").textContent = `${pos + 1} of ${navIdx.length}`;
+    $q('[data-mc="prev"]').disabled = pos === 0; $q('[data-mc="next"]').disabled = pos === navIdx.length - 1;
+    scrim.querySelectorAll("[data-mc-style]").forEach((b) => b.classList.toggle("active", b.dataset.mcStyle === style));
+    const rm = $q("#mc-rm-photo"); if (rm) rm.hidden = true;
+    photoUrl = "";
+    const u = await cardPhotoUrl(r);
+    if (my !== seq) return;
+    photoUrl = u;
+    $q("#mcf").innerHTML = cardFrontHtml(r, { style, valid, photoUrl });
+    if (rm) rm.hidden = !u;
+  }
+  scrim.querySelectorAll("[data-mc-style]").forEach((b) => (b.onclick = () => { style = b.dataset.mcStyle; saveCardPrefs({ style, valid }); paint(); }));
+  $q("#mc-valid").onchange = (e) => { valid = e.target.value || valid; saveCardPrefs({ style, valid }); paint(); };
+  $q('[data-mc="prev"]').onclick = () => { if (pos > 0) { pos--; paint(); } };
+  $q('[data-mc="next"]').onclick = () => { if (pos < navIdx.length - 1) { pos++; paint(); } };
+  $q('[data-mc="print"]').onclick = () => printMemberCards([row()], { style, valid, photoUrl });
+  const ed = $q('[data-mc="edit"]');
+  if (ed) ed.onclick = () => editBeneficiaryRow(row(), () => paint());
+  const fi = $q("#mc-file");
+  if (fi) fi.onchange = async () => {
+    const f = fi.files[0]; fi.value = "";
+    if (!f) return;
+    const r = row(), msg = $q("#mc-msg");
+    if (!r._id) { msg.textContent = "Save the member first."; return; }
+    msg.textContent = "Uploading…";
+    try {
+      const img = await resizeMemberPhoto(f);
+      const doc = await repo.uploadDoc(orgId, "member-photo", r._id, img);
+      bumpDocCount("member-photo", r._id, 1);
+      for (const d of await repo.listDocs(orgId, "member-photo", r._id)) {
+        if (d.id !== doc.id) { await repo.deleteDoc(d); bumpDocCount("member-photo", r._id, -1); }
+      }
+      msg.textContent = "Photo saved."; paint();
+    } catch (e) { msg.textContent = "Couldn't use that photo (" + (e.message || e) + "). Try a JPG or PNG."; }
+  };
+  const rmb = $q("#mc-rm-photo");
+  if (rmb) rmb.onclick = () => confirmModal("Remove this member's photo?", async () => {
+    const r = row();
+    try {
+      for (const d of await repo.listDocs(orgId, "member-photo", r._id)) { await repo.deleteDoc(d); bumpDocCount("member-photo", r._id, -1); }
+      paint();
+    } catch (e) { toast("Couldn't remove: " + (e.message || e), true); }
+  });
+  paint();
+}
+function beneActionsHtml(r, idx) {
+  return `<span style="display:inline-flex;gap:2px;align-items:center;">
+    ${CAN_EDIT ? `<span class="row-actions"><button type="button" data-bene-edit="${idx}" title="Edit member" aria-label="Edit ${esc(r[1])}">${PENCIL}</button></span>` : ""}
+    <button type="button" class="doc-chip" data-bene-card="${idx}" title="Membership card — view, edit &amp; print" aria-label="Membership card for ${esc(r[1])}">${IDCARD}</button></span>`;
+}
 function renderBeneRegister(host) {
+  const reg = DATA.beneficiaryCentre.register;
+  const sel = bulkState("bene-register").selected;
+  const selRows = reg.filter((r) => sel.has(String(r._id)));
   mountRegister(host, {
     title: "Master Beneficiary Register", importKey: "beneficiaries", stats: beneStats,
-    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score.",
+    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score. Use the pencil to edit a member and the card icon to view, edit and print their membership card.",
     columns: [{ label: "Ref." }, { label: "Full name" }, { label: "Family position" }, { label: "Gender" }, { label: "DOB" }, { label: "Household" },
-      { label: "Contact" }, { label: "Joined" }, { label: "Status" }, { label: "Verification" }],
-    rows: () => DATA.beneficiaryCentre.register,
+      { label: "Contact" }, { label: "Joined" }, { label: "Status" }, { label: "Verification" }, { label: "Actions" }],
+    rows: () => reg,
     empty: "No beneficiaries captured yet — Import a spreadsheet or add them.",
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
       `<span style="font-weight:600;">${esc(r[1])}</span>`, r[11] ? `<span class="pill neutral">${esc(r[11])}</span>` : "—",
       esc(r[2]), `<span class="mono">${esc(r[3])}</span>`,
       `<span class="mono">${esc(r[5])}</span>`, esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
-      statusPill(r[8]), statusPill(r[9])],
+      statusPill(r[8]), statusPill(r[9]), beneActionsHtml(r, reg.indexOf(r))],
     manage: () => listEditor(BENE_EDITORS.register()),
     bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
     search: "Search name, ref, ID, household, contact…",
     rerender: () => renderBeneRegister(host),
+    extraTools: [
+      `<button class="btn" data-bene-print-sel type="button"${selRows.length ? "" : " disabled"}>Print cards${selRows.length ? ` (${selRows.length})` : ""}</button>`,
+      `<button class="btn" data-bene-print-all type="button">Print all active</button>`,
+    ],
+    afterRender: (h) => {
+      const nav = [...h.querySelectorAll("[data-bene-card]")].map((b) => +b.dataset.beneCard);
+      h.querySelectorAll("[data-bene-card]").forEach((b) => (b.onclick = () => openMemberCard(+b.dataset.beneCard, nav)));
+      h.querySelectorAll("[data-bene-edit]").forEach((b) => (b.onclick = () => editBeneficiaryRow(reg[+b.dataset.beneEdit])));
+      const ps = h.querySelector("[data-bene-print-sel]");
+      if (ps) ps.onclick = () => printCardsDialog(selRows, "Print membership cards");
+      const pa = h.querySelector("[data-bene-print-all]");
+      if (pa) pa.onclick = () => {
+        const act = reg.filter((r) => r[8] === "Active");
+        if (!act.length) { toast("No active members on the register.", true); return; }
+        printCardsDialog(act, `Print cards for all ${act.length} active members`);
+      };
+    },
   });
 }
 function renderBeneVerification(host) {
