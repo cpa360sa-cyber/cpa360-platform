@@ -2512,6 +2512,32 @@ function beneStats() {
    reg + member no. + name: if the name on the register changes, an old card's code no longer
    matches, which flags a stale or altered card. Member photos live in the documents store
    (section "member-photo"), resized to ≤480px on upload. */
+/* ODI link. A beneficiary belongs to a household in the ODI register (Household Records) through
+   `household_ref` (register column 5 = Household ID, e.g. MCPA-012). The household row carries the ODI. */
+const hhList = () => DATA.beneficiaryCentre.households || [];
+const householdOf = (ref) => (ref ? hhList().find((h) => h[0] === ref) || null : null);
+const odiNameOf = (h) => (h ? String(h[2] || h[1] || "").trim() : "");
+const hhOptionLabel = (h) => `${h[0]} · ${odiNameOf(h) || "(no ODI name)"}`;
+function hhChoices(currentRef) {
+  const labels = [...hhList()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true })).map(hhOptionLabel);
+  let current = "";
+  if (currentRef) {
+    const h = householdOf(currentRef);
+    current = h ? hhOptionLabel(h) : `${currentRef} (not in the ODI register)`;
+    if (!h) labels.unshift(current);
+  }
+  return { options: ["", ...labels], current };
+}
+const refFromHhLabel = (l) => String(l || "").split(" · ")[0].replace(/ \(not in the ODI register\)$/, "").trim();
+function inferHouseholdRole(h, name) {
+  const n = String(name || "").trim().toLowerCase();
+  if (!h || !n) return "";
+  const hit = [[h[2], "ODI"], [h[1], "Family Representative"], [h[4], "1st Descendant"], [h[6], "2nd Descendant"], [h[8], "3rd Descendant"], [h[10], "4th Descendant"]]
+    .find(([nm]) => String(nm || "").trim().toLowerCase() === n);
+  return hit ? hit[1] : "";
+}
+function gotoHousehold(ref) { SUBTAB.beneficiary = "households"; bulkState("bene-households").q = ref; renderCurrent(); }
+function gotoHouseholdMembers(ref) { SUBTAB.beneficiary = "register"; bulkState("bene-register").q = ref; renderCurrent(); }
 const IDCARD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16.2c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M15 10h3.5M15 13h3.5"/></svg>';
 const CARD_STYLES = [["brand", "Brand band"], ["dark", "Dark"], ["clean", "Clean"]];
 const CARD_CSS = `
@@ -2528,11 +2554,12 @@ const CARD_CSS = `
 .mc-photo{width:21mm;height:26mm;border-radius:1.8mm;background:color-mix(in srgb,var(--p) 12%,#fff);border:.3mm solid color-mix(in srgb,var(--p) 30%,#fff);display:grid;place-items:center;overflow:hidden;flex:none;color:var(--p);font-weight:800;font-size:8mm;}
 .mc-photo img{width:100%;height:100%;object-fit:cover;object-position:center 20%;}
 .mc-info{min-width:0;flex:1;display:flex;flex-direction:column;}
-.mc-name{font-size:4.2mm;font-weight:800;line-height:1.12;color:var(--p);margin-bottom:1.8mm;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.mc-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.3mm 2.4mm;}
-.mc-k{font-size:1.8mm;letter-spacing:.35mm;text-transform:uppercase;color:#6b7386;}
-.mc-v{font-size:2.8mm;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-.mc-v.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:2.7mm;}
+.mc-name{font-size:3.9mm;font-weight:800;line-height:1.12;color:var(--p);margin-bottom:1.2mm;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.mc-grid{display:grid;grid-template-columns:1fr 1fr;gap:1mm 2.4mm;}
+.mc-grid .span2{grid-column:1/-1;min-width:0;}
+.mc-k{font-size:1.7mm;letter-spacing:.35mm;text-transform:uppercase;color:#6b7386;}
+.mc-v{font-size:2.6mm;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.mc-v.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:2.5mm;}
 .mc-foot{position:absolute;left:0;right:0;bottom:0;height:7mm;background:color-mix(in srgb,var(--p) 8%,#fff);border-top:.25mm solid color-mix(in srgb,var(--p) 18%,#fff);display:flex;align-items:center;justify-content:space-between;gap:2mm;padding:0 4mm;font-size:2.2mm;color:#4d5871;}
 .mc-foot .mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;}
 .mc-chip{display:inline-block;padding:.45mm 1.7mm;border-radius:99px;font-size:2mm;font-weight:800;letter-spacing:.2mm;text-transform:uppercase;background:#e2f4e6;color:#0f6b30;white-space:nowrap;}
@@ -2583,6 +2610,8 @@ function cardState(r) {
 function cardIssues(r) {
   const w = [];
   if (!(r[0] || "").trim()) w.push("This member has no register / member number — add one so the card and QR code identify them.");
+  if (!(r[5] || "").trim()) w.push("No ODI / household linked — choose one below so the card shows the member's ODI.");
+  else if (!householdOf(r[5])) w.push(`Household “${r[5]}” isn't in the ODI register (Beneficiaries → Households), so no ODI name can be shown.`);
   if (r[8] !== "Active") w.push(`Status is “${r[8]}” — the card prints with a NOT ACTIVE watermark.`);
   else if (r[9] !== "Verified") w.push(`Verification is “${r[9] || "not set"}” — cards are normally issued to verified members.`);
   return w;
@@ -2602,8 +2631,9 @@ function cardFrontHtml(r, o) {
         <div class="mc-grid">
           <div><div class="mc-k">Member no.</div><div class="mc-v mono">${esc(r[0] || "—")}</div></div>
           <div><div class="mc-k">Household</div><div class="mc-v mono">${esc(r[5] || "—")}</div></div>
-          <div><div class="mc-k">Member since</div><div class="mc-v">${esc(cardMonth(r[7]))}</div></div>
+          <div class="span2"><div class="mc-k">ODI</div><div class="mc-v">${esc(r[11] === "ODI" ? "Self (ODI)" : odiNameOf(householdOf(r[5])) || "Not linked")}</div></div>
           <div><div class="mc-k">Position</div><div class="mc-v">${esc(r[11] || "Member")}</div></div>
+          <div><div class="mc-k">Member since</div><div class="mc-v">${esc(cardMonth(r[7]))}</div></div>
         </div></div>
     </div>
     <div class="mc-foot"><span class="mono">${r[4] ? "ID " + esc(r[4]) + " · " : ""}Valid to ${esc(cardMonth(o.valid))}</span><span class="mc-chip ${st.chip[0]}">${esc(st.chip[1])}</span></div>
@@ -2708,6 +2738,11 @@ function openMemberCard(startIdx, navIdx) {
       <span class="mc-lbl" style="margin:0;">Style</span>${CARD_STYLES.map((s) => `<button type="button" class="btn small" data-mc-style="${s[0]}">${s[1]}</button>`).join("")}
       <span class="mc-lbl" style="margin:0 0 0 8px;">Valid until</span><input type="date" id="mc-valid" class="mc-date" value="${esc(valid)}">
     </div>
+    <div class="mc-ctl" style="margin-top:8px;">
+      <span class="mc-lbl" style="margin:0;">ODI / household</span><select id="mc-odi" class="mc-date" style="max-width:260px;"${CAN_EDIT ? "" : " disabled"}></select>
+      <span class="mc-lbl" style="margin:0 0 0 8px;">Position</span><select id="mc-role" class="mc-date"${CAN_EDIT ? "" : " disabled"}></select>
+      <button type="button" class="btn small" id="mc-open-hh" title="Open this household in the ODI register">View in ODI register</button>
+    </div>
     ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:8px;"><label class="btn small" style="cursor:pointer;">Upload photo<input type="file" id="mc-file" accept="image/*" hidden></label>
       <button type="button" class="btn small" id="mc-rm-photo" hidden>Remove photo</button><span class="hint" id="mc-msg"></span></div>` : ""}`,
     `<span class="hint" id="mc-pos" style="margin-right:auto;"></span>
@@ -2722,6 +2757,10 @@ function openMemberCard(startIdx, navIdx) {
     $q("#mcb").innerHTML = cardBackHtml(r, { style, valid });
     $q("#mc-warn").innerHTML = cardIssues(r).map((w) => `<p class="mc-note">&#9888; ${esc(w)}</p>`).join("");
     $q("#mc-pos").textContent = `${pos + 1} of ${navIdx.length}`;
+    const hc = hhChoices(r[5]);
+    $q("#mc-odi").innerHTML = hc.options.map((o) => `<option value="${esc(o)}"${o === hc.current ? " selected" : ""}>${esc(o || "— not linked —")}</option>`).join("");
+    $q("#mc-role").innerHTML = HOUSEHOLD_ROLES.map((o) => `<option value="${esc(o)}"${o === (r[11] || "") ? " selected" : ""}>${esc(o || "— none —")}</option>`).join("");
+    $q("#mc-open-hh").hidden = !householdOf(r[5]);
     $q('[data-mc="prev"]').disabled = pos === 0; $q('[data-mc="next"]').disabled = pos === navIdx.length - 1;
     scrim.querySelectorAll("[data-mc-style]").forEach((b) => b.classList.toggle("active", b.dataset.mcStyle === style));
     const rm = $q("#mc-rm-photo"); if (rm) rm.hidden = true;
@@ -2734,6 +2773,14 @@ function openMemberCard(startIdx, navIdx) {
   }
   scrim.querySelectorAll("[data-mc-style]").forEach((b) => (b.onclick = () => { style = b.dataset.mcStyle; saveCardPrefs({ style, valid }); paint(); }));
   $q("#mc-valid").onchange = (e) => { valid = e.target.value || valid; saveCardPrefs({ style, valid }); paint(); };
+  $q("#mc-odi").onchange = (e) => {
+    const r = row();
+    r[5] = refFromHhLabel(e.target.value);
+    if (!r[11]) r[11] = inferHouseholdRole(householdOf(r[5]), r[1]);
+    paint(); commit("beneficiaries");
+  };
+  $q("#mc-role").onchange = (e) => { const r = row(); r[11] = e.target.value; paint(); commit("beneficiaries"); };
+  $q("#mc-open-hh").onclick = () => { const ref = row()[5]; close(); gotoHousehold(ref); };
   $q('[data-mc="prev"]').onclick = () => { if (pos > 0) { pos--; paint(); } };
   $q('[data-mc="next"]').onclick = () => { if (pos < navIdx.length - 1) { pos++; paint(); } };
   $q('[data-mc="print"]').onclick = () => printMemberCards([row()], { style, valid, photoUrl });
@@ -2785,7 +2832,10 @@ function renderBeneRegister(host) {
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
       `<span style="font-weight:600;">${esc(r[1])}</span>`, r[11] ? `<span class="pill neutral">${esc(r[11])}</span>` : "—",
       esc(r[2]), `<span class="mono">${esc(r[3])}</span>`,
-      `<span class="mono">${esc(r[5])}</span>`, esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
+      !r[5] ? `<span class="hint">— not linked</span>`
+        : `<button type="button" class="linkbtn mono" data-bene-hh="${esc(r[5])}" title="Open this household in the ODI register">${esc(r[5])}</button>`
+          + (householdOf(r[5]) ? `<div class="hint">ODI: ${esc(odiNameOf(householdOf(r[5])) || "—")}</div>` : `<div class="hint" style="color:var(--status-warning);">not in ODI register</div>`),
+      esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
       statusPill(r[8]), statusPill(r[9]), beneActionsHtml(r, reg.indexOf(r))],
     manage: () => listEditor(BENE_EDITORS.register()),
     bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
@@ -2799,6 +2849,7 @@ function renderBeneRegister(host) {
       const nav = [...h.querySelectorAll("[data-bene-card]")].map((b) => +b.dataset.beneCard);
       h.querySelectorAll("[data-bene-card]").forEach((b) => (b.onclick = () => openMemberCard(+b.dataset.beneCard, nav)));
       h.querySelectorAll("[data-bene-edit]").forEach((b) => (b.onclick = () => editBeneficiaryRow(reg[+b.dataset.beneEdit])));
+      h.querySelectorAll("[data-bene-hh]").forEach((b) => (b.onclick = () => gotoHousehold(b.dataset.beneHh)));
       const ps = h.querySelector("[data-bene-print-sel]");
       if (ps) ps.onclick = () => printCardsDialog(selRows, "Print membership cards");
       const pa = h.querySelector("[data-bene-print-all]");
@@ -2917,7 +2968,7 @@ function renderBeneHouseholds(host) {
       const members = reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length;
       return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
         `<span style="font-weight:600;">${esc(r[2])}</span>`,
-        esc(r[1]), `<span class="mono">${members}</span>`,
+        esc(r[1]), members ? `<button type="button" class="linkbtn mono" data-hh-members="${esc(r[0])}" title="Show these members in the Master Register">${members}</button>` : `<span class="mono">0</span>`,
         statusPill(r[17] || "Pending"),
         r[22] ? pill(r[23] ? `Disputed (${esc(r[23])})` : "Disputed", "critical") : pill("None", "neutral"),
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
@@ -2930,6 +2981,7 @@ function renderBeneHouseholds(host) {
     afterRender: (h) => {
       const b = h.querySelector("[data-reg-extract]");
       if (b) b.onclick = () => extractHouseholdsAsBeneficiaries();
+      h.querySelectorAll("[data-hh-members]").forEach((m) => (m.onclick = () => gotoHouseholdMembers(m.dataset.hhMembers)));
     },
   });
 }
@@ -5665,8 +5717,8 @@ const BENE_EDITORS = {
       { key: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other", "Unspecified"], value: r[2] || "Female" },
       { key: "dob", label: "Date of birth", type: "date", value: r[3] },
       { key: "idm", label: "ID (auto-masked — only the last 4 digits are kept)", type: "text", value: r[4] },
-      { key: "hh", label: "Household ref.", type: "text", value: r[5] },
-      { key: "role", label: "Family position", type: "select", options: HOUSEHOLD_ROLES, value: r[11] || "" },
+      { key: "hh", label: "ODI / household — linked to the ODI register (Beneficiaries → Households)", type: "select", ...(() => { const c = hhChoices(r[5]); return { options: c.options, value: c.current }; })() },
+      { key: "role", label: "Family position (filled automatically if the name matches the household)", type: "select", options: HOUSEHOLD_ROLES, value: r[11] || "" },
       { key: "contact", label: "Contact", type: "text", value: r[6] },
       { key: "joined", label: "Joined on", type: "date", value: r[7] },
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
@@ -5674,8 +5726,9 @@ const BENE_EDITORS = {
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
     ],
     write: (r, o) => {
-      r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = maskId(o.idm); r[5] = o.hh;
-      r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes; r[11] = o.role;
+      r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = maskId(o.idm); r[5] = refFromHhLabel(o.hh);
+      r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes;
+      r[11] = o.role || inferHouseholdRole(householdOf(r[5]), o.name);
     },
   }),
   households: () => ({
