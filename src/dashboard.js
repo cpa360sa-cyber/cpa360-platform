@@ -756,6 +756,7 @@ function mountRegister(host, cfg) {
   const tools = [];
   if (sstate) tools.push(`<span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off"
       placeholder="${esc(cfg.search === true ? "Search this list…" : cfg.search)}" value="${esc(sstate.q || "")}" aria-label="Search ${esc(cfg.title)}">${q ? `<span class="hint reg-search-n">${rows.length} of ${pool.length}</span>` : ""}</span>`);
+  if (CAN_EDIT && cfg.addNew) tools.push(`<button class="btn primary" data-reg-add type="button">+ ${esc(cfg.addNew.label)}</button>`);
   if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV / Excel</button>`);
   if (bulk && distinctVals.length > 1) {
     const on = bulk.filter.size < distinctVals.length;
@@ -800,6 +801,19 @@ function mountRegister(host, cfg) {
     };
     si.onkeydown = (e) => { if (e.key === "Escape" && si.value) { si.value = ""; si.oninput(); } };
   }
+  const ab = host.querySelector("[data-reg-add]");
+  if (ab) ab.onclick = () => {
+    const ed = cfg.addNew.editor();
+    const row = ed.blank();
+    openModal("Add — " + cfg.addNew.label.replace(/^Add /i, ""), ed.fields(row), (out) => {
+      ed.write(row, out);
+      ed.arr.push(row);
+      if (cfg.addNew.after) cfg.addNew.after(row);
+      renderCurrent();
+      commit(ed.section);
+      toast(`${cfg.addNew.label.replace(/^Add /i, "").replace(/^./, (c) => c.toUpperCase())} added.`);
+    }, "Add");
+  };
   const mb = host.querySelector("[data-reg-manage]");
   if (mb) mb.onclick = cfg.manage;
   const ib = host.querySelector("[data-reg-import]");
@@ -2838,6 +2852,7 @@ function renderBeneRegister(host) {
       esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
       statusPill(r[8]), statusPill(r[9]), beneActionsHtml(r, reg.indexOf(r))],
     manage: () => listEditor(BENE_EDITORS.register()),
+    addNew: { label: "Add beneficiary", editor: () => BENE_EDITORS.register(), after: (row) => { bulkState("bene-register").q = row[1] || ""; } },
     bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
     search: "Search name, ref, ID, household, contact…",
     rerender: () => renderBeneRegister(host),
@@ -2974,6 +2989,7 @@ function renderBeneHouseholds(host) {
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
     },
     manage: () => listEditor(BENE_EDITORS.households()),
+    addNew: { label: "Add household", editor: () => BENE_EDITORS.households(), after: (row) => { bulkState("bene-households").q = row[0] || ""; } },
     bulkKey: "bene-households", filterCol: 12, filterLabel: "Status", section: "households",
     search: "Search ODI, representative, descendants, ref…",
     rerender: () => renderBeneHouseholds(host),
@@ -3003,6 +3019,7 @@ function renderBeneSuccession(host) {
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
       `<span class="mono">${esc(r[2])}</span>`, esc(r[3]), esc(r[4]), `<span class="mono">${esc(r[5])}</span>`, statusPill(r[6])],
     manage: () => listEditor(BENE_EDITORS.succession()),
+    addNew: { label: "Add succession case", editor: () => BENE_EDITORS.succession() },
     bulkKey: "bene-succession", filterCol: 6, filterLabel: "Status", section: "succession_cases",
     search: "Search deceased, successor, ref…",
     rerender: () => renderBeneSuccession(host),
@@ -3071,6 +3088,7 @@ function renderBeneDisputes(host) {
       esc(r[2]), `<span style="color:var(--ink-2);min-width:220px;display:inline-block;">${esc(r[3])}</span>`,
       `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
     manage: () => listEditor(BENE_EDITORS.disputes()),
+    addNew: { label: "Add case", editor: () => BENE_EDITORS.disputes() },
     bulkKey: "bene-disputes", filterCol: 5, filterLabel: "Status", section: "beneficiary_disputes",
     search: "Search parties, description, ref…",
     rerender: () => renderBeneDisputes(host),
