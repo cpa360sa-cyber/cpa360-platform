@@ -2892,6 +2892,7 @@ function openMemberCard(startIdx, navIdx) {
       <span class="mc-lbl" style="margin:0;">Save as image</span>
       <button type="button" class="btn small" id="mc-img-front">Front (PNG)</button><button type="button" class="btn small" id="mc-img-back">Back (PNG)</button>
       <span class="mc-lbl" style="margin:0 0 0 8px;">Receipt</span><button type="button" class="btn small" id="mc-receipt">Registration receipt</button>
+      <button type="button" class="btn small" id="mc-docs">ID &amp; documents</button>
     </div>
     ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:8px;"><label class="btn small" style="cursor:pointer;">Upload photo<input type="file" id="mc-file" accept="image/*" hidden></label>
       <button type="button" class="btn small" id="mc-rm-photo" hidden>Remove photo</button><span class="hint" id="mc-msg"></span></div>` : ""}`,
@@ -2937,6 +2938,7 @@ function openMemberCard(startIdx, navIdx) {
   $q("#mc-img-front").onclick = () => downloadCardImage(row(), "front", { style, valid, photoUrl });
   $q("#mc-img-back").onclick = () => downloadCardImage(row(), "back", { style, valid });
   $q("#mc-receipt").onclick = () => openReceipt(row());
+  $q("#mc-docs").onclick = () => openMemberDocs(row());
   $q('[data-mc="prev"]').onclick = () => { if (pos > 0) { pos--; paint(); } };
   $q('[data-mc="next"]').onclick = () => { if (pos < navIdx.length - 1) { pos++; paint(); } };
   $q('[data-mc="print"]').onclick = () => printMemberCards([row()], { style, valid, photoUrl });
@@ -2969,9 +2971,78 @@ function openMemberCard(startIdx, navIdx) {
   });
   paint();
 }
+/* ---- member documents (ID copy + supporting papers) ----
+   Stored in the CPA's private document store, one section per document type so the register can
+   show at a glance who has no ID on file. Required: ID document. */
+const MEMBER_DOC_TYPES = [
+  { section: "member-id", label: "ID document (certified copy)", required: true },
+  { section: "member-residence", label: "Proof of residence" },
+  { section: "member-form", label: "Membership / application form" },
+  { section: "member-civil", label: "Birth, marriage or death certificate" },
+  { section: "member-other", label: "Other supporting document" },
+];
+const memberDocTotal = (id) => MEMBER_DOC_TYPES.reduce((s, t) => s + docCount(t.section, id), 0);
+const memberHasId = (r) => docCount("member-id", r._id) > 0;
+async function openMemberDocs(r) {
+  if (!r._id) { toast("This member isn't saved yet — wait a moment, then add documents.", true); return; }
+  const { scrim } = govModal("Documents — " + (r[1] || "member"), `
+    <p class="hint" style="margin:0 0 10px;">${esc(r[1] || "")}${r[0] ? " · " + esc(r[0]) : ""}. Certified ID copies and supporting papers are stored privately and are visible only to this CPA's members.</p>
+    <div id="md-list">${stateHtml("loading", "Loading…")}</div>
+    ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:12px;">
+      <select id="md-type" class="mc-date">${MEMBER_DOC_TYPES.map((t) => `<option value="${t.section}">${esc(t.label)}</option>`).join("")}</select>
+      <label class="btn primary small" style="cursor:pointer;">Upload file(s)<input type="file" id="md-file" multiple hidden accept="application/pdf,image/*,.doc,.docx"></label>
+      <span class="hint" id="md-msg"></span></div>
+      <p class="hint" style="margin:6px 0 0;">PDF, photo or Word, up to 25 MB each.</p>` : ""}`, undefined, 640);
+  const listEl = scrim.querySelector("#md-list"), msg = scrim.querySelector("#md-msg");
+  async function refresh() {
+    try {
+      const groups = await Promise.all(MEMBER_DOC_TYPES.map(async (t) => ({ t, docs: await repo.listDocs(orgId, t.section, r._id) })));
+      listEl.innerHTML = groups.map(({ t, docs }) => `
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><b>${esc(t.label)}</b>
+            ${docs.length ? pill(`${docs.length} on file`, "good") : t.required ? pill("Missing", "critical") : '<span class="hint">none</span>'}</div>
+          ${docs.map((d) => `<div class="le-row"><span title="${esc(d.name)}">${esc(d.name)} <span style="color:var(--ink-muted);">${esc(fmtBytes(d.size))}${d.uploaded_at ? " · " + esc(fmtDay(String(d.uploaded_at).slice(0, 10))) : ""}</span></span>
+            <span style="display:flex;gap:4px;"><button type="button" class="btn small" data-md-view="${d.id}">View</button>
+              <button type="button" class="btn small" data-md-dl="${d.id}">Download</button>
+              ${CAN_EDIT ? `<button type="button" class="btn small" data-md-rm="${d.id}" style="color:var(--status-critical);">Delete</button>` : ""}</span></div>`).join("")}
+        </div>`).join("");
+      const find = (id) => groups.flatMap((g) => g.docs).find((x) => x.id === id);
+      listEl.querySelectorAll("[data-md-view]").forEach((b) => (b.onclick = async () => {
+        try { window.open(await repo.docPreviewUrl(find(b.dataset.mdView).path), "_blank", "noopener"); } catch (e) { toast("Couldn't open the file", true); }
+      }));
+      listEl.querySelectorAll("[data-md-dl]").forEach((b) => (b.onclick = async () => {
+        try { window.open(await repo.docUrl(find(b.dataset.mdDl).path), "_blank", "noopener"); } catch (e) { toast("Couldn't download the file", true); }
+      }));
+      listEl.querySelectorAll("[data-md-rm]").forEach((b) => (b.onclick = () => {
+        const d = find(b.dataset.mdRm), t = groups.find((g) => g.docs.includes(d)).t;
+        confirmModal(`Delete “${d.name}”?`, async () => {
+          try { await repo.deleteDoc(d); bumpDocCount(t.section, r._id, -1); refresh(); renderCurrent(); if (onChange) onChange(); }
+          catch (e) { toast("Couldn't delete: " + (e.message || e), true); }
+        });
+      }));
+    } catch (e) { listEl.innerHTML = stateHtml("error", "Couldn't load documents. " + (e.message || e)); }
+  }
+  refresh();
+  const fi = scrim.querySelector("#md-file");
+  if (fi) fi.onchange = async () => {
+    const files = [...fi.files], sec = scrim.querySelector("#md-type").value;
+    fi.value = "";
+    let done = 0;
+    for (const f of files) {
+      if (!/\.(pdf|jpe?g|png|heic|webp|gif|docx?)$/i.test(f.name) && !/^(image\/|application\/(pdf|msword|vnd\.openxmlformats))/.test(f.type)) { msg.textContent = `“${f.name}” isn't a PDF, photo or Word file.`; continue; }
+      if (f.size > 25 * 1048576) { msg.textContent = `“${f.name}” is over 25 MB.`; continue; }
+      msg.textContent = `Uploading ${done + 1} of ${files.length}…`;
+      try { await repo.uploadDoc(orgId, sec, r._id, f); bumpDocCount(sec, r._id, 1); done++; }
+      catch (e) { msg.textContent = "Failed: " + (e.message || e); }
+    }
+    if (done) { msg.textContent = `${done} file${done > 1 ? "s" : ""} uploaded.`; refresh(); renderCurrent(); if (onChange) onChange(); }
+  };
+}
 function beneActionsHtml(r, idx) {
+  const nDocs = memberDocTotal(r._id), noId = !memberHasId(r);
   return `<span style="display:inline-flex;gap:2px;align-items:center;">
     ${CAN_EDIT ? `<span class="row-actions"><button type="button" data-bene-edit="${idx}" title="Edit member" aria-label="Edit ${esc(r[1])}">${PENCIL}</button></span>` : ""}
+    <button type="button" class="doc-chip${noId ? " missing" : ""}" data-bene-docs="${idx}" title="Documents — ${noId ? "no ID on file" : nDocs + " on file"}" aria-label="Documents for ${esc(r[1])}${noId ? ", ID missing" : ""}">${CLIP}${nDocs ? `<span>${nDocs}</span>` : ""}</button>
     <button type="button" class="doc-chip" data-bene-card="${idx}" title="Membership card — view, edit &amp; print" aria-label="Membership card for ${esc(r[1])}">${IDCARD}</button>
     ${canIssueReceipt(r) ? `<button type="button" class="doc-chip" data-bene-receipt="${idx}" title="Registration &amp; verification receipt" aria-label="Receipt for ${esc(r[1])}">${RECEIPT_ICON}</button>` : ""}</span>`;
 }
@@ -2981,7 +3052,8 @@ function renderBeneRegister(host) {
   const selRows = reg.filter((r) => sel.has(String(r._id)));
   mountRegister(host, {
     title: "Master Beneficiary Register", importKey: "beneficiaries", stats: beneStats,
-    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score. Use the pencil to edit a member and the card icon to view, edit and print their membership card.",
+    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score. Pencil = edit · paperclip = ID and supporting documents (red dot = no ID on file"
+      + (reg.length ? `: ${reg.filter((r) => !memberHasId(r)).length} of ${reg.length}` : "") + ") · card icon = membership card.",
     columns: [{ label: "Ref." }, { label: "Full name" }, { label: "Family position" }, { label: "Gender" }, { label: "DOB" }, { label: "Household" },
       { label: "Contact" }, { label: "Joined" }, { label: "Status" }, { label: "Verification" }, { label: "Actions" }],
     rows: () => reg,
@@ -3009,6 +3081,7 @@ function renderBeneRegister(host) {
       h.querySelectorAll("[data-bene-edit]").forEach((b) => (b.onclick = () => editBeneficiaryRow(reg[+b.dataset.beneEdit])));
       h.querySelectorAll("[data-bene-hh]").forEach((b) => (b.onclick = () => gotoHousehold(b.dataset.beneHh)));
       h.querySelectorAll("[data-bene-receipt]").forEach((b) => (b.onclick = () => openReceipt(reg[+b.dataset.beneReceipt])));
+      h.querySelectorAll("[data-bene-docs]").forEach((b) => (b.onclick = () => openMemberDocs(reg[+b.dataset.beneDocs])));
       const ps = h.querySelector("[data-bene-print-sel]");
       if (ps) ps.onclick = () => printCardsDialog(selRows, "Print membership cards");
       const pa = h.querySelector("[data-bene-print-all]");
