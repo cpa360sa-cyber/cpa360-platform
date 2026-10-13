@@ -2799,7 +2799,7 @@ function receiptBody(r, withQr) {
     <h2>Verification</h2>
     <table>
       ${row("Verification status", "<b>Verified</b>")}
-      ${row("Date verified", r[12] ? esc(fmtDay(r[12])) : "Recorded as verified (date was not captured)")}
+      ${row("Date verified", esc(fmtDay(r[12] || r[7])) || "Recorded as verified (date was not captured)")}
       ${row("Status on the register", esc(r[8] || "—"))}
     </table>
     <table class="sig" style="margin-top:14pt;"><tr><th>Secretary &mdash; signature</th><th>Chairperson &mdash; signature</th><th>Date</th></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>
