@@ -4,6 +4,7 @@ import { renderAuth } from "./auth-ui.js";
 import {
   myOrgs, resolveActiveOrg, setActiveOrgId, createOrg, seedSandbox, atLeast,
   updateOrgBrand, uploadOrgLogo, removeOrgLogo, resolveBrand,
+  getOrgSignatures, setOrgSignature, processSignatureImage,
 } from "./orgs.js";
 import {
   listMembers, addMember, setMemberRole, removeMember,
@@ -725,6 +726,22 @@ function renderBrandBox(view) {
             <input id="bb-secondary" value="${esc(secondary)}" style="flex:1"></div>
         </div>
       </section>
+      <section class="card" style="grid-column:1/-1">
+        <div class="section-title" style="margin-top:0">Signatures</div>
+        <p style="font-size:12px;color:var(--ink-2);margin:0 0 12px">The Chairperson&rsquo;s and Secretary&rsquo;s signatures are placed automatically on documents that need them —
+          member receipts, membership cards, submissions to the Department and permit certificates. Upload a photo or scan of each signature in dark ink on white or light paper;
+          the background is removed for you. Visible only to this CPA&rsquo;s members.</p>
+        <div style="display:flex;gap:24px;flex-wrap:wrap">
+          ${[["chair", "Chairperson"], ["secretary", "Secretary"]].map(([k, label]) => `
+            <div style="min-width:230px;flex:1">
+              <div style="font-weight:700;font-size:12.5px;margin-bottom:6px">${label}</div>
+              <div id="sig-${k}-prev" style="height:80px;border:1px dashed var(--border-strong);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;margin-bottom:8px;font-size:12px;color:var(--ink-muted)">Loading…</div>
+              <label class="btn primary" style="cursor:pointer;display:inline-flex;width:auto">Upload<input type="file" id="sig-${k}-file" accept="image/*" hidden></label>
+              <button class="btn" id="sig-${k}-rm" type="button" style="margin-left:8px;width:auto">Remove</button>
+              <div id="sig-${k}-msg" style="font-size:11.5px;color:var(--ink-2);margin-top:6px"></div>
+            </div>`).join("")}
+        </div>
+      </section>
       <section class="card">
         <div class="section-title" style="margin-top:0">Letterhead footer</div>
         <div class="field">
@@ -767,6 +784,30 @@ function renderBrandBox(view) {
       paintLogo(null); msg.textContent = "";
     } catch (err) { msg.textContent = "Failed: " + (err.message || err); }
   };
+
+  /* signatures */
+  getOrgSignatures(org.id).then((sg) => {
+    ["chair", "secretary"].forEach((k) => {
+      const prev = view.querySelector(`#sig-${k}-prev`), msg = view.querySelector(`#sig-${k}-msg`);
+      const paint = (u) => { prev.innerHTML = u ? `<img src="${u}" alt="" style="max-height:70px;max-width:90%">` : "No signature yet."; };
+      paint(sg[k]);
+      view.querySelector(`#sig-${k}-file`).onchange = async (e) => {
+        const f = e.target.files[0]; e.target.value = "";
+        if (!f) return;
+        msg.textContent = "Cleaning and saving…";
+        try {
+          const url = await processSignatureImage(f);
+          await setOrgSignature(org.id, k, url);
+          paint(url); msg.textContent = "Saved.";
+        } catch (err) { msg.textContent = "Failed: " + (err.message || err); }
+      };
+      view.querySelector(`#sig-${k}-rm`).onclick = async () => {
+        if (!confirm(`Remove the ${k === "chair" ? "Chairperson" : "Secretary"}'s signature?`)) return;
+        try { await setOrgSignature(org.id, k, null); paint(""); msg.textContent = ""; }
+        catch (err) { msg.textContent = "Failed: " + (err.message || err); }
+      };
+    });
+  }).catch(() => ["chair", "secretary"].forEach((k) => { view.querySelector(`#sig-${k}-prev`).textContent = "Couldn't load."; }));
 
   const syncPair = (pickId, textId) => {
     const pick = view.querySelector(pickId), text = view.querySelector(textId);

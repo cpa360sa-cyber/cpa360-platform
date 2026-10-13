@@ -154,6 +154,7 @@ export async function loadOrg(orgId) {
       portions: num(org.portions), members: num(org.members_count),
       brandPrimary: org.brand_primary || "", brandSecondary: org.brand_secondary || "",
       brandFooter: org.brand_footer || "", logoDataUrl,
+      chairSig: org.chair_signature || "", secretarySig: org.secretary_signature || "",
     },
     gates: (gates || []).map((g) => tagObj({ n: g.n, name: g.name, state: g.state, updated_at: g.updated_at }, g)),
     stageReviews: (stageReviews || []).map((r) => tagObj({

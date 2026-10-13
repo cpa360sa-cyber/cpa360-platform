@@ -93,6 +93,60 @@ export async function removeOrgLogo(orgId, path) {
   if (error) throw error;
 }
 
+/* ---- Chairperson / Secretary signatures ----
+   Stored per-org as small transparent PNG data: URLs (orgs.chair_signature / secretary_signature,
+   migration 0040) and read only by that org's members. */
+export async function getOrgSignatures(orgId) {
+  const { data, error } = await supabase.from("orgs").select("chair_signature, secretary_signature").eq("id", orgId).single();
+  if (error) throw error;
+  return { chair: data.chair_signature || "", secretary: data.secretary_signature || "" };
+}
+export async function setOrgSignature(orgId, which, dataUrl) {
+  const col = which === "chair" ? "chair_signature" : "secretary_signature";
+  const { error } = await supabase.from("orgs").update({ [col]: dataUrl || null }).eq("id", orgId);
+  if (error) throw error;
+}
+/** Turns a photo/scan of a signature into a clean transparent PNG data URL: the paper
+    colour becomes see-through (so it sits on a signature line), the ink keeps one solid
+    colour, and the picture is cropped to the ink and capped at 800px wide. */
+export async function processSignatureImage(file) {
+  if (!/^image\//.test(file.type)) throw new Error("Please choose an image (PNG or JPG).");
+  if (file.size > 6 * 1048576) throw new Error("Max 6 MB.");
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 800 / bmp.width);
+  const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(bmp, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  // paper brightness = the 85th-percentile pixel (the page itself, not the ink), so grey or
+  // off-white scans become fully see-through instead of leaving a tinted box
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) hist[Math.min(d[i], d[i + 1], d[i + 2])]++;
+  let acc = 0, paper = 255;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= w * h * 0.85) { paper = Math.max(v, 140); break; } }
+  let minX = w, minY = h, maxX = -1, maxY = -1, inkR = 0, inkG = 0, inkB = 0, inkN = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4, a0 = d[i + 3], m = Math.min(d[i], d[i + 1], d[i + 2]);
+    const t = paper - m;
+    const a = Math.min(a0, t < 22 ? 0 : Math.min(255, (t - 22) * 2.6));
+    if (a > 200) { inkR += d[i]; inkG += d[i + 1]; inkB += d[i + 2]; inkN++; }
+    d[i + 3] = a;
+    if (a > 24) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  }
+  if (maxX < 0) throw new Error("No signature found in that picture — use dark ink on a light background.");
+  const r = inkN ? Math.round(inkR / inkN) : 20, g = inkN ? Math.round(inkG / inkN) : 20, b = inkN ? Math.round(inkB / inkN) : 60;
+  for (let i = 0; i < d.length; i += 4) { d[i] = r; d[i + 1] = g; d[i + 2] = b; }
+  ctx.putImageData(img, 0, 0);
+  const pad = 3;
+  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad); maxX = Math.min(w - 1, maxX + pad); maxY = Math.min(h - 1, maxY + pad);
+  const out = document.createElement("canvas");
+  out.width = maxX - minX + 1; out.height = maxY - minY + 1;
+  out.getContext("2d").drawImage(c, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+  return out.toDataURL("image/png");
+}
+
 /** Fetches the org's logo and returns it as a data: URL — inlined into
     generated documents so they render without depending on a signed URL
     (which expires) or network access once downloaded. */

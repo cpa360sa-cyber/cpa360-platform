@@ -1160,8 +1160,18 @@ remain responsible for obtaining any licence required by law before commencing a
   <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
 </table>`;
 }
+/* Chairperson / Secretary signatures (Brand Box → Signatures). Printed names come from the
+   Governance office-bearers register. */
+const sigImg = (which, h = 40) => {
+  const u = which === "chair" ? DATA.cpa.chairSig : DATA.cpa.secretarySig;
+  return u ? `<img src="${u}" height="${h}" alt="" style="height:${h}px;">` : "";
+};
+const signerName = (re, notRe) => { const c = (DATA.committee || []).find((x) => re.test(x[0] || "") && !(notRe && notRe.test(x[0] || ""))); return c ? (c[1] || "") : ""; };
+const chairName = () => signerName(/chair/i, /vice|deputy/i);
+const secName = () => signerName(/secretar/i, /assistant|deputy/i);
+const sigCell = (which) => `${sigImg(which)}<div style="font-size:8pt;color:#555;">${esc(which === "chair" ? chairName() : secName())}</div>`;
 function permitCertificateBodyHtml(r) {
-  const validRange = `${r[12] ? esc(r[12]) : esc((r[1] || "").split(" to ")[0] || "")}${r[1] ? " &ndash; " + esc(r[1]) : ""}`;
+  const validRange = r[1] ? "Until " + esc(r[1]) : "—";
   return `
 <div class="cert">
   <h1>Timber Harvesting Permit</h1>
@@ -1184,10 +1194,10 @@ function permitCertificateBodyHtml(r) {
       statutory licence before commencing harvesting.</li>
     <li>Harvesting is confined strictly to the species, quantity and site specified above.</li>
     <li>This permit may be suspended or revoked by ${esc(DATA.cpa.name || "the CPA")} for breach of its conditions.</li>
-    ${r[13] ? `<li>${esc(r[13])}</li>` : ""}
+    ${r[12] ? `<li>${esc(r[12])}</li>` : ""}
   </ol>
   <table class="sig" style="margin-top:16pt;"><tr><th>Signature</th><th>Name</th><th>Capacity</th><th>Date issued</th></tr>
-    <tr><td>&nbsp;</td><td>&nbsp;</td><td>EXCO / Land Committee</td><td>${esc((r[12] || "").slice(0, 10))}</td></tr></table>
+    <tr><td>${sigImg("chair")}&nbsp;</td><td>${esc(chairName())}&nbsp;</td><td>Chairperson, EXCO / Land Committee</td><td>${esc(fmtDay(isoDay(new Date())))}</td></tr></table>
 </div>`;
 }
 function printHtmlDoc(title, bodyHtml) {
@@ -1777,7 +1787,7 @@ function govPackBody(rows) {
     <h2>Enclosures</h2>${govEnclosureTable(rows)}
     <p>Kindly acknowledge receipt and quote your reference number in future correspondence.</p>
     <p>Yours faithfully,</p>
-    <table class="sig"><tr><th>Chairperson — signature</th><th>Secretary — signature</th><th>Date</th></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>
+    <table class="sig"><tr><th>Chairperson — signature</th><th>Secretary — signature</th><th>Date</th></tr><tr><td>${sigCell("chair")}&nbsp;</td><td>${sigCell("secretary")}&nbsp;</td><td>${esc(fmtDay(isoDay(new Date())))}</td></tr></table>
     <p class="note">Department reference no.: ________________________</p>`;
 }
 function govDownloadPack(rows, filename) {
@@ -2587,6 +2597,8 @@ const CARD_CSS = `
 .mc-qr small{display:block;text-align:center;font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:2.2mm;margin-top:.7mm;letter-spacing:.3mm;}
 .mc-terms{position:absolute;left:31mm;right:4mm;top:13.8mm;font-size:2mm;line-height:1.3;color:#3b465c;}
 .mc-sig{position:absolute;left:31mm;right:4mm;bottom:9.6mm;display:flex;gap:3mm;}
+.mc-chair-sig{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);height:8.5mm;max-width:100%;width:auto;margin-bottom:.4mm;}
+.mc.dark .mc-chair-sig{filter:invert(1) brightness(1.6);}
 .mc-sig div{flex:1;border-top:.25mm solid #8890a3;padding-top:.5mm;font-size:1.8mm;color:#6b7386;text-transform:uppercase;letter-spacing:.2mm;}
 .mc.dark{background:linear-gradient(135deg,var(--p) 0%,color-mix(in srgb,var(--p) 62%,#000) 100%);color:#fff;}
 .mc.dark .mc-head{background:transparent;} .mc.dark .mc-acc{height:.6mm;}
@@ -2662,7 +2674,7 @@ function cardBackHtml(r, o) {
     <div class="mc-stripe"><span>Property of ${esc(cpa)}</span></div>
     <div class="mc-qr">${qr}<small>${esc(cardCode(r))}</small></div>
     <div class="mc-terms">This card identifies the holder as a member of ${esc(cpa)}${DATA.cpa.reg ? " (" + esc(DATA.cpa.reg) + ")" : ""}. It remains the property of the association, is not transferable, and is valid only while membership is in good standing. If found, please return it to ${esc(cpa)}${DATA.cpa.region ? ", " + esc(DATA.cpa.region) : ""}.</div>
-    <div class="mc-sig"><div>Holder's signature</div><div>Chairperson</div></div>
+    <div class="mc-sig"><div>Holder's signature</div><div style="position:relative;">${DATA.cpa.chairSig ? `<img class="mc-chair-sig" src="${DATA.cpa.chairSig}" alt="">` : ""}Chairperson</div></div>
     <div class="mc-foot" style="height:6mm;font-size:2mm;"><span>Issued with CPA360&trade;</span><span class="mono">${esc(r[0] || "")}</span></div>
   </div>`;
 }
@@ -2782,8 +2794,11 @@ function receiptBody(r, withQr) {
   let qr = "";
   if (withQr) { try { qr = qrSvg(cardPayload(r), { quiet: 1 }); } catch (e) {} }
   const row = (k, v) => `<tr><td style="width:34%;font-weight:600;">${esc(k)}</td><td>${v}</td></tr>`;
+  // the receipt is dated the day the member was verified (members verified before dates were
+  // tracked fall back to the day they joined; with neither, today)
+  const rdate = fmtDay(r[12] || r[7] || isoDay(new Date()));
   return `
-    <p style="text-align:right;margin:0 0 6pt;">Receipt no. <b>${esc(receiptNo(r))}</b><br>Issued on ${esc(fmtDay(isoDay(new Date())))}</p>
+    <p style="text-align:right;margin:0 0 6pt;">Receipt no. <b>${esc(receiptNo(r))}</b><br>Date: ${esc(rdate)}</p>
     <p>This is to certify that <b>${esc(r[1] || "")}</b>${r[4] ? ` (ID ${esc(r[4])})` : ""} has been <b>added to the Master Beneficiary Register</b> of
       <b>${cpa}</b>${DATA.cpa.reg ? ` (${esc(DATA.cpa.reg)})` : ""} and that the membership has been <b>verified</b> by the association.</p>
     <h2>Member</h2>
@@ -2802,7 +2817,7 @@ function receiptBody(r, withQr) {
       ${row("Date verified", esc(fmtDay(r[12] || r[7])) || "Recorded as verified (date was not captured)")}
       ${row("Status on the register", esc(r[8] || "—"))}
     </table>
-    <table class="sig" style="margin-top:14pt;"><tr><th>Secretary &mdash; signature</th><th>Chairperson &mdash; signature</th><th>Date</th></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table>
+    <table class="sig" style="margin-top:14pt;"><tr><th>Secretary &mdash; signature</th><th>Chairperson &mdash; signature</th><th>Date</th></tr><tr><td>${sigCell("secretary")}&nbsp;</td><td>${sigCell("chair")}&nbsp;</td><td>${esc(rdate)}</td></tr></table>
     <table style="border:0;margin-top:8pt;"><tr>${qr ? `<td style="border:0;width:70pt;padding-left:0;">${qr.replace("<svg ", '<svg width="64" height="64" ')}</td>` : ""}
       <td style="border:0;"><p class="note">Check code <b>${esc(cardCode(r))}</b>. This receipt is evidence of registration and verification only. It does not by itself confer ownership of, or a right to, any land or benefit, and
         is valid only while the member's verification on the register remains <i>Verified</i>.</p></td></tr></table>`;
