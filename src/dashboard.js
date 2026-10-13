@@ -739,6 +739,10 @@ function mountRegister(host, cfg) {
 
   // Free-text search (opt-in via cfg.search): every word typed must appear somewhere in the
   // row's data — names, refs, masked IDs, household, contact, notes — in any order.
+  // Quick toggles (opt-in via cfg.toggles: [{key,label,test}]) — each narrows the list to rows passing `test`.
+  const togs = cfg.toggles || [];
+  const tstate = togs.length ? bulkState(cfg.bulkKey || "toggle:" + cfg.title) : null;
+  if (tstate) { tstate.tog ||= {}; togs.forEach((t) => { if (tstate.tog[t.key]) rows = rows.filter(t.test); }); }
   const sstate = cfg.search ? bulkState(cfg.bulkKey || "search:" + cfg.title) : null;
   const q = sstate ? (sstate.q || "").trim().toLowerCase() : "";
   const pool = rows;
@@ -756,6 +760,10 @@ function mountRegister(host, cfg) {
   const tools = [];
   if (sstate) tools.push(`<span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off"
       placeholder="${esc(cfg.search === true ? "Search this list…" : cfg.search)}" value="${esc(sstate.q || "")}" aria-label="Search ${esc(cfg.title)}">${q ? `<span class="hint reg-search-n">${rows.length} of ${pool.length}</span>` : ""}</span>`);
+  togs.forEach((t) => {
+    const on = !!tstate.tog[t.key], n = allRows.filter(t.test).length;
+    tools.push(`<button class="btn${on ? " active" : ""}" data-reg-tog="${esc(t.key)}" type="button" aria-pressed="${on}" title="${on ? "Showing only these — click to show everyone" : "Show only these"}">${esc(t.label)} (${n})</button>`);
+  });
   if (CAN_EDIT && cfg.addNew) tools.push(`<button class="btn primary" data-reg-add type="button">+ ${esc(cfg.addNew.label)}</button>`);
   if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV / Excel</button>`);
   if (bulk && distinctVals.length > 1) {
@@ -801,6 +809,10 @@ function mountRegister(host, cfg) {
     };
     si.onkeydown = (e) => { if (e.key === "Escape" && si.value) { si.value = ""; si.oninput(); } };
   }
+  host.querySelectorAll("[data-reg-tog]").forEach((b) => (b.onclick = () => {
+    tstate.tog[b.dataset.regTog] = !tstate.tog[b.dataset.regTog];
+    if (cfg.rerender) cfg.rerender(); else mountRegister(host, cfg);
+  }));
   const ab = host.querySelector("[data-reg-add]");
   if (ab) ab.onclick = () => {
     const ed = cfg.addNew.editor();
@@ -3070,6 +3082,10 @@ function renderBeneRegister(host) {
     addNew: { label: "Add beneficiary", editor: () => BENE_EDITORS.register(), after: (row) => { bulkState("bene-register").q = row[1] || ""; offerReceipt(row); } },
     bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
     search: "Search name, ref, ID, household, contact…",
+    toggles: [
+      { key: "noid", label: "No ID on file", test: (r) => !memberHasId(r) },
+      { key: "unver", label: "Not verified", test: (r) => r[9] !== "Verified" },
+    ],
     rerender: () => renderBeneRegister(host),
     extraTools: [
       `<button class="btn" data-bene-print-sel type="button"${selRows.length ? "" : " disabled"}>Print cards${selRows.length ? ` (${selRows.length})` : ""}</button>`,
