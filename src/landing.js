@@ -55,8 +55,8 @@
     doc: '<path d="M7 3h7l5 5v13H7z"/><path d="M13 3v6h6"/>',
   };
   var MODULES = [
-    ["gov", "Governance", "EXCO, committees, resolutions, meetings, AGM/SGM, conflict of interest.", "A functioning, minuted Committee."],
-    ["ben", "Beneficiaries", "The Master Beneficiary Register — verification, households, succession, disputes.", "A register you can defend."],
+    ["gov", "Governance", "EXCO, committees, resolutions, meetings, AGM/SGM, conflict of interest — and the annual returns due to the Registrar.", "A functioning, minuted Committee that files on time."],
+    ["ben", "Beneficiaries", "The Master Beneficiary Register — verification, ID documents, households, succession, disputes, membership cards.", "A register you can defend."],
     ["adm", "Administration", "Records management, correspondence and the delegation-of-authority matrix.", "Nothing lost, everything found."],
     ["fin", "Finance", "Budget, transactions, bank reconciliation and annual financial statements.", "Books that reconcile."],
     ["pro", "Procurement", "Requisitions, purchase orders, suppliers, payments and procurement compliance.", "Every rand authorised and traced."],
@@ -65,8 +65,8 @@
     ["prod", "Productivity", "Crops, orchards, timber, livestock, water, inputs, harvest and cost of production.", "Land that is actually working."],
     ["proj", "Projects", "Pipeline, scorecards, business cases and delivery tracking.", "Projects that get delivered."],
     ["comm", "Commercialisation", "Markets, partnerships, revenue streams and investment readiness.", "Diversified, own-source income."],
-    ["fund", "Funding Readiness", "The institutional evidence a funder or bank asks for, assembled in one place.", "Proposals that don't stall."],
-    ["perf", "Performance", "The CPA360 Institutional Score and monitoring & evaluation.", "One honest view of where you stand."],
+    ["fund", "Funding Readiness", "The institutional evidence a funder, a bank or a government partner asks for, assembled in one place.", "Proposals that don't stall."],
+    ["perf", "Performance", "The CPA360 Institutional Score, scored from the CPA's own registers, and monitoring & evaluation.", "One honest view of where you stand."],
     ["doc", "Documents", "The CPA Master File — eleven categories forming the institution's official memory.", "A complete institutional record."],
   ];
   var mg = $("#lp-modules-grid");
@@ -80,12 +80,12 @@
 
   /* ---- FAQ ---- */
   var FAQ = [
-    ["What is CPA360?", "CPA360 is an integrated institutional management platform for Communal Property Associations. It brings governance, beneficiaries, administration, finance, land, productivity, projects and commercialisation into one operating environment, and measures institutional health on a standardised 100-point score."],
-    ["Who is CPA360 for?", "CPA Executive Committees, CPA administration offices, and the professionals, government departments, funders and NGOs that work with CPAs."],
+    ["What is CPA360?", "CPA360 is an integrated institutional management platform for Communal Property Associations, built because only 207 of South Africa's 1,743 registered CPAs are fully compliant with the CPA Act. It brings governance, beneficiaries, administration, finance, land, productivity, projects and commercialisation into one operating environment, and measures institutional health on a standardised 100-point score."],
+    ["Who is CPA360 for?", "CPA Executive Committees and administration offices first — and the Registrar's office, provincial departments, funders, banks, NGOs and professionals who need a reliable, evidence-based view of the CPAs they work with."],
     ["What does CPA360 assess?", "Nine institutional domains: governance, beneficiary integrity, administration, financial controls, land & assets, productivity, commercialisation, compliance and investment readiness."],
     ["Does CPA360 manage my CPA?", "No. CPA360 supports institutional management and gives the Committee and administration office one shared, structured view. The CPA continues to govern itself through its lawful structures."],
     ["Can CPA360 help with beneficiary verification?", "Yes. CPA360 maintains the Master Beneficiary Register with verification status, household records, succession cases, deceased members, duplicate/conflict cases and verification evidence."],
-    ["Can CPA360 help with governance?", "Yes. It maintains EXCO and office-bearer records, sub-committees, a resolutions register, meeting and AGM/SGM records, conflict-of-interest declarations and a governance calendar of statutory deadlines."],
+    ["Can CPA360 help with governance?", "Yes. It maintains EXCO and office-bearer records, sub-committees, a resolutions register, meeting and AGM/SGM records, conflict-of-interest declarations and a governance calendar of statutory deadlines — including a tracker for the annual returns a CPA owes the Department, with a readiness check on each one."],
     ["Can CPA360 help with funding readiness?", "Yes. CPA360 assembles the institutional evidence — governance, verified beneficiaries, finances, land records, business cases — that funders and banks ask for, and flags what is still missing."],
     ["Does CPA360 provide funding?", "No. CPA360 does not provide funding and does not provide government funding. It strengthens institutional readiness so a CPA is better positioned when it approaches funders."],
     ["How does the CPA360 score work?", "Each of the nine domains is scored against weighted criteria and rolled up to a single figure out of 100, mapped to a maturity band. As tracked actions are completed and evidence is uploaded, the score moves."],
