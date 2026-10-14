@@ -3058,6 +3058,161 @@ function beneActionsHtml(r, idx) {
     <button type="button" class="doc-chip" data-bene-card="${idx}" title="Membership card — view, edit &amp; print" aria-label="Membership card for ${esc(r[1])}">${IDCARD}</button>
     ${canIssueReceipt(r) ? `<button type="button" class="doc-chip" data-bene-receipt="${idx}" title="Registration &amp; verification receipt" aria-label="Receipt for ${esc(r[1])}">${RECEIPT_ICON}</button>` : ""}</span>`;
 }
+/* ============ Beneficiary Master Register — official export ============
+   A formal, paginated document for submission to the Registrar of Communal Property Associations
+   (Dept. of Land Reform and Rural Development) or for the AGM/funders: letterhead, document number +
+   check code, summary, the register (headers repeat on every page, "Page x of y"), then a
+   certification page with the Chairperson's and Secretary's signatures and a stamp box.
+   Formats: PDF (browser print), Word, CSV. ID numbers are printed exactly as held — masked (last 4
+   digits) — the platform never stores full ID numbers. No prescribed Departmental template is
+   assumed: the layout follows what the CPA Act asks a membership list to show. */
+const BRM_TITLE = "Beneficiary Master Register";
+const natCmp = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+function brmRows(reg, o) {
+  let rows = reg.filter((r) => (o.scope === "all" ? true : o.scope === "selected" ? o.selected.has(String(r._id)) : r[8] === "Active"));
+  if (o.verifiedOnly) rows = rows.filter((r) => r[9] === "Verified");
+  return [...rows].sort((a, b) => (o.sort === "name" ? natCmp(a[1], b[1]) : natCmp(a[0], b[0])) || natCmp(a[1], b[1]));
+}
+function brmOdi(r) { return r[11] === "ODI" ? "Self (ODI)" : odiNameOf(householdOf(r[5])) || ""; }
+function brmSummary(rows) {
+  const c = (f) => rows.filter(f).length;
+  return {
+    total: rows.length, active: c((r) => r[8] === "Active"), deceased: c((r) => r[8] === "Deceased"),
+    removed: c((r) => r[8] === "Removed"), transferred: c((r) => r[8] === "Transferred"),
+    verified: c((r) => r[9] === "Verified"), notVerified: c((r) => r[9] !== "Verified"),
+    female: c((r) => /^f/i.test(r[2])), male: c((r) => /^m/i.test(r[2])),
+    households: new Set(rows.map((r) => r[5]).filter(Boolean)).size,
+  };
+}
+function brmColumns(o) {
+  const cols = [
+    ["No.", (r, i) => String(i + 1)], ["Member no.", (r) => r[0] || ""], ["Full name", (r) => r[1] || ""], ["Gender", (r) => r[2] || ""],
+    ["ID number (masked)", (r) => r[4] || ""],
+  ];
+  if (o.dob) cols.push(["Date of birth", (r) => fmtDay(r[3])]);
+  cols.push(["Household", (r) => r[5] || ""], ["ODI", (r) => brmOdi(r)], ["Family position", (r) => r[11] || ""]);
+  if (o.contact) cols.push(["Contact", (r) => r[6] || ""]);
+  cols.push(["Date joined", (r) => fmtDay(r[7])], ["Status", (r) => r[8] || ""], ["Verification", (r) => r[9] || ""], ["Date verified", (r) => fmtDay(r[12])]);
+  return cols;
+}
+function brmDocNo(rows, asAt) {
+  const check = fnv1a(rows.map((r) => [r[0], r[1], r[4], r[5], r[8], r[9]].join("~")).join("\n") + "|" + (DATA.cpa.reg || "") + "|" + asAt).toString(36).toUpperCase().padStart(7, "0").slice(0, 7);
+  return { no: `BMR-${asAt.replace(/-/g, "")}-${check}`, check };
+}
+function brmHtml(rows, o, mode) {
+  const cols = brmColumns(o), s = brmSummary(rows), word = mode === "word";
+  const primary = DATA.cpa.brandPrimary || "#1c3a68", secondary = DATA.cpa.brandSecondary || "#2f7d4f";
+  const { no, check } = brmDocNo(rows, o.asAt);
+  const cpa = DATA.cpa.name || "", reg = DATA.cpa.reg || "";
+  const asAtLong = new Date(o.asAt + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
+  const cssStr = (t) => String(t).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const logo = DATA.cpa.logoDataUrl ? `<img src="${DATA.cpa.logoDataUrl}" alt="" height="54" style="height:54px;">` : "";
+  const sigOn = o.sign && (DATA.cpa.chairSig || DATA.cpa.secretarySig);
+  const stat = (k, v) => `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`;
+  const css = `
+    ${word ? "@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt 30pt 36pt 30pt;} div.Section1{page:Section1;}"
+      : `@page{size:A4 landscape;margin:15mm 12mm 17mm;
+          @top-left{content:"${cssStr(BRM_TITLE)}";font:8pt Calibri,Arial,sans-serif;color:#666;}
+          @top-right{content:"${cssStr(cpa)}${reg ? " · " + cssStr(reg) : ""}";font:8pt Calibri,Arial,sans-serif;color:#666;}
+          @bottom-left{content:"Document no. ${cssStr(no)}";font:8pt Calibri,Arial,sans-serif;color:#666;}
+          @bottom-right{content:"Page " counter(page) " of " counter(pages);font:8pt Calibri,Arial,sans-serif;color:#666;}}`}
+    body{font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#1a1a1a;font-size:10pt;margin:0;}
+    .bar{position:sticky;top:0;background:#14203a;color:#fff;padding:9px 14px;font-size:12px;display:flex;gap:12px;align-items:center;z-index:9;}
+    .bar button{background:#b98a2e;color:#fff;border:0;border-radius:7px;padding:7px 14px;font-weight:700;cursor:pointer;}
+    @media print{.bar{display:none}}
+    .hdr{border-bottom:3pt solid ${primary};padding-bottom:8pt;margin-bottom:10pt;}
+    .hdr table{border:0;width:100%;} .hdr td{border:0;padding:0;vertical-align:middle;}
+    .org{font-size:9pt;letter-spacing:1.4pt;text-transform:uppercase;color:${secondary};font-weight:bold;}
+    h1{font-size:22pt;margin:2pt 0 0;color:${primary};font-weight:bold;}
+    .sub{font-size:10.5pt;color:#444;margin:2pt 0 0;}
+    .meta{font-size:9pt;color:#333;}
+    h2{font-size:11pt;color:#fff;background:${primary};padding:3pt 8pt;margin:12pt 0 5pt;}
+    table{border-collapse:collapse;width:100%;}
+    .sum td{border:.5pt solid #b5b5b5;padding:3pt 7pt;font-size:9.5pt;} .sum .k{width:22%;background:#eef2f7;font-weight:bold;color:${primary};} .sum .v{width:11%;text-align:right;}
+    table.reg{font-size:7.8pt;margin-top:4pt;}
+    table.reg th{background:${primary};color:#fff;padding:3pt 4pt;text-align:left;border:.5pt solid ${primary};}
+    table.reg td{border:.5pt solid #bdbdbd;padding:2pt 4pt;vertical-align:top;}
+    table.reg tr:nth-child(even) td{background:#f6f8fb;}
+    thead{display:table-header-group;} tr{page-break-inside:avoid;break-inside:avoid;}
+    .cert{page-break-before:always;break-before:page;}
+    .cert p{font-size:10.5pt;line-height:1.5;margin:6pt 0;}
+    .sig{width:100%;margin-top:18pt;} .sig td{border:0;width:50%;padding:0 18pt 0 0;vertical-align:bottom;height:64pt;}
+    .sigline{border-top:.75pt solid #333;padding-top:3pt;font-size:9pt;} .sigline b{font-size:9.5pt;}
+    .stamp{border:1pt dashed #888;width:120pt;height:90pt;text-align:center;color:#999;font-size:8.5pt;padding-top:36pt;}
+    .fine{font-size:8pt;color:#666;margin-top:10pt;}
+    .box td{border:.5pt solid #999;padding:6pt 8pt;font-size:9.5pt;height:24pt;}`;
+  const head = cols.map((c) => `<th>${esc(c[0])}</th>`).join("");
+  const body = rows.map((r, i) => `<tr>${cols.map((c) => `<td>${esc(c[1](r, i))}</td>`).join("")}</tr>`).join("");
+  const sigCellHtml = (which, label, nm) => `<td>${sigOn ? sigImg(which, 46) : "<div style=\"height:46px\"></div>"}<div class="sigline"><b>${esc(label)}</b><br>${esc(nm || "")}<br>Date: ${sigOn ? esc(fmtDay(isoDay(new Date()))) : "________________"}</div></td>`;
+  return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(BRM_TITLE)} — ${esc(cpa)}</title>
+  <style>${css}</style></head><body>
+  ${word ? "" : `<div class="bar"><button onclick="window.print()">Print / Save as PDF</button><span>${rows.length} record${rows.length === 1 ? "" : "s"} · A4 landscape · choose “Save as PDF” as the printer · header and footer are built in — turn off the browser's own Headers and footers</span></div>`}
+  <div class="${word ? "Section1" : ""}">
+  <div class="hdr"><table><tr><td style="width:70pt;">${logo}</td><td>
+    <div class="org">${esc(cpa)}${reg ? " · Registration no. " + esc(reg) : ""}</div>
+    <h1>${esc(BRM_TITLE)}</h1>
+    <div class="sub">Communal Property Associations Act, 1996 (Act 28 of 1996) — as at ${esc(asAtLong)}${o.period ? " · " + esc(o.period) : ""}</div></td>
+    <td style="text-align:right;width:190pt;" class="meta">Document no.<br><b>${esc(no)}</b><br>Prepared for: the Registrar of Communal Property Associations,<br>Department of Land Reform and Rural Development${DATA.cpa.region ? `<br>${esc(DATA.cpa.region)}` : ""}</td></tr></table></div>
+  <h2>Summary of the register</h2>
+  <table class="sum"><tr>
+    <td class="k">Members in this register</td><td class="v">${s.total}</td><td class="k">Verified</td><td class="v">${s.verified}</td><td class="k">Female</td><td class="v">${s.female}</td></tr><tr>
+    <td class="k">Active</td><td class="v">${s.active}</td><td class="k">Not yet verified</td><td class="v">${s.notVerified}</td><td class="k">Male</td><td class="v">${s.male}</td></tr><tr>
+    <td class="k">Deceased / removed / transferred</td><td class="v">${s.deceased} / ${s.removed} / ${s.transferred}</td><td class="k">Households represented</td><td class="v">${s.households}</td><td class="k">Scope</td><td class="v" style="text-align:left;">${o.scope === "all" ? "All members" : o.scope === "selected" ? "Selected members" : "Active members"}${o.verifiedOnly ? ", verified only" : ""}</td></tr></table>
+  <h2>Register of members</h2>
+  <table class="reg"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}">No members match the chosen scope.</td></tr>`}</tbody></table>
+  <div class="cert">
+    <div class="hdr"><div class="org">${esc(cpa)}${reg ? " · " + esc(reg) : ""}</div><h1 style="font-size:17pt;">Certification of the ${esc(BRM_TITLE)}</h1></div>
+    <p>We, the undersigned office bearers of <b>${esc(cpa)}</b>${reg ? ` (registration no. ${esc(reg)})` : ""}, certify that this ${esc(BRM_TITLE)} (document no. <b>${esc(no)}</b>) has been extracted from the association's membership records, reflects <b>${s.total}</b> member${s.total === 1 ? "" : "s"} as at <b>${esc(asAtLong)}</b> — of whom <b>${s.verified}</b> ${s.verified === 1 ? "has" : "have"} been verified by the association — and is a true and accurate record to the best of our knowledge. It is submitted in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), to the Registrar of Communal Property Associations.</p>
+    <p>Identity numbers are shown masked (last four digits), as held on the association's register. The full register, with supporting identity documents, is available from the association's records on request.</p>
+    <table class="sig"><tr>${sigCellHtml("chair", "Chairperson", chairName())}${sigCellHtml("secretary", "Secretary", secName())}</tr></table>
+    <table style="width:100%;margin-top:14pt;"><tr><td style="border:0;vertical-align:top;"><div class="stamp">Official stamp<br>of the Association</div></td>
+      <td style="border:0;vertical-align:top;padding-left:20pt;"><table class="box"><tr><td style="width:40%;"><b>Date of the AGM at which the register was presented</b></td><td>&nbsp;</td></tr>
+        <tr><td><b>For official use — Department reference no.</b></td><td>&nbsp;</td></tr><tr><td><b>Date received / received by</b></td><td>&nbsp;</td></tr></table></td></tr></table>
+    <p class="fine">Document no. ${esc(no)} · check code ${esc(check)} · ${s.total} record${s.total === 1 ? "" : "s"} · generated ${esc(new Date().toLocaleString("en-ZA", { dateStyle: "long", timeStyle: "short" }))} from ${esc(cpa)}'s CPA360™ records. The check code changes if any member's name, ID, household, status or verification in this register changes, so a printed copy can be compared with the live register.</p>
+  </div></div></body></html>`;
+}
+function brmCsv(rows, o) {
+  const cols = brmColumns(o);
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  return "﻿" + [cols.map((c) => q(c[0])).join(","), ...rows.map((r, i) => cols.map((c) => q(c[1](r, i))).join(","))].join("\r\n");
+}
+function brmExport(o) {
+  const reg = DATA.beneficiaryCentre.register || [];
+  const rows = brmRows(reg, o);
+  if (!rows.length) { toast("No members match those choices.", true); return; }
+  const base = `${BRM_TITLE.replace(/ /g, "-")}-${govSafe(DATA.cpa.name)}-${o.asAt}`;
+  if (o.format === "csv") { downloadFile(base + ".csv", brmCsv(rows, o), "text/csv"); toast(`CSV exported — ${rows.length} members.`); return; }
+  if (o.format === "word") { downloadFile(base + ".doc", brmHtml(rows, o, "word"), "application/msword"); toast(`Word document exported — ${rows.length} members.`); return; }
+  const url = URL.createObjectURL(new Blob([brmHtml(rows, o, "print")], { type: "text/html" }));
+  const w = window.open(url, "_blank");
+  if (!w) { toast("Please allow pop-ups to open the print view.", true); URL.revokeObjectURL(url); return; }
+  w.opener = null;
+  w.addEventListener("load", () => { setTimeout(() => { try { w.print(); } catch (e) {} }, 700); setTimeout(() => URL.revokeObjectURL(url), 120000); });
+}
+function brmDialog(selected) {
+  const hasSig = !!(DATA.cpa.chairSig || DATA.cpa.secretarySig);
+  const scopes = [["active", "Active members (recommended)"], ["all", "All members (incl. deceased, removed, transferred)"]];
+  if (selected.size) scopes.push(["selected", `Only the ${selected.size} selected member${selected.size > 1 ? "s" : ""}`]);
+  const fields = [
+    { key: "i", label: BRM_TITLE, type: "info", value: "A formal register with the CPA's letterhead, summary, every member, and a certification page for the Chairperson and Secretary. Review it before you sign and submit." },
+    { key: "scope", label: "Who to include", type: "select", options: scopes.map((s) => s[1]), value: scopes[0][1] },
+    { key: "ver", label: "Verification", type: "select", options: ["All members", "Verified members only"], value: "All members" },
+    { key: "sort", label: "Order", type: "select", options: ["By member number", "By name"], value: "By member number" },
+    { key: "extra", label: "Extra columns", type: "select", options: ["None", "Date of birth", "Contact number", "Date of birth and contact number"], value: "None" },
+    { key: "asAt", label: "Register as at", type: "date", value: isoDay(new Date()) },
+    { key: "period", label: "Reporting period / financial year (optional)", type: "text", value: "" },
+    { key: "sign", label: "Chairperson & Secretary signatures", type: "select", options: hasSig ? ["Apply the signatures from Brand Box", "Leave blank — I will sign by hand"] : ["Leave blank — I will sign by hand"], value: hasSig ? "Apply the signatures from Brand Box" : "Leave blank — I will sign by hand" },
+    { key: "format", label: "Format", type: "select", options: ["PDF (print view)", "Word (.doc)", "CSV (Excel)"], value: "PDF (print view)" },
+  ];
+  openModal("Export — " + BRM_TITLE, fields, (out) => {
+    brmExport({
+      scope: (scopes.find((s) => s[1] === out.scope) || scopes[0])[0], verifiedOnly: out.ver === "Verified members only",
+      sort: out.sort === "By name" ? "name" : "ref", dob: /birth/.test(out.extra), contact: /ontact/.test(out.extra),
+      asAt: out.asAt || isoDay(new Date()), period: out.period, sign: /^Apply/.test(out.sign),
+      format: /^Word/.test(out.format) ? "word" : /^CSV/.test(out.format) ? "csv" : "print", selected,
+    });
+  }, "Export");
+}
 function renderBeneRegister(host) {
   const reg = DATA.beneficiaryCentre.register;
   const sel = bulkState("bene-register").selected;
@@ -3088,6 +3243,7 @@ function renderBeneRegister(host) {
     ],
     rerender: () => renderBeneRegister(host),
     extraTools: [
+      `<button class="btn" data-bene-export type="button" title="Official Beneficiary Master Register — PDF, Word or CSV">Export register</button>`,
       `<button class="btn" data-bene-print-sel type="button"${selRows.length ? "" : " disabled"}>Print cards${selRows.length ? ` (${selRows.length})` : ""}</button>`,
       `<button class="btn" data-bene-print-all type="button">Print all active</button>`,
     ],
@@ -3098,6 +3254,8 @@ function renderBeneRegister(host) {
       h.querySelectorAll("[data-bene-hh]").forEach((b) => (b.onclick = () => gotoHousehold(b.dataset.beneHh)));
       h.querySelectorAll("[data-bene-receipt]").forEach((b) => (b.onclick = () => openReceipt(reg[+b.dataset.beneReceipt])));
       h.querySelectorAll("[data-bene-docs]").forEach((b) => (b.onclick = () => openMemberDocs(reg[+b.dataset.beneDocs])));
+      const ex = h.querySelector("[data-bene-export]");
+      if (ex) ex.onclick = () => brmDialog(new Set(selRows.map((r) => String(r._id))));
       const ps = h.querySelector("[data-bene-print-sel]");
       if (ps) ps.onclick = () => printCardsDialog(selRows, "Print membership cards");
       const pa = h.querySelector("[data-bene-print-all]");
