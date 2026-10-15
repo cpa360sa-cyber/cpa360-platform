@@ -230,7 +230,9 @@ export async function loadOrg(orgId) {
          r.status, r.resident !== false,
          r.head_id_number || "", r.head_phone || "", r.head_address || "", r.verification_status || "Pending",
          r.date_registered || "", r.last_reviewed_date || "", r.land_site_ref || "", r.benefit_basis || "",
-         !!r.dispute_flag, r.dispute_ref || ""], r)),
+         !!r.dispute_flag, r.dispute_ref || "",
+         r.descendant5_name || "", r.descendant5_id || "", r.descendant6_name || "", r.descendant6_id || "",
+         r.descendant7_name || "", r.descendant7_id || ""], r)),
       succession: (succession || []).map((r) => tagArr(
         [r.deceased_ref || "", r.deceased_name, r.date_of_death || "", r.successor_name || "", r.relationship || "",
          r.lodged_on || "", r.status, r.notes || ""], r)),
@@ -701,6 +703,8 @@ export async function saveSection(orgId, section, D) {
         head_id_number: nn(r[14]), head_phone: nn(r[15]), head_address: nn(r[16]),
         verification_status: r[17] || "Pending", date_registered: nn(r[18]), last_reviewed_date: nn(r[19]),
         land_site_ref: nn(r[20]), benefit_basis: nn(r[21]), dispute_flag: !!r[22], dispute_ref: nn(r[23]),
+        descendant5_name: nn(r[24]), descendant5_id: nn(r[25]), descendant6_name: nn(r[26]), descendant6_id: nn(r[27]),
+        descendant7_name: nn(r[28]), descendant7_id: nn(r[29]),
         sort: i,
       }));
     case "succession_cases":

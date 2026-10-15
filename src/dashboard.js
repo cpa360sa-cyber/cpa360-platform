@@ -2537,7 +2537,7 @@ const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
    structured "which one are they" tag, set automatically when extracted
    from Household Records (see extractOneHousehold) or picked manually for
    a beneficiary added straight into the register. */
-const HOUSEHOLD_ROLES = ["", "ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant"];
+const HOUSEHOLD_ROLES = ["", "ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant", "5th Descendant", "6th Descendant", "7th Descendant"];
 const BENEFIT_BASIS_OPTIONS = ["", "Per Household", "Per Capita"];
 
 function beneStats() {
@@ -2579,7 +2579,8 @@ const refFromHhLabel = (l) => String(l || "").split(" · ")[0].replace(/ \(not i
 function inferHouseholdRole(h, name) {
   const n = String(name || "").trim().toLowerCase();
   if (!h || !n) return "";
-  const hit = [[h[2], "ODI"], [h[1], "Family Representative"], [h[4], "1st Descendant"], [h[6], "2nd Descendant"], [h[8], "3rd Descendant"], [h[10], "4th Descendant"]]
+  const hit = [[h[2], "ODI"], [h[1], "Family Representative"], [h[4], "1st Descendant"], [h[6], "2nd Descendant"], [h[8], "3rd Descendant"], [h[10], "4th Descendant"],
+    [h[24], "5th Descendant"], [h[26], "6th Descendant"], [h[28], "7th Descendant"]]
     .find(([nm]) => String(nm || "").trim().toLowerCase() === n);
   return hit ? hit[1] : "";
 }
@@ -3463,9 +3464,9 @@ function renderBeneVerification(host) {
   host.querySelector("#bene-evidence-btn").onclick = () => attachmentsModal("beneficiary", null, "Beneficiary verification evidence");
 }
 /* Each household is a family tree rooted at its ODI: the ODI, the Family
-   Representative and up to 4 descendants — is a real beneficiary. Each
+   Representative and up to 7 descendants — is a real beneficiary. Each
    becomes its own row in the Master Beneficiary Register, tagged with its
-   Family position (see HOUSEHOLD_ROLES) so 1st/2nd/3rd/4th Descendant is a
+   Family position (see HOUSEHOLD_ROLES) so 1st…7th Descendant is a
    proper field, not a number you have to infer. Keyed by <household
    ref>-<slot>, so running it again after editing a household updates the
    same beneficiary rather than duplicating; status/verification already set
@@ -3480,6 +3481,9 @@ function extractOneHousehold(h, reg) {
     { suffix: "D2", name: h[6], id: h[7], role: "2nd Descendant" },
     { suffix: "D3", name: h[8], id: h[9], role: "3rd Descendant" },
     { suffix: "D4", name: h[10], id: h[11], role: "4th Descendant" },
+    { suffix: "D5", name: h[24], id: h[25], role: "5th Descendant" },
+    { suffix: "D6", name: h[26], id: h[27], role: "6th Descendant" },
+    { suffix: "D7", name: h[28], id: h[29], role: "7th Descendant" },
   ];
   let created = 0, updated = 0;
   slots.forEach((s) => {
@@ -5906,7 +5910,7 @@ const IMPORT = {
     title: "beneficiaries", section: "beneficiaries", arr: () => DATA.beneficiaryCentre.register,
     targets: [{ k: "ref", label: "Register no." }, { k: "name", label: "Full name", required: true }, { k: "gender", label: "Gender" },
       { k: "dob", label: "Date of birth" }, { k: "idm", label: "ID (masked)" }, { k: "hh", label: "Household ref" },
-      { k: "role", label: "Family position (ODI / Family Representative / 1st-4th Descendant)" },
+      { k: "role", label: "Family position (ODI / Family Representative / 1st-7th Descendant)" },
       { k: "contact", label: "Contact" }, { k: "joined", label: "Joined on" }, { k: "status", label: "Status" }, { k: "verif", label: "Verification" }],
     make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || dobFromSaId(v.idm), maskId(v.idm), v.hh || "", v.contact || "", v.joined || "",
       ["Active", "Deceased", "Removed", "Transferred"].includes(v.status) ? v.status : "Active",
@@ -5924,6 +5928,9 @@ const IMPORT = {
       { k: "d2", label: "2nd Descendant" }, { k: "d2id", label: "ID 2nd Descendant (auto-masked)" },
       { k: "d3", label: "3rd Descendants" }, { k: "d3id", label: "ID 3rd Descendant (auto-masked)" },
       { k: "d4", label: "4th Descendants" }, { k: "d4id", label: "ID 4th Descendants (auto-masked)" },
+      { k: "d5", label: "5th Descendant" }, { k: "d5id", label: "ID: 5th Descendant (auto-masked)" },
+      { k: "d6", label: "6th Descendant" }, { k: "d6id", label: "ID: 6th Descendant (auto-masked)" },
+      { k: "d7", label: "7th Descendant" }, { k: "d7id", label: "ID: 7th Descendant (auto-masked)" },
       { k: "status", label: "Status" }, { k: "resident", label: "Dwells on the farm / in the community (Yes/No)" },
     ],
     make: (v, idx) => [
@@ -5932,6 +5939,7 @@ const IMPORT = {
       v.d1 || "", maskId(v.d1id), v.d2 || "", maskId(v.d2id), v.d3 || "", maskId(v.d3id), v.d4 || "", maskId(v.d4id),
       v.status || "Active", !/^(no|n|false|0)$/i.test((v.resident || "").trim()),
       "", "", "", "Pending", "", "", "", "", false, "",
+      v.d5 || "", maskId(v.d5id), v.d6 || "", maskId(v.d6id), v.d7 || "", maskId(v.d7id),
     ],
     // Every household imported here has its own family tree — extract the ODI, Family
     // Representative and each descendant straight into the Master Register too, so one
@@ -6315,7 +6323,8 @@ const BENE_EDITORS = {
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
     rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || r[1] || "Household"}`,
     blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true,
-      "", "", "", "Pending", "", "", "", "", false, ""],
+      "", "", "", "Pending", "", "", "", "", false, "",
+      "", "", "", "", "", ""],
     fields: (r) => [
       { key: "famrep", label: "Household Head Name", type: "text", value: r[1] },
       { key: "headId", label: "Household Head ID Number (auto-masked — only the last 4 digits are kept)", type: "text", value: r[14] },
@@ -6331,6 +6340,12 @@ const BENE_EDITORS = {
       { key: "d3id", label: "ID 3rd Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[9] },
       { key: "d4", label: "4th Descendants", type: "text", value: r[10] },
       { key: "d4id", label: "ID 4th Descendants (auto-masked — only the last 4 digits are kept)", type: "text", value: r[11] },
+      { key: "d5", label: "5th Descendant", type: "text", value: r[24] },
+      { key: "d5id", label: "ID: 5th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[25] },
+      { key: "d6", label: "6th Descendant", type: "text", value: r[26] },
+      { key: "d6id", label: "ID: 6th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[27] },
+      { key: "d7", label: "7th Descendant", type: "text", value: r[28] },
+      { key: "d7id", label: "ID: 7th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[29] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
       { key: "verification", label: "Verification Status", type: "select", options: VERIF_STATUSES, value: r[17] || "Pending" },
@@ -6349,6 +6364,7 @@ const BENE_EDITORS = {
       r[14] = maskId(o.headId); r[15] = o.headPhone; r[16] = o.headAddress;
       r[17] = o.verification; r[18] = o.dateRegistered; r[19] = o.lastReviewed;
       r[20] = o.landRef; r[21] = o.benefitBasis; r[22] = o.disputeFlag === "Yes"; r[23] = o.disputeRef;
+      r[24] = o.d5; r[25] = maskId(o.d5id); r[26] = o.d6; r[27] = maskId(o.d6id); r[28] = o.d7; r[29] = maskId(o.d7id);
     },
   }),
   succession: () => ({
