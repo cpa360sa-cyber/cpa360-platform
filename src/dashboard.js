@@ -13,6 +13,7 @@
 import * as repo from "./repo.js";
 import { qrSvg } from "./qr.js";
 import { renderCommunication } from "./communication.js";
+import { processSignatureImage } from "./orgs.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -2622,7 +2623,8 @@ const CARD_CSS = `
 .mc-terms{position:absolute;left:31mm;right:4mm;top:13.8mm;font-size:2mm;line-height:1.3;color:#3b465c;}
 .mc-sig{position:absolute;left:31mm;right:4mm;bottom:9.6mm;display:flex;gap:3mm;}
 .mc-chair-sig{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);height:8.5mm;max-width:100%;width:auto;margin-bottom:.4mm;}
-.mc.dark .mc-chair-sig{filter:invert(1) brightness(1.6);}
+.mc-holder-sig{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);height:8.5mm;max-width:100%;width:auto;margin-bottom:.4mm;}
+.mc.dark .mc-chair-sig,.mc.dark .mc-holder-sig{filter:invert(1) brightness(1.6);}
 .mc-sig div{flex:1;border-top:.25mm solid #8890a3;padding-top:.5mm;font-size:1.8mm;color:#6b7386;text-transform:uppercase;letter-spacing:.2mm;}
 .mc.dark{background:linear-gradient(135deg,var(--p) 0%,color-mix(in srgb,var(--p) 62%,#000) 100%);color:#fff;}
 .mc.dark .mc-head{background:transparent;} .mc.dark .mc-acc{height:.6mm;}
@@ -2698,7 +2700,7 @@ function cardBackHtml(r, o) {
     <div class="mc-stripe"><span>Property of ${esc(cpa)}</span></div>
     <div class="mc-qr">${qr}<small>${esc(cardCode(r))}</small></div>
     <div class="mc-terms">This card identifies the holder as a member of ${esc(cpa)}${DATA.cpa.reg ? " (" + esc(DATA.cpa.reg) + ")" : ""}. It remains the property of the association, is not transferable, and is valid only while membership is in good standing. If found, please return it to ${esc(cpa)}${DATA.cpa.region ? ", " + esc(DATA.cpa.region) : ""}.</div>
-    <div class="mc-sig"><div>Holder's signature</div><div style="position:relative;">${DATA.cpa.chairSig ? `<img class="mc-chair-sig" src="${DATA.cpa.chairSig}" alt="">` : ""}Chairperson</div></div>
+    <div class="mc-sig"><div style="position:relative;">${o.sigUrl ? `<img class="mc-holder-sig" src="${esc(o.sigUrl)}" alt="">` : ""}Holder's signature</div><div style="position:relative;">${DATA.cpa.chairSig ? `<img class="mc-chair-sig" src="${DATA.cpa.chairSig}" alt="">` : ""}Chairperson</div></div>
     <div class="mc-foot" style="height:6mm;font-size:2mm;"><span>Issued with CPA360&trade;</span><span class="mono">${esc(r[0] || "")}</span></div>
   </div>`;
 }
@@ -2720,6 +2722,87 @@ async function cardPhotoMap() {
   } catch (e) {}
   return out;
 }
+/* Card holder's own signature (printed on the back of the card above "Holder's signature").
+   Stored like the photo: a small transparent PNG in the private document store, section
+   "member-signature", newest wins. Attached from a photo/scan or drawn live on screen. */
+async function cardSigUrl(r) {
+  if (!r._id) return "";
+  try {
+    const docs = await repo.listDocs(orgId, "member-signature", r._id);
+    return docs[0] ? await repo.docPreviewUrl(docs[0].path) : "";
+  } catch (e) { return ""; }
+}
+async function cardSigMap() {
+  const out = new Map();
+  try {
+    const docs = await repo.listDocsBySection(orgId, "member-signature");
+    const latest = new Map();
+    docs.forEach((d) => { if (!latest.has(String(d.ref_id))) latest.set(String(d.ref_id), d); });
+    const urls = await repo.docPreviewUrls([...latest.values()].map((d) => d.path));
+    latest.forEach((d, id) => { const u = urls.get(d.path); if (u) out.set(id, u); });
+  } catch (e) {}
+  return out;
+}
+async function saveHolderSignature(r, blob) {
+  const file = new File([blob], `signature-${Date.now()}.png`, { type: "image/png" });
+  const doc = await repo.uploadDoc(orgId, "member-signature", r._id, file);
+  bumpDocCount("member-signature", r._id, 1);
+  for (const d of await repo.listDocs(orgId, "member-signature", r._id)) {
+    if (d.id !== doc.id) { await repo.deleteDoc(d); bumpDocCount("member-signature", r._id, -1); }
+  }
+}
+/* Pop-up signature pad: the card holder signs with a finger, stylus or mouse. Calls
+   onSave(pngBlob) with a transparent PNG cropped to the ink. */
+function drawSignatureModal({ title, who, onSave }) {
+  const { scrim, close } = govModal(title, `
+    <p class="hint" style="margin:0 0 8px;">${who ? `<b>${esc(who)}</b>, sign` : "Sign"} inside the box with your finger, a stylus or the mouse. Use Undo or Clear to try again.</p>
+    <div class="sg-wrap"><canvas id="sg-cv" aria-label="Signature pad"></canvas><div class="sg-line"></div><span class="sg-x" aria-hidden="true">&times;</span></div>
+    <div id="sg-msg" class="hint" role="status" style="margin-top:8px;min-height:18px;"></div>`,
+    `<button class="btn" data-act="close" type="button">Cancel</button>
+     <button class="btn" id="sg-undo" type="button" disabled>Undo</button><button class="btn" id="sg-clear" type="button" disabled>Clear</button>
+     <button class="btn primary" id="sg-save" type="button" disabled>Save signature</button>`, 640);
+  const $s = (q) => scrim.querySelector(q), cv = $s("#sg-cv"), ctx = cv.getContext("2d");
+  const INK = "#14203a", W = 2.6;
+  let strokes = [], cur = null, dpr = 1;
+  const stroke = (c, pts, k = 1, ox = 0, oy = 0) => {
+    c.beginPath(); c.lineWidth = W * k; c.strokeStyle = INK; c.fillStyle = INK; c.lineCap = "round"; c.lineJoin = "round";
+    const P = pts.map((p) => [(p.x - ox) * k, (p.y - oy) * k]);
+    if (P.length === 1) { c.arc(P[0][0], P[0][1], W * k / 2, 0, Math.PI * 2); c.fill(); return; }
+    c.moveTo(P[0][0], P[0][1]);
+    for (let i = 1; i < P.length - 1; i++) c.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
+    c.lineTo(P[P.length - 1][0], P[P.length - 1][1]); c.stroke();
+  };
+  const sync = () => {
+    const has = strokes.length > 0;
+    $s("#sg-undo").disabled = !has; $s("#sg-clear").disabled = !has; $s("#sg-save").disabled = !has;
+  };
+  const redraw = () => { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); strokes.forEach((s) => stroke(ctx, s)); };
+  const fit = () => { const b = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1; cv.width = Math.round(b.width * dpr); cv.height = Math.round(b.height * dpr); redraw(); };
+  fit();
+  const pt = (e) => { const b = cv.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+  cv.addEventListener("pointerdown", (e) => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (x) {} cur = [pt(e)]; strokes.push(cur); redraw(); sync(); });
+  cv.addEventListener("pointermove", (e) => { if (!cur) return; e.preventDefault(); const evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || []; (evs.length ? evs : [e]).forEach((ev) => cur.push(pt(ev))); redraw(); });
+  const end = () => { cur = null; };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  $s("#sg-undo").onclick = () => { strokes.pop(); redraw(); sync(); };
+  $s("#sg-clear").onclick = () => { strokes = []; redraw(); sync(); };
+  $s("#sg-save").onclick = async () => {
+    const msg = $s("#sg-msg"), all = strokes.flat();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    all.forEach((p) => { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+    if (all.length < 6 || x1 - x0 < 24) { msg.textContent = "That looks too small to be a signature — please sign a little larger."; return; }
+    const pad = 4, bw = x1 - x0 + pad * 2, bh = y1 - y0 + pad * 2, k = Math.min(3, 800 / bw);
+    const out = document.createElement("canvas");
+    out.width = Math.max(1, Math.round(bw * k)); out.height = Math.max(1, Math.round(bh * k));
+    const oc = out.getContext("2d");
+    strokes.forEach((s) => stroke(oc, s, k, x0 - pad, y0 - pad));
+    const blob = await new Promise((res) => out.toBlob(res, "image/png"));
+    if (!blob) { msg.textContent = "Couldn't capture the signature — try again."; return; }
+    $s("#sg-save").disabled = true; msg.textContent = "Saving…";
+    try { await onSave(blob); close(); }
+    catch (e) { msg.textContent = "Couldn't save: " + ((e && e.message) || e); $s("#sg-save").disabled = false; }
+  };
+}
 async function resizeMemberPhoto(file, max = 480) {
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
@@ -2733,7 +2816,8 @@ async function printMemberCards(rows, o) {
   if (!rows.length) { toast("No members to print.", true); return; }
   toast(`Preparing ${rows.length} card${rows.length > 1 ? "s" : ""}…`);
   const photos = rows.length === 1 ? new Map(o.photoUrl ? [[String(rows[0]._id), o.photoUrl]] : []) : await cardPhotoMap();
-  const pairs = rows.map((r) => `<div class="pair">${cardFrontHtml(r, { ...o, photoUrl: photos.get(String(r._id)) || "" })}${cardBackHtml(r, o)}</div>`).join("");
+  const sigs = rows.length === 1 ? new Map(o.sigUrl ? [[String(rows[0]._id), o.sigUrl]] : []) : await cardSigMap();
+  const pairs = rows.map((r) => `<div class="pair">${cardFrontHtml(r, { ...o, photoUrl: photos.get(String(r._id)) || "" })}${cardBackHtml(r, { ...o, sigUrl: sigs.get(String(r._id)) || "" })}</div>`).join("");
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Membership cards — ${esc(DATA.cpa.name || "")}</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
     <style>${CARD_CSS}
@@ -2778,9 +2862,11 @@ async function cardFontCss() {
 }
 async function cardPng(r, side, o, dpi = 300) {
   let photo = "";
+  let sig = "";
   if (side === "front" && o.photoUrl) { try { photo = await blobToDataUrl(await fetch(o.photoUrl).then((x) => x.blob())); } catch (e) {} }
+  if (side === "back" && o.sigUrl) { try { sig = await blobToDataUrl(await fetch(o.sigUrl).then((x) => x.blob())); } catch (e) {} }
   const holder = document.createElement("div");
-  holder.innerHTML = side === "front" ? cardFrontHtml(r, { ...o, photoUrl: photo }) : cardBackHtml(r, o);
+  holder.innerHTML = side === "front" ? cardFrontHtml(r, { ...o, photoUrl: photo }) : cardBackHtml(r, { ...o, sigUrl: sig });
   const xhtml = new XMLSerializer().serializeToString(holder.firstElementChild);
   const css = (CARD_CSS + (await cardFontCss()) + ".mc{box-shadow:none !important}").replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const W = 85.6 * 96 / 25.4, H = 54 * 96 / 25.4;
@@ -2898,7 +2984,7 @@ function openMemberCard(startIdx, navIdx) {
   const reg = () => DATA.beneficiaryCentre.register;
   let pos = Math.max(0, navIdx.indexOf(startIdx));
   const pf = cardPrefs();
-  let style = pf.style, valid = pf.valid, photoUrl = "", seq = 0;
+  let style = pf.style, valid = pf.valid, photoUrl = "", sigUrl = "", seq = 0;
   const row = () => reg()[navIdx[pos]];
   const { scrim, close } = govModal("Membership card", `
     <div class="mc-stage"><div class="mc-side"><div class="mc-lbl">Front</div><div id="mcf"></div></div><div class="mc-side"><div class="mc-lbl">Back</div><div id="mcb"></div></div></div>
@@ -2919,7 +3005,11 @@ function openMemberCard(startIdx, navIdx) {
       <button type="button" class="btn small" id="mc-docs">ID &amp; documents</button>
     </div>
     ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:8px;"><label class="btn small" style="cursor:pointer;">Upload photo<input type="file" id="mc-file" accept="image/*" hidden></label>
-      <button type="button" class="btn small" id="mc-rm-photo" hidden>Remove photo</button><span class="hint" id="mc-msg"></span></div>` : ""}`,
+      <button type="button" class="btn small" id="mc-rm-photo" hidden>Remove photo</button><span class="hint" id="mc-msg"></span></div>
+    <div class="mc-ctl" style="margin-top:8px;"><span class="mc-lbl" style="margin:0;">Holder's signature</span>
+      <button type="button" class="btn small primary" id="mc-sig-draw">Draw signature</button>
+      <label class="btn small" style="cursor:pointer;">Attach signature image<input type="file" id="mc-sig-file" accept="image/*" hidden></label>
+      <button type="button" class="btn small" id="mc-rm-sig" hidden>Remove signature</button><span class="hint" id="mc-sig-msg"></span></div>` : ""}`,
     `<span class="hint" id="mc-pos" style="margin-right:auto;"></span>
      <button class="btn" data-mc="prev" type="button">&lsaquo; Prev</button><button class="btn" data-mc="next" type="button">Next &rsaquo;</button>
      ${CAN_EDIT ? '<button class="btn" data-mc="edit" type="button">Edit member</button>' : ""}
@@ -2929,7 +3019,7 @@ function openMemberCard(startIdx, navIdx) {
   async function paint() {
     const r = row(), my = ++seq;
     $q("#mcf").innerHTML = cardFrontHtml(r, { style, valid, photoUrl });
-    $q("#mcb").innerHTML = cardBackHtml(r, { style, valid });
+    $q("#mcb").innerHTML = cardBackHtml(r, { style, valid, sigUrl: "" });
     $q("#mc-warn").innerHTML = cardIssues(r).map((w) => `<p class="mc-note">&#9888; ${esc(w)}</p>`).join("");
     $q("#mc-pos").textContent = `${pos + 1} of ${navIdx.length}`;
     const hc = hhChoices(r[5]);
@@ -2941,13 +3031,17 @@ function openMemberCard(startIdx, navIdx) {
     rc.title = okR ? "Issue a registration & verification receipt for this member" : "Available only once the member's verification is “Verified”";
     $q('[data-mc="prev"]').disabled = pos === 0; $q('[data-mc="next"]').disabled = pos === navIdx.length - 1;
     scrim.querySelectorAll("[data-mc-style]").forEach((b) => b.classList.toggle("active", b.dataset.mcStyle === style));
-    const rm = $q("#mc-rm-photo"); if (rm) rm.hidden = true;
-    photoUrl = "";
-    const u = await cardPhotoUrl(r);
+    const rm = $q("#mc-rm-photo"), rms = $q("#mc-rm-sig");
+    if (rm) rm.hidden = true;
+    if (rms) rms.hidden = true;
+    photoUrl = ""; sigUrl = "";
+    const [u, s] = await Promise.all([cardPhotoUrl(r), cardSigUrl(r)]);
     if (my !== seq) return;
-    photoUrl = u;
+    photoUrl = u; sigUrl = s;
     $q("#mcf").innerHTML = cardFrontHtml(r, { style, valid, photoUrl });
+    $q("#mcb").innerHTML = cardBackHtml(r, { style, valid, sigUrl });
     if (rm) rm.hidden = !u;
+    if (rms) rms.hidden = !s;
   }
   scrim.querySelectorAll("[data-mc-style]").forEach((b) => (b.onclick = () => { style = b.dataset.mcStyle; saveCardPrefs({ style, valid }); paint(); }));
   $q("#mc-valid").onchange = (e) => { valid = e.target.value || valid; saveCardPrefs({ style, valid }); paint(); };
@@ -2960,12 +3054,12 @@ function openMemberCard(startIdx, navIdx) {
   $q("#mc-role").onchange = (e) => { const r = row(); r[11] = e.target.value; paint(); commit("beneficiaries"); };
   $q("#mc-open-hh").onclick = () => { const ref = row()[5]; close(); gotoHousehold(ref); };
   $q("#mc-img-front").onclick = () => downloadCardImage(row(), "front", { style, valid, photoUrl });
-  $q("#mc-img-back").onclick = () => downloadCardImage(row(), "back", { style, valid });
+  $q("#mc-img-back").onclick = () => downloadCardImage(row(), "back", { style, valid, sigUrl });
   $q("#mc-receipt").onclick = () => openReceipt(row());
   $q("#mc-docs").onclick = () => openMemberDocs(row());
   $q('[data-mc="prev"]').onclick = () => { if (pos > 0) { pos--; paint(); } };
   $q('[data-mc="next"]').onclick = () => { if (pos < navIdx.length - 1) { pos++; paint(); } };
-  $q('[data-mc="print"]').onclick = () => printMemberCards([row()], { style, valid, photoUrl });
+  $q('[data-mc="print"]').onclick = () => printMemberCards([row()], { style, valid, photoUrl, sigUrl });
   const ed = $q('[data-mc="edit"]');
   if (ed) ed.onclick = () => editBeneficiaryRow(row(), () => paint());
   const fi = $q("#mc-file");
@@ -2985,6 +3079,37 @@ function openMemberCard(startIdx, navIdx) {
       msg.textContent = "Photo saved."; paint();
     } catch (e) { msg.textContent = "Couldn't use that photo (" + (e.message || e) + "). Try a JPG or PNG."; }
   };
+  /* holder's signature: draw it live, or attach a photo/scan (background is made transparent) */
+  const sigMsg = $q("#mc-sig-msg");
+  const storeSig = async (r, blob) => { await saveHolderSignature(r, blob); paint(); };
+  const sd = $q("#mc-sig-draw");
+  if (sd) sd.onclick = () => {
+    const r = row();
+    if (!r._id) { sigMsg.textContent = "Save the member first."; return; }
+    sigMsg.textContent = "";
+    drawSignatureModal({ title: "Card holder's signature", who: r[1], onSave: async (blob) => { await storeSig(r, blob); sigMsg.textContent = "Signature saved."; } });
+  };
+  const sf = $q("#mc-sig-file");
+  if (sf) sf.onchange = async () => {
+    const f = sf.files[0]; sf.value = "";
+    if (!f) return;
+    const r = row();
+    if (!r._id) { sigMsg.textContent = "Save the member first."; return; }
+    sigMsg.textContent = "Uploading…";
+    try {
+      const png = await processSignatureImage(f);
+      await storeSig(r, await (await fetch(png)).blob());
+      sigMsg.textContent = "Signature saved.";
+    } catch (e) { sigMsg.textContent = (e && e.message) || "Couldn't use that picture — try a PNG or JPG of the signature on plain paper."; }
+  };
+  const rms2 = $q("#mc-rm-sig");
+  if (rms2) rms2.onclick = () => confirmModal("Remove this member's signature from the card?", async () => {
+    const r = row();
+    try {
+      for (const d of await repo.listDocs(orgId, "member-signature", r._id)) { await repo.deleteDoc(d); bumpDocCount("member-signature", r._id, -1); }
+      sigMsg.textContent = ""; paint();
+    } catch (e) { toast("Couldn't remove: " + (e.message || e), true); }
+  });
   const rmb = $q("#mc-rm-photo");
   if (rmb) rmb.onclick = () => confirmModal("Remove this member's photo?", async () => {
     const r = row();
