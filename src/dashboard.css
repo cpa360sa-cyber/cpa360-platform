@@ -423,3 +423,17 @@
   body{ background:#fff; }
   .print-only{ display:block; margin-bottom:14px; }
 }
+
+/* ---- Communication hub ---- */
+.cpa-dash .cm-grid{ display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:14px; align-items:start; }
+@media (max-width:900px){ .cpa-dash .cm-grid{ grid-template-columns:1fr; } }
+.cpa-dash .cm-filters{ display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+@media (max-width:560px){ .cpa-dash .cm-filters{ grid-template-columns:1fr; } }
+.cpa-dash .cm-check{ display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.4; cursor:pointer; }
+.cpa-dash .cm-check input{ margin-top:2px; }
+.cpa-dash .cm-actions{ display:flex; flex-direction:column; gap:8px; align-items:stretch; }
+.cpa-dash .cm-actions .btn{ justify-content:center; }
+.cpa-dash .cm-bubble{ background:#dcf8c6; color:#1c2a1c; border-radius:4px 14px 14px 14px; padding:10px 13px; font-size:13px; line-height:1.5;
+  max-width:420px; box-shadow:0 1px 1.5px rgba(0,0,0,.13); word-break:break-word; }
+:root[data-theme="dark"] .cpa-dash .cm-bubble{ background:#25483a; color:#e8f3ec; }
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .cpa-dash .cm-bubble{ background:#25483a; color:#e8f3ec; } }

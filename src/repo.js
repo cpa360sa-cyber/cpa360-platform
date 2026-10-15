@@ -434,6 +434,78 @@ export async function removeBirthdayWish(id) {
   if (error) throw error;
 }
 
+/* --------------------------------------------------------- communication --- */
+/* Loaded on demand when the Communication tab opens (not part of loadOrg): the
+   message history, delivery log counts, inbound replies and the WhatsApp Business
+   connection. Secrets never come to the browser — the access token lives in a locked
+   table that only the Edge Functions can read. */
+async function callFn(name, payload) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("your session expired — sign in again");
+  const res = await fetch(`${FUNCTIONS_URL}/${name}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const m = String(out.error || "");
+    if (/integrations_whatsapp_phone_uidx|duplicate key/i.test(m)) throw new Error("That WhatsApp number is already connected to another CPA.");
+    throw new Error(m || `request failed (${res.status})`);
+  }
+  return out;
+}
+
+export async function loadComm(orgId) {
+  const [msgs, stats, inbound, integ] = await Promise.all([
+    supabase.from("comm_messages").select("id, title, body, kind, channel, audience, recipient_count, status, created_at").eq("org_id", orgId).order("created_at", { ascending: false }).limit(200),
+    supabase.rpc("comm_stats", { p_org: orgId }),
+    supabase.from("comm_inbound").select("id, wa_message_id, from_phone, profile_name, msg_type, body, received_at, status").eq("org_id", orgId).order("received_at", { ascending: false }).limit(200),
+    supabase.from("integrations").select("id, status, account_label, settings, connected_at, last_used_at").eq("org_id", orgId).eq("provider", "whatsapp").maybeSingle(),
+  ]);
+  for (const r of [msgs, inbound]) if (r.error) throw r.error;
+  const counts = {};
+  (stats.data || []).forEach((s) => { (counts[s.message_id] ||= {})[s.status] = Number(s.n); });
+  return { messages: msgs.data || [], counts, inbound: inbound.data || [], whatsapp: integ.data || null };
+}
+
+export async function createCommMessage(orgId, { title, body, kind, channel, audience, recipientCount }) {
+  const { data, error } = await supabase.from("comm_messages")
+    .insert({ org_id: orgId, title, body, kind: kind || "announcement", channel, audience: audience || {}, recipient_count: recipientCount || 0 })
+    .select("id, title, body, kind, channel, audience, recipient_count, status, created_at").single();
+  if (error) throw error;
+  return data;
+}
+export async function updateCommMessage(id, patch) {
+  const { error } = await supabase.from("comm_messages").update(patch).eq("id", id);
+  if (error) throw error;
+}
+export async function listCommLog(messageId) {
+  const { data, error } = await supabase.from("comm_log")
+    .select("id, beneficiary_id, recipient_name, phone, channel, status, error, status_at").eq("message_id", messageId).order("recipient_name").limit(5000);
+  if (error) throw error;
+  return data || [];
+}
+/* manual WhatsApp (wa.me) — one row per member the user opened a chat for */
+export async function logCommOpened(orgId, messageId, r) {
+  const { error } = await supabase.from("comm_log").insert({
+    org_id: orgId, message_id: messageId, beneficiary_id: r.beneficiary_id || null, recipient_name: r.name || "", phone: r.phone || "",
+    channel: "whatsapp", status: "opened", status_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+export async function deleteCommLogRows(ids) {
+  if (!ids.length) return;
+  const { error } = await supabase.from("comm_log").delete().in("id", ids);
+  if (error) throw error;
+}
+export async function markCommInbound(id, status) {
+  const { error } = await supabase.from("comm_inbound").update({ status }).eq("id", id);
+  if (error) throw error;
+}
+export const whatsappSend = (payload) => callFn("whatsapp-send", payload);
+export const whatsappConnect = (payload) => callFn("whatsapp-connect", payload);
+
 /* ---------------------------------------------------------- stage gating --- */
 export async function flagStageReview(orgId, toStage, detail) {
   const { error } = await supabase.rpc("flag_stage_review", { p_org: orgId, p_to_stage: toStage, p_detail: detail || {} });

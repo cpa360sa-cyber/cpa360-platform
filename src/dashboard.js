@@ -12,6 +12,7 @@
    ============================================================================ */
 import * as repo from "./repo.js";
 import { qrSvg } from "./qr.js";
+import { renderCommunication } from "./communication.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -54,6 +55,7 @@ export const NAV = [
   { id: "journey", label: "CPA360 Journey", group: "Performance", eyebrow: "Performance", title: "The CPA360™ Journey", sub: "Seven stages from Assess to Scale — where this CPA is, and what comes next." },
   { id: "profile", label: "Governance Centre", group: "Operations", eyebrow: "Operations", title: "Governance Centre", sub: "Institutional identity, EXCO and office bearers, committees, resolutions, meetings and the governance calendar." },
   { id: "beneficiary", label: "Beneficiary Centre", group: "Operations", eyebrow: "Operations", title: "Beneficiary Centre", sub: "The Master Beneficiary Register — verification, households, succession, deceased members and disputes." },
+  { id: "communication", label: "Communication", group: "Operations", eyebrow: "Operations", title: "Communication Centre", sub: "Announcements, notices and member replies — WhatsApp Business, one-by-one WhatsApp and printed notices in one place." },
   { id: "administration", label: "Administration", group: "Operations", eyebrow: "Operations", title: "Administration Centre", sub: "Correspondence, the delegation-of-authority matrix, policies & SOPs and the institutional records index." },
   { id: "hr", label: "HR", group: "Operations", eyebrow: "Operations", title: "HR Centre", sub: "Staff register, positions and the organogram, and monthly payroll summaries." },
   { id: "finance", label: "Finance & Procurement", group: "Operations", eyebrow: "Operations", title: "Finance & Procurement", sub: "Budget, transactions, requisitions, purchase orders, suppliers, payments and procurement compliance." },
@@ -81,6 +83,7 @@ const JOURNEY = [
 let DATA = null;
 let orgId = null;
 let CAN_EDIT = false;
+let ROLE = "viewer";
 let container = null;
 let currentView = "profile";
 let onChange = null;
@@ -5834,7 +5837,18 @@ const RENDERERS = {
   profile: renderProfile, beneficiary: renderBeneficiary, administration: renderAdministration, hr: renderHR,
   finance: renderFinance, assets: renderAssets, productivity: renderProductivity, projects: renderProjects,
   masterfile: renderMasterFile, actions: renderActions, impact: renderImpact, gallery: renderGallery,
+  communication: renderCommunicationView,
 };
+
+/* Communication hub lives in communication.js; this hands it the live data + the shared UI helpers. */
+function renderCommunicationView() {
+  renderCommunication({
+    orgId, canEdit: CAN_EDIT, isAdmin: ROLE === "admin" || ROLE === "owner",
+    cpa: () => DATA.cpa, register: () => DATA.beneficiaryCentre.register, roles: () => HOUSEHOLD_ROLES.filter(Boolean),
+    strip: $("comm-subtabs"), body: $("comm-body"), rerender: () => renderCurrent(),
+    h: { esc, toast, pill, statTile, stateHtml, govModal, confirmModal, subtabStrip, wireSubtabs, SUBTAB, waNumber, prettyCell, printHtmlDoc, sigImg, chairName },
+  });
+}
 
 /* CSV import specs — map spreadsheet columns onto each collection's row shape */
 const IMPORT = {
@@ -6288,7 +6302,7 @@ const BENE_EDITORS = {
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
-      { key: "wishes", label: "Birthday wishes on WhatsApp", type: "select", options: ["Allowed", "Do not send (member declined)"], value: r[13] === true ? "Do not send (member declined)" : "Allowed" },
+      { key: "wishes", label: "WhatsApp messages from the CPA (birthday wishes and announcements)", type: "select", options: ["Allowed", "Do not message (member declined)"], value: r[13] === true ? "Do not message (member declined)" : "Allowed" },
     ],
     write: (r, o) => {
       r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob || dobFromSaId(o.idm); r[4] = maskId(o.idm); r[5] = refFromHhLabel(o.hh);
@@ -6935,6 +6949,7 @@ export function setOnChange(fn) { onChange = fn; }
 
 export async function initDashboard({ orgId: oid, role, preload, noRealtime }) {
   orgId = oid;
+  ROLE = role;
   CAN_EDIT = role !== "viewer";
   DATA = preload || (await repo.loadOrg(orgId));
   try { if (syncAutoScore() && CAN_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
@@ -7158,6 +7173,11 @@ const VIEW_HTML = `
       <p class="hint" id="journey-note" style="margin:2px 0 0;"></p>
     </div>
     <div class="journey" id="journey-list"></div>
+  </section>
+
+  <section class="view hidden" id="view-communication">
+    <div id="comm-subtabs"></div>
+    <div id="comm-body"></div>
   </section>
 
   <section class="view hidden" id="view-productivity">
