@@ -2487,12 +2487,13 @@ const BENE_TABS = [
   { id: "households", label: "Households" },
   { id: "succession", label: "Succession" },
   { id: "deceased", label: "Deceased Members" },
+  { id: "birthdays", label: "Birthdays" },
   { id: "disputes", label: "Duplicate / Conflict" },
   { id: "evidence", label: "Verification Evidence" },
 ];
 const BENE_PANELS = {
   register: renderBeneRegister, verification: renderBeneVerification, households: renderBeneHouseholds,
-  succession: renderBeneSuccession, deceased: renderBeneDeceased, disputes: renderBeneDisputes, evidence: renderBeneEvidence,
+  succession: renderBeneSuccession, deceased: renderBeneDeceased, birthdays: renderBeneBirthdays, disputes: renderBeneDisputes, evidence: renderBeneEvidence,
 };
 /* rollups: use the live register when it has rows, else the figures singleton */
 function beneRollup() {
@@ -2514,9 +2515,16 @@ function beneRollup() {
 }
 function renderBeneficiary() {
   const strip = $("beneficiary-subtabs");
-  strip.innerHTML = subtabStrip("beneficiary", BENE_TABS);
-  wireSubtabs(strip);
   const cur = SUBTAB.beneficiary || "register";
+  const due = birthdayDue(0);
+  const tabs = BENE_TABS.map((t) => (t.id === "birthdays" && due.length ? { ...t, label: `Birthdays (${due.length})` } : t));
+  const names = due.slice(0, 3).map((x) => `${(String(x.r[1]).trim().split(/\s+/)[0] || "")} (${x.info.turns})`).join(", ") + (due.length > 3 ? ` and ${due.length - 3} more` : "");
+  strip.innerHTML = subtabStrip("beneficiary", tabs)
+    + (due.length && cur !== "birthdays" ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span>Birthday today: <b>${esc(names)}</b></span><button type="button" class="btn small" data-bday-go style="margin-left:auto;">Send wishes</button></div>` : "");
+  wireSubtabs(strip);
+  const go = strip.querySelector("[data-bday-go]");
+  if (go) go.onclick = () => { SUBTAB.beneficiary = "birthdays"; renderCurrent(); };
   (BENE_PANELS[cur] || renderBeneRegister)($("beneficiary-body"));
 }
 const BENE_STATUSES = ["Active", "Deceased", "Removed", "Transferred"];
@@ -3058,6 +3066,152 @@ function beneActionsHtml(r, idx) {
     <button type="button" class="doc-chip" data-bene-card="${idx}" title="Membership card — view, edit &amp; print" aria-label="Membership card for ${esc(r[1])}">${IDCARD}</button>
     ${canIssueReceipt(r) ? `<button type="button" class="doc-chip" data-bene-receipt="${idx}" title="Registration &amp; verification receipt" aria-label="Receipt for ${esc(r[1])}">${RECEIPT_ICON}</button>` : ""}</span>`;
 }
+/* ============ Birthdays (Beneficiaries → Birthdays) ============
+   Reminds the team of member birthdays and opens a pre-written WhatsApp message to the member.
+   Principles: nothing is ever sent automatically (a person taps Send in WhatsApp — no API, no cost,
+   no secrets); only Active, adult members who haven't opted out; a 29 Feb birthday is observed on
+   28 Feb in non-leap years; one wish per member per year is recorded (bene_wishes) so the team
+   doesn't double-send and the reminder clears; the message text is never stored. */
+const parseIso = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || "")); return m ? { y: +m[1], m: +m[2], d: +m[3] } : null; };
+const isLeap = (y) => y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+function birthInfo(r, today = new Date()) {
+  const p = parseIso(r[3]);
+  if (!p || p.m < 1 || p.m > 12 || p.d < 1 || p.d > 31 || p.y < 1900) return null;
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const on = (y) => new Date(y, p.m - 1, p.m === 2 && p.d === 29 && !isLeap(y) ? 28 : p.d);
+  let dt = on(t0.getFullYear());
+  if (dt < t0) dt = on(t0.getFullYear() + 1);
+  const turns = dt.getFullYear() - p.y;
+  if (turns < 0 || turns > 120) return null;
+  return { date: dt, days: Math.round((dt - t0) / 86400000), turns };
+}
+const wishThisYear = (r) => (DATA.wishes || []).find((w) => w.beneficiary_id === r._id && w.year === new Date().getFullYear());
+/* Free-text "Contact" → a WhatsApp-ready South African mobile number (27XXXXXXXXX), or "". */
+function waNumber(contact) {
+  for (const part of String(contact || "").split(/[\/,;]|\bor\b|\band\b/i)) {
+    let s = part.replace(/[^\d+]/g, "");
+    if (s.startsWith("+")) s = s.slice(1);
+    if (s.startsWith("0027")) s = s.slice(2);
+    if (/^0[678]\d{8}$/.test(s)) return "27" + s.slice(1);
+    if (/^27[678]\d{8}$/.test(s)) return s;
+  }
+  return "";
+}
+const prettyCell = (n) => (n ? `+${n.slice(0, 2)} ${n.slice(2, 4)} ${n.slice(4, 7)} ${n.slice(7)}` : "");
+/* South African ID → birth date (YYMMDD at the start). Used only to fill an empty birth date when a
+   full 13-digit ID is typed or imported; the ID itself is still stored masked. Luhn-checked. */
+function dobFromSaId(raw) {
+  const id = String(raw || "").replace(/\D/g, "");
+  if (id.length !== 13) return "";
+  let sum = 0;
+  for (let i = 0; i < 13; i++) { let d = +id[12 - i]; if (i % 2) { d *= 2; if (d > 9) d -= 9; } sum += d; }
+  if (sum % 10 !== 0) return "";
+  const yy = +id.slice(0, 2), mm = +id.slice(2, 4), dd = +id.slice(4, 6);
+  const y = yy <= new Date().getFullYear() % 100 ? 2000 + yy : 1900 + yy;
+  const dt = new Date(y, mm - 1, dd);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mm - 1 || dt.getDate() !== dd) return "";
+  return `${y}-${pad2(mm)}-${pad2(dd)}`;
+}
+const DEFAULT_WISH = "Happy birthday, {name}! Everyone at {cpa} wishes you good health and a wonderful year ahead. — The Committee";
+const wishTemplate = () => { try { return localStorage.getItem("cpa360.bday.msg." + orgId) || DEFAULT_WISH; } catch (e) { return DEFAULT_WISH; } };
+function wishMessage(r, info) {
+  const full = String(r[1] || "").trim().replace(/\s+/g, " ");
+  const first = (full.split(" ")[0] || "").toLowerCase().replace(/(^|[-'])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  return wishTemplate().replace(/\{name\}/g, first || full).replace(/\{fullname\}/g, full).replace(/\{cpa\}/g, DATA.cpa.name || "the association").replace(/\{age\}/g, info ? String(info.turns) : "");
+}
+/* Members to remind about within `maxDays`: Active, adult, not opted out, not yet wished this year. */
+function birthdayDue(maxDays) {
+  const today = new Date();
+  return (DATA.beneficiaryCentre.register || []).map((r) => ({ r, info: r[8] === "Active" && r[13] !== true ? birthInfo(r, today) : null }))
+    .filter((x) => x.info && x.info.days <= maxDays && x.info.turns >= 18 && !wishThisYear(x.r))
+    .sort((a, b) => a.info.days - b.info.days || natCmp(a.r[1], b.r[1]));
+}
+async function sendBirthdayWish(r, info) {
+  const num = waNumber(r[6]);
+  if (!num) { toast("This member has no WhatsApp-able cell number — add one via Edit.", true); return; }
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(wishMessage(r, info))}`, "_blank", "noopener");
+  try {
+    const w = await repo.addBirthdayWish(orgId, r._id, new Date().getFullYear());
+    DATA.wishes = (DATA.wishes || []).filter((x) => x.beneficiary_id !== r._id).concat(w);
+    renderCurrent(); if (onChange) onChange();
+  } catch (e) { toast("WhatsApp opened, but the wish couldn't be recorded: " + (e.message || e), true); }
+}
+function editWishMessage() {
+  openModal("Birthday wish message", [
+    { key: "i", label: "Placeholders", type: "info", value: "{name} = first name · {fullname} · {cpa} = your CPA's name · {age} = the age they turn. Keep it short and warm — it opens in WhatsApp for you to review and send." },
+    { key: "msg", label: "Message", type: "textarea", value: wishTemplate() },
+  ], (o) => {
+    try { localStorage.setItem("cpa360.bday.msg." + orgId, o.msg.trim() || DEFAULT_WISH); } catch (e) {}
+    toast("Message saved for this CPA on this computer.");
+  });
+}
+function renderBeneBirthdays(host) {
+  const today = new Date(), yr = today.getFullYear();
+  const active = (DATA.beneficiaryCentre.register || []).filter((r) => r[8] === "Active");
+  const info = new Map();
+  active.forEach((r) => { const i = birthInfo(r, today); if (i) info.set(r, i); });
+  const rows = [...info.keys()].sort((a, b) => info.get(a).days - info.get(b).days || natCmp(a[1], b[1]));
+  const noDob = active.length - rows.length;
+  const eligible = (r) => r[13] !== true && info.get(r).turns >= 18;
+  const t = bulkState("toggle:Birthdays");
+  if (!t.init) { t.init = true; t.tog = { n30: true }; }
+  const dueToday = rows.filter((r) => info.get(r).days === 0 && eligible(r) && !wishThisYear(r)).length;
+  const wishedN = (DATA.wishes || []).filter((w) => w.year === yr).length;
+  const dayLabel = (d) => (d === 0 ? pill("Today", "good") : d === 1 ? "Tomorrow" : `in ${d} days`);
+  mountRegister(host, {
+    title: "Birthdays", hint: "Nothing is sent automatically — “Send birthday wish” opens a pre-written WhatsApp message for you to review and send. Only active adult members who haven't opted out are shown a button.",
+    stats: () => [
+      statTile("Birthdays today", rows.filter((r) => info.get(r).days === 0).length, dueToday ? `${dueToday} still to wish` : "All wished", dueToday ? "warning" : "good"),
+      statTile("Next 7 days", rows.filter((r) => info.get(r).days <= 7).length, "Coming up", ""),
+      statTile("Wished this year", wishedN, "Opened in WhatsApp", "good"),
+      statTile("No birth date yet", noDob, noDob ? "Add via Edit, import, or a full ID number" : "Everyone has one", noDob ? "warning" : "good"),
+    ],
+    columns: [{ label: "Birthday" }, { label: "Member" }, { label: "Turns", cls: "num" }, { label: "WhatsApp" }, { label: "Household / ODI" }, { label: "Wish" }],
+    rows: () => rows,
+    empty: rows.length ? "No birthdays in this window." : "No birth dates on the register yet — add them under Edit member, import them, or type a full 13-digit ID number (the birth date fills in automatically).",
+    search: "Search name or ref…",
+    toggles: [
+      { key: "today", label: "Today", test: (r) => info.get(r).days === 0 },
+      { key: "w7", label: "Next 7 days", test: (r) => info.get(r).days <= 7 },
+      { key: "n30", label: "Next 30 days", test: (r) => info.get(r).days <= 30 },
+      { key: "todo", label: "Still to wish", test: (r) => eligible(r) && !wishThisYear(r) },
+    ],
+    cell: (r) => {
+      const i = info.get(r), num = waNumber(r[6]), w = wishThisYear(r), idx = DATA.beneficiaryCentre.register.indexOf(r);
+      let wish;
+      if (r[13] === true) wish = pill("Opted out", "neutral");
+      else if (i.turns < 18) wish = `<span class="hint">Under 18 — greet via parent / guardian</span>`;
+      else if (w) wish = pill("Wished " + fmtDay(String(w.at).slice(0, 10)), "good") + (CAN_EDIT ? ` <button type="button" class="linkbtn" data-bday-undo="${idx}">Undo</button>` : "");
+      else if (!num) wish = `<span class="hint" style="color:var(--status-warning);">No cell number</span>` + (CAN_EDIT ? ` <button type="button" class="linkbtn" data-bday-edit="${idx}">Add</button>` : "");
+      else if (CAN_EDIT) wish = `<button type="button" class="btn primary small" data-bday-send="${idx}">Send birthday wish</button>`;
+      else wish = '<span class="hint">—</span>';
+      return [
+        `<b>${esc(i.date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" }))}</b><div class="hint">${dayLabel(i.days)}</div>`,
+        `<span style="font-weight:600;">${esc(r[1])}</span><div class="hint mono">${esc(r[0])}</div>`,
+        `<span class="mono">${i.turns}</span>`,
+        num ? `<span class="mono">${esc(prettyCell(num))}</span>` : '<span class="hint">—</span>',
+        r[5] ? `<span class="mono">${esc(r[5])}</span><div class="hint">${esc(brmOdi(r) ? "ODI: " + brmOdi(r) : "")}</div>` : '<span class="hint">—</span>',
+        wish,
+      ];
+    },
+    manage: () => listEditor(BENE_EDITORS.register()),
+    rerender: () => renderBeneBirthdays(host),
+    extraTools: CAN_EDIT ? [`<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
+    afterRender: (h) => {
+      const reg = DATA.beneficiaryCentre.register;
+      h.querySelectorAll("[data-bday-send]").forEach((b) => (b.onclick = () => { const r = reg[+b.dataset.bdaySend]; sendBirthdayWish(r, info.get(r)); }));
+      h.querySelectorAll("[data-bday-edit]").forEach((b) => (b.onclick = () => editBeneficiaryRow(reg[+b.dataset.bdayEdit])));
+      h.querySelectorAll("[data-bday-undo]").forEach((b) => (b.onclick = async () => {
+        const w = wishThisYear(reg[+b.dataset.bdayUndo]);
+        if (!w) return;
+        try { await repo.removeBirthdayWish(w.id); DATA.wishes = DATA.wishes.filter((x) => x.id !== w.id); renderCurrent(); if (onChange) onChange(); }
+        catch (e) { toast("Couldn't undo: " + (e.message || e), true); }
+      }));
+      const mb = h.querySelector("[data-bday-msg]"); if (mb) mb.onclick = editWishMessage;
+    },
+  });
+}
+
 /* ============ Beneficiary Master Register — official export ============
    A formal, paginated document for submission to the Registrar of Communal Property Associations
    (Dept. of Land Reform and Rural Development) or for the AGM/funders: letterhead, document number +
@@ -3239,6 +3393,7 @@ function renderBeneRegister(host) {
     search: "Search name, ref, ID, household, contact…",
     toggles: [
       { key: "noid", label: "No ID on file", test: (r) => !memberHasId(r) },
+      { key: "nodob", label: "No date of birth", test: (r) => !parseIso(r[3]) },
       { key: "unver", label: "Not verified", test: (r) => r[9] !== "Verified" },
     ],
     rerender: () => renderBeneRegister(host),
@@ -5739,7 +5894,7 @@ const IMPORT = {
       { k: "dob", label: "Date of birth" }, { k: "idm", label: "ID (masked)" }, { k: "hh", label: "Household ref" },
       { k: "role", label: "Family position (ODI / Family Representative / 1st-4th Descendant)" },
       { k: "contact", label: "Contact" }, { k: "joined", label: "Joined on" }, { k: "status", label: "Status" }, { k: "verif", label: "Verification" }],
-    make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || "", maskId(v.idm), v.hh || "", v.contact || "", v.joined || "",
+    make: (v) => [v.ref || "", v.name, v.gender || "", v.dob || dobFromSaId(v.idm), maskId(v.idm), v.hh || "", v.contact || "", v.joined || "",
       ["Active", "Deceased", "Removed", "Transferred"].includes(v.status) ? v.status : "Active",
       ["Verified", "Pending", "Disputed", "Rejected"].includes(v.verif) ? v.verif : "Pending", "",
       HOUSEHOLD_ROLES.includes(v.role) ? v.role : (v.role || "")],
@@ -6124,8 +6279,8 @@ const BENE_EDITORS = {
       { key: "ref", label: "Register / member no.", type: "text", value: r[0] },
       { key: "name", label: "Full name", type: "text", value: r[1], required: true },
       { key: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other", "Unspecified"], value: r[2] || "Female" },
-      { key: "dob", label: "Date of birth", type: "date", value: r[3] },
-      { key: "idm", label: "ID (auto-masked — only the last 4 digits are kept)", type: "text", value: r[4] },
+      { key: "dob", label: "Date of birth (drives birthday reminders)", type: "date", value: r[3] },
+      { key: "idm", label: "ID (auto-masked — only the last 4 digits are kept; a full 13-digit ID also fills an empty birth date)", type: "text", value: r[4] },
       { key: "hh", label: "ODI / household — linked to the ODI register (Beneficiaries → Households)", type: "select", ...(() => { const c = hhChoices(r[5]); return { options: c.options, value: c.current }; })() },
       { key: "role", label: "Family position (filled automatically if the name matches the household)", type: "select", options: HOUSEHOLD_ROLES, value: r[11] || "" },
       { key: "contact", label: "Contact", type: "text", value: r[6] },
@@ -6133,9 +6288,11 @@ const BENE_EDITORS = {
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
+      { key: "wishes", label: "Birthday wishes on WhatsApp", type: "select", options: ["Allowed", "Do not send (member declined)"], value: r[13] === true ? "Do not send (member declined)" : "Allowed" },
     ],
     write: (r, o) => {
-      r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob; r[4] = maskId(o.idm); r[5] = refFromHhLabel(o.hh);
+      r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob || dobFromSaId(o.idm); r[4] = maskId(o.idm); r[5] = refFromHhLabel(o.hh);
+      r[13] = /^Do not/.test(o.wishes || "");
       r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes;
       r[11] = o.role || inferHouseholdRole(householdOf(r[5]), o.name);
     },
@@ -6871,6 +7028,9 @@ function computeAlerts() {
   if (unrec) a.push({ tone: "info", text: `${unrec} transaction${unrec > 1 ? "s" : ""} not reconciled`, goto: "#/v/finance" });
   const disp = (DATA.beneficiaryCentre?.disputes || []).filter((r) => r[5] !== "Resolved").length;
   if (disp) a.push({ tone: "warning", text: `${disp} beneficiary dispute${disp > 1 ? "s" : ""} open`, goto: "#/v/beneficiary" });
+  const bdToday = birthdayDue(0).length, bdWeek = birthdayDue(7).length;
+  if (bdToday) a.push({ tone: "info", text: `${bdToday} member birthday${bdToday > 1 ? "s" : ""} today — send a wish`, goto: "#/v/beneficiary/birthdays" });
+  else if (bdWeek) a.push({ tone: "info", text: `${bdWeek} member birthday${bdWeek > 1 ? "s" : ""} in the next 7 days`, goto: "#/v/beneficiary/birthdays" });
   const pend = (DATA.beneficiaryCentre?.register || []).filter((r) => r[9] === "Pending").length;
   if (pend) a.push({ tone: "info", text: `${pend} beneficiar${pend > 1 ? "ies" : "y"} pending verification`, goto: "#/v/beneficiary" });
   const noReqPO = (DATA.finProc?.pos || []).filter((r) => !r[5] && r[6] !== "Cancelled").length;

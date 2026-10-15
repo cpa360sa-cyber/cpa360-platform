@@ -122,6 +122,8 @@ export async function loadOrg(orgId) {
     sel("revenue_streams", "sort"),
     supabase.from("impact_figures").select("*").eq("org_id", orgId).maybeSingle(),
     pageAll((a, b) => supabase.from("documents").select("section, ref_id").eq("org_id", orgId).order("id", { ascending: true }).range(a, b)),
+    pageAll((a, b) => supabase.from("bene_wishes").select("id, beneficiary_id, wish_year, created_at").eq("org_id", orgId)
+      .eq("wish_year", new Date().getFullYear()).order("id", { ascending: true }).range(a, b)),
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
@@ -132,7 +134,7 @@ export async function loadOrg(orgId) {
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
          finPay, finBills, finQuotes, finContracts, finGrn, finAfs, finMemberPay, finBankRecon, finClose,
-         projects, markets, partnerships, revenue, impact, docs] =
+         projects, markets, partnerships, revenue, impact, docs, wishes] =
     results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
@@ -215,10 +217,12 @@ export async function loadOrg(orgId) {
           disputed: num(bene.disputed), female: num(bene.female), male: num(bene.male),
           households: num(bene.households), succession: num(bene.succession) }
       : { ...EMPTY_BENE },
+    wishes: (wishes || []).map((w) => ({ id: w.id, beneficiary_id: w.beneficiary_id, year: w.wish_year, at: w.created_at })),
     beneficiaryCentre: {
       register: (beneReg || []).map((r) => tagArr(
         [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
-         r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || "", r.household_role || "", r.verified_on || ""], r)),
+         r.contact || "", r.joined_on || "", r.status, r.verification, r.notes || "", r.household_role || "", r.verified_on || "",
+         r.wish_optout === true], r)),
       households: (households || []).map((r) => tagArr(
         [r.ref || "", r.family_representative || "", r.odi_name || "", r.odi_id || "",
          r.descendant1_name || "", r.descendant1_id || "", r.descendant2_name || "", r.descendant2_id || "",
@@ -417,6 +421,19 @@ export async function markPermitEmailed(permitId) {
   if (error) throw error;
 }
 
+/* ------------------------------------------------------ birthday wishes --- */
+export async function addBirthdayWish(orgId, beneficiaryId, year) {
+  const { data, error } = await supabase.from("bene_wishes")
+    .upsert({ org_id: orgId, beneficiary_id: beneficiaryId, wish_year: year, channel: "whatsapp" }, { onConflict: "beneficiary_id,wish_year" })
+    .select("id, beneficiary_id, wish_year, created_at").single();
+  if (error) throw error;
+  return { id: data.id, beneficiary_id: data.beneficiary_id, year: data.wish_year, at: data.created_at };
+}
+export async function removeBirthdayWish(id) {
+  const { error } = await supabase.from("bene_wishes").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /* ---------------------------------------------------------- stage gating --- */
 export async function flagStageReview(orgId, toStage, detail) {
   const { error } = await supabase.rpc("flag_stage_review", { p_org: orgId, p_to_stage: toStage, p_detail: detail || {} });
@@ -601,7 +618,7 @@ export async function saveSection(orgId, section, D) {
       return reconcile("beneficiaries", orgId, D.beneficiaryCentre.register, (r, i) => ({
         ref: nn(r[0]), full_name: r[1], gender: nn(r[2]), dob: nn(r[3]), id_masked: nn(r[4]),
         household_ref: nn(r[5]), contact: nn(r[6]), joined_on: nn(r[7]), status: r[8], verification: r[9], notes: nn(r[10]),
-        household_role: nn(r[11]), verified_on: nn(r[12]), sort: i,
+        household_role: nn(r[11]), verified_on: nn(r[12]), wish_optout: r[13] === true, sort: i,
       }));
     case "households":
       return reconcile("households", orgId, D.beneficiaryCentre.households, (r, i) => ({
