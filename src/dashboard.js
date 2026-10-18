@@ -2941,8 +2941,10 @@ function openReceipt(r) {
     ${r[8] !== "Active" ? `<p class="mc-note">&#9888; This member's status is “${esc(r[8])}”, not Active.</p>` : ""}
     <iframe id="rc-frame" sandbox title="Receipt preview" style="width:100%;height:430px;border:1px solid var(--border);border-radius:8px;background:#fff;"></iframe>`,
     `<button class="btn" data-act="close" type="button">Close</button>
+     <button class="btn" data-rc="wa" type="button">Send via WhatsApp</button>
      <button class="btn" data-rc="word" type="button">Download Word</button>
      <button class="btn primary" data-rc="print" type="button">Print / PDF</button>`, 760);
+  scrim.querySelector('[data-rc="wa"]').onclick = () => sendDocsWhatsApp(r, { card: false, receipt: true });
   scrim.querySelector("#rc-frame").srcdoc = receiptDoc(r, true);
   scrim.querySelector('[data-rc="word"]').onclick = () => downloadFile(`Receipt-${govSafe(r[0] || r[1])}.doc`, receiptDoc(r, false), "application/msword");
   scrim.querySelector('[data-rc="print"]').onclick = () => {
@@ -2954,6 +2956,122 @@ function openReceipt(r) {
   };
 }
 const offerReceipt = (r) => setTimeout(() => { if (canIssueReceipt(r)) openReceipt(r); }, 200);
+
+/* ---- send a member's documents by WhatsApp ----
+   WhatsApp has no way to attach a file from a link (wa.me carries text only), so there are two
+   honest routes, both with a person pressing Send:
+     · Share — on a phone/tablet the device's share sheet takes the image files straight into a
+       WhatsApp chat (navigator.share with files).
+     · Chat + download — opens the member's WhatsApp chat with a ready message and saves the files
+       so they can be attached with the paperclip (the desktop route).
+   Documents: the membership card (front/back, as PNG) and the verification receipt (as PNG). */
+async function receiptPng(r) {
+  const W = 794;
+  const css = permitDocCss().replace(/body\{[^}]*\}/, ".rcp{font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1f1f1f;line-height:1.45;padding:83px 76px;box-sizing:border-box;background:#fff;}");
+  const html = receiptDoc(r, true);
+  // measure the page's real height in a hidden, script-less frame so the picture isn't cropped
+  const H = await new Promise((res) => {
+    const f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-same-origin"); f.style.cssText = `position:fixed;left:-10000px;top:0;width:${W}px;height:400px;border:0;`;
+    f.onload = () => { const h = f.contentDocument.documentElement.scrollHeight; f.remove(); res(Math.max(600, h + 48)); };
+    f.srcdoc = html; document.body.appendChild(f);
+    setTimeout(() => { if (f.isConnected) { f.remove(); res(1123); } }, 4000);
+  });
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const holder = document.createElement("div");
+  holder.innerHTML = `<div class="rcp" style="width:${W}px;min-height:${H}px;">${parsed.body.innerHTML}</div>`;
+  const xhtml = new XMLSerializer().serializeToString(holder.firstElementChild);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml"><style>${css.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</style>${xhtml}</div></foreignObject></svg>`;
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("render failed")); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+  const k = 2, c = document.createElement("canvas");
+  c.width = W * k; c.height = H * k;
+  const cx = c.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(img, 0, 0, c.width, c.height);
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("export failed"))), "image/png"));
+}
+function saveBlobAs(blob, name) {
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function sendDocsWhatsApp(r, opts) {
+  opts = opts || {};
+  const pf = cardPrefs(), canRc = canIssueReceipt(r), declined = r[13] === true;
+  const first = (String(r[1] || "").trim().split(/\s+/)[0] || "").toLowerCase().replace(/(^|[-'])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) || "member";
+  const num0 = waNumber(r[6]);
+  const { scrim } = govModal("Send documents on WhatsApp — " + (r[1] || ""), `
+    <p class="hint" style="margin:0 0 8px;">WhatsApp can't attach a file from a link, so a person finishes the send: on a phone or tablet use <b>Share files</b> and pick the chat; on a computer use <b>Open chat &amp; save files</b>, then attach the saved pictures with the paperclip.</p>
+    ${declined ? `<p class="mc-note">&#9888; This member has asked not to receive WhatsApp messages from the CPA. Only continue if they requested these documents.</p>` : ""}
+    <div class="field"><label for="sw-num">WhatsApp number</label><input id="sw-num" type="tel" value="${esc(num0 ? prettyCell(num0) : (r[6] || ""))}" placeholder="082 123 4567">
+      <div class="hint" id="sw-numhint"></div></div>
+    <div class="field"><label>Documents to send</label>
+      <label class="cm-check"><input type="checkbox" id="sw-front"${opts.card === false ? "" : " checked"}> Membership card — front</label>
+      <label class="cm-check"><input type="checkbox" id="sw-back"${opts.card === false ? "" : " checked"}> Membership card — back</label>
+      <label class="cm-check"><input type="checkbox" id="sw-rc"${canRc ? "" : " disabled"}${canRc && opts.receipt ? " checked" : ""}> Verification receipt${canRc ? "" : " <span class=\"hint\">(available once the member is Verified)</span>"}</label></div>
+    <div class="field"><label for="sw-msg">Message</label><textarea id="sw-msg" rows="3"></textarea></div>
+    <div id="sw-status" class="hint" role="status"></div>`,
+    `<button class="btn" data-act="close" type="button">Close</button>
+     <button class="btn" id="sw-chat" type="button" disabled>Open chat &amp; save files</button>
+     <button class="btn primary" id="sw-share" type="button" disabled>Share files</button>`, 560);
+  const $s = (q) => scrim.querySelector(q);
+  let files = [], seq = 0, dirty = false;
+  const labelList = () => {
+    const l = []; if ($s("#sw-front").checked || $s("#sw-back").checked) l.push("membership card"); if ($s("#sw-rc").checked) l.push("verification receipt");
+    return l.join(" and ");
+  };
+  const defMsg = () => `Hello ${first}, ${DATA.cpa.name || "the association"} here. Please find your ${labelList() || "documents"} attached.`;
+  const numNow = () => waNumber($s("#sw-num").value);
+  const sync = () => {
+    const n = numNow();
+    $s("#sw-numhint").textContent = n ? "Will open " + prettyCell(n) : "Enter a valid South African cell number to open the chat (Share files doesn't need one).";
+    const ready = files.length > 0;
+    $s("#sw-chat").disabled = !ready || !n;
+    $s("#sw-share").disabled = !ready || !(navigator.canShare && navigator.canShare({ files }));
+    $s("#sw-share").title = $s("#sw-share").disabled && ready ? "Your browser can't share files directly — use “Open chat & save files”." : "";
+  };
+  async function prepare() {
+    const my = ++seq; files = []; sync();
+    if (!dirty) $s("#sw-msg").value = defMsg();
+    const want = { front: $s("#sw-front").checked, back: $s("#sw-back").checked, rc: $s("#sw-rc").checked && canRc };
+    if (!want.front && !want.back && !want.rc) { $s("#sw-status").textContent = "Tick at least one document."; return; }
+    $s("#sw-status").textContent = "Preparing pictures…";
+    try {
+      const out = [], ref = govSafe(r[0] || r[1]);
+      if (want.front || want.back) {
+        ensureCardCss();
+        const o = { style: opts.style || pf.style, valid: opts.valid || pf.valid,
+          photoUrl: opts.photoUrl != null ? opts.photoUrl : await cardPhotoUrl(r), sigUrl: opts.sigUrl != null ? opts.sigUrl : await cardSigUrl(r) };
+        if (want.front) out.push(new File([await cardPng(r, "front", o)], `Card-${ref}-front.png`, { type: "image/png" }));
+        if (want.back) out.push(new File([await cardPng(r, "back", o)], `Card-${ref}-back.png`, { type: "image/png" }));
+      }
+      if (want.rc) out.push(new File([await receiptPng(r)], `Receipt-${ref}.png`, { type: "image/png" }));
+      if (my !== seq) return;
+      files = out; $s("#sw-status").textContent = `${out.length} picture${out.length === 1 ? "" : "s"} ready.`;
+    } catch (e) { if (my === seq) $s("#sw-status").textContent = "Couldn't prepare the pictures: " + ((e && e.message) || e); }
+    sync();
+  }
+  const record = async (how) => {
+    try {   // keep Communication → History complete: one entry per member documents were sent to
+      const m = await repo.createCommMessage(orgId, { title: `Documents sent to ${r[1] || "member"}`, body: `${labelList() || "documents"} — ${how}`, kind: "documents", channel: "whatsapp_manual", audience: { member: r[0] || "" }, recipientCount: 1 });
+      await repo.logCommOpened(orgId, m.id, { beneficiary_id: r._id || null, name: r[1], phone: numNow() });
+    } catch (e) { /* history is a convenience; the send itself already happened */ }
+  };
+  $s("#sw-msg").oninput = () => { dirty = true; };
+  ["#sw-front", "#sw-back", "#sw-rc"].forEach((q) => ($s(q).onchange = prepare));
+  $s("#sw-num").oninput = sync;
+  $s("#sw-share").onclick = async () => {
+    try { await navigator.share({ files, text: $s("#sw-msg").value }); await record("shared from the device"); toast("Shared — choose the WhatsApp chat to send."); }
+    catch (e) { if (e && e.name !== "AbortError") $s("#sw-status").textContent = "Couldn't share: " + ((e && e.message) || e); }
+  };
+  $s("#sw-chat").onclick = async () => {
+    window.open(`https://wa.me/${numNow()}?text=${encodeURIComponent($s("#sw-msg").value)}`, "_blank", "noopener");
+    files.forEach((f) => saveBlobAs(f, f.name));
+    $s("#sw-status").textContent = "WhatsApp opened and the pictures were saved — attach them with the paperclip, then press Send.";
+    await record("chat opened, pictures saved");
+  };
+  prepare();
+}
 
 function editBeneficiaryRow(r, after) {
   const cfg = BENE_EDITORS.register();
@@ -3003,6 +3121,7 @@ function openMemberCard(startIdx, navIdx) {
       <button type="button" class="btn small" id="mc-img-front">Front (PNG)</button><button type="button" class="btn small" id="mc-img-back">Back (PNG)</button>
       <span class="mc-lbl" style="margin:0 0 0 8px;">Receipt</span><button type="button" class="btn small" id="mc-receipt">Registration receipt</button>
       <button type="button" class="btn small" id="mc-docs">ID &amp; documents</button>
+      <button type="button" class="btn small" id="mc-wa" title="Send this card (and the receipt) to the member on WhatsApp">Send via WhatsApp</button>
     </div>
     ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:8px;"><label class="btn small" style="cursor:pointer;">Upload photo<input type="file" id="mc-file" accept="image/*" hidden></label>
       <button type="button" class="btn small" id="mc-rm-photo" hidden>Remove photo</button><span class="hint" id="mc-msg"></span></div>
@@ -3057,6 +3176,7 @@ function openMemberCard(startIdx, navIdx) {
   $q("#mc-img-back").onclick = () => downloadCardImage(row(), "back", { style, valid, sigUrl });
   $q("#mc-receipt").onclick = () => openReceipt(row());
   $q("#mc-docs").onclick = () => openMemberDocs(row());
+  $q("#mc-wa").onclick = () => sendDocsWhatsApp(row(), { style, valid, photoUrl, sigUrl, receipt: canIssueReceipt(row()) });
   $q('[data-mc="prev"]').onclick = () => { if (pos > 0) { pos--; paint(); } };
   $q('[data-mc="next"]').onclick = () => { if (pos < navIdx.length - 1) { pos++; paint(); } };
   $q('[data-mc="print"]').onclick = () => printMemberCards([row()], { style, valid, photoUrl, sigUrl });
