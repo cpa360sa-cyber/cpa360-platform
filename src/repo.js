@@ -505,6 +505,19 @@ export async function markCommInbound(id, status) {
   const { error } = await supabase.from("comm_inbound").update({ status }).eq("id", id);
   if (error) throw error;
 }
+/* ---------------------------------------------- remote card signing (sign-request) --- */
+export const signRequest = (payload) => callFn("sign-request", payload);
+export async function listSignatureRequests(beneficiaryId) {
+  const { data, error } = await supabase.from("signature_requests")
+    .select("id, status, expires_at, created_at, signed_at, needs_id_check")
+    .eq("beneficiary_id", beneficiaryId).order("created_at", { ascending: false }).limit(6);
+  if (error) throw error;
+  return data || [];
+}
+export async function whatsappConnected(orgId) {
+  const { data } = await supabase.from("integrations").select("status").eq("org_id", orgId).eq("provider", "whatsapp").maybeSingle();
+  return !!data && data.status === "connected";
+}
 export const whatsappSend = (payload) => callFn("whatsapp-send", payload);
 export const whatsappConnect = (payload) => callFn("whatsapp-connect", payload);
 

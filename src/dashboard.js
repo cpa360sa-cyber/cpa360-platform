@@ -3073,6 +3073,97 @@ function sendDocsWhatsApp(r, opts) {
   prepare();
 }
 
+/* ---- remote signing: the card holder signs on their own phone ----
+   Staff create a private, single-use, expiring link (sign-request Edge Function → sign.html). It can
+   be sent on WhatsApp (chat, or automatically through the Business number), copied, or shown as a
+   QR code for a member who is standing next to you. The member confirms the last 4 digits of their
+   ID, signs with a finger and the signature appears on the card by itself. */
+const signPageUrl = (token) => new URL("sign.html", location.href.replace(/[#?].*$/, "")).href + "#t=" + token;
+function requestSignatureModal(r, onSigned) {
+  if (!r._id) { toast("Save the member first.", true); return; }
+  const first = (String(r[1] || "").trim().split(/\s+/)[0] || "").toLowerCase().replace(/(^|[-'])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) || "member";
+  const num0 = waNumber(r[6]);
+  const { scrim } = govModal("Ask " + first + " to sign remotely", `
+    <p class="hint" style="margin:0 0 8px;">Creates a <b>private link</b> that works once. ${esc(first)} opens it on their own phone, confirms the last 4 digits of their ID, signs with a finger, and the signature appears on the card automatically. Creating a new link cancels any older one.</p>
+    <div class="field"><label for="rs-num">WhatsApp number</label><input id="rs-num" type="tel" value="${esc(num0 ? prettyCell(num0) : (r[6] || ""))}" placeholder="082 123 4567"></div>
+    <div class="field"><label for="rs-ttl">Link stays valid for</label><select id="rs-ttl"><option value="24">24 hours</option><option value="72" selected>3 days</option><option value="168">7 days</option></select></div>
+    <div id="rs-link" hidden>
+      <div class="field"><label>Signing link</label><input id="rs-url" type="text" readonly></div>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+        <div id="rs-qr" style="width:132px;"></div>
+        <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;">
+          <button class="btn primary" id="rs-wa" type="button">Send on WhatsApp</button>
+          <button class="btn" id="rs-api" type="button" hidden>Send via WhatsApp Business</button>
+          <button class="btn" id="rs-copy" type="button">Copy link</button>
+          <span class="hint">Standing next to the member? Let them scan the QR code with their phone camera.</span>
+        </div></div>
+    </div>
+    <div id="rs-msg" class="hint" role="status" style="margin-top:8px;"></div>
+    <div id="rs-hist" style="margin-top:10px;"></div>`,
+    `<button class="btn" data-act="close" type="button">Close</button><button class="btn primary" id="rs-go" type="button">Create signing link</button>`, 560);
+  const $s = (q) => scrim.querySelector(q);
+  let current = null, timer = null, signedSeen = false;
+  const numNow = () => waNumber($s("#rs-num").value);
+  const statusPill = (s) => pill(esc(s === "signed" ? "Signed" : s === "pending" ? "Waiting" : s === "expired" ? "Expired" : "Cancelled"), s === "signed" ? "good" : s === "pending" ? "warning" : "neutral");
+  async function refresh() {
+    if (!scrim.isConnected) { clearInterval(timer); return; }
+    try {
+      const list = await repo.listSignatureRequests(r._id);
+      $s("#rs-hist").innerHTML = list.length ? `<div class="hint" style="margin-bottom:4px;">Recent requests</div>` + list.map((x) => {
+        const live = x.status === "pending" && new Date(x.expires_at) > new Date();
+        const st = x.status === "pending" && !live ? "expired" : x.status;
+        return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--border);">${statusPill(st)}
+          <span class="hint" style="flex:1;">${esc(fmtDay(x.created_at.slice(0, 10)))}${x.signed_at ? " · signed " + esc(new Date(x.signed_at).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })) : ""}</span>
+          ${live ? `<button type="button" class="btn small" data-rs-revoke="${esc(x.id)}">Cancel link</button>` : ""}</div>`;
+      }).join("") : "";
+      scrim.querySelectorAll("[data-rs-revoke]").forEach((b) => (b.onclick = async () => {
+        try { await repo.signRequest({ action: "revoke", org_id: orgId, request_id: b.dataset.rsRevoke }); refresh(); } catch (e) { toast("Couldn't cancel: " + ((e && e.message) || e), true); }
+      }));
+      if (current && !signedSeen && list.some((x) => x.id === current.id && x.status === "signed")) {
+        signedSeen = true; clearInterval(timer);
+        $s("#rs-msg").innerHTML = `<b style="color:var(--status-good);">&#10003; ${esc(first)} has signed.</b> The signature is now on the card.`;
+        $s("#rs-link").hidden = true;
+        toast(first + " signed their card."); if (onSigned) onSigned();
+      }
+    } catch (e) { /* offline blip — the next poll will retry */ }
+  }
+  refresh();
+  $s("#rs-go").onclick = async () => {
+    const b = $s("#rs-go"); b.disabled = true; $s("#rs-msg").textContent = "Creating a private link…";
+    try {
+      const out = await repo.signRequest({ action: "create", org_id: orgId, beneficiary_id: r._id, ttl_hours: +$s("#rs-ttl").value });
+      current = { id: out.id, url: signPageUrl(out.token), expires: out.expires_at }; signedSeen = false;
+      $s("#rs-url").value = current.url; $s("#rs-link").hidden = false;
+      let qr = ""; try { qr = qrSvg(current.url, { dark: "#111", light: "#fff", quiet: 2 }); } catch (e) {}
+      $s("#rs-qr").innerHTML = qr ? qr.replace("<svg ", '<svg width="132" height="132" style="border:1px solid var(--border);border-radius:6px;" ') : "";
+      $s("#rs-msg").textContent = out.needs_id_check ? "Link ready. The member will be asked for the last 4 digits of their ID." : "Link ready. (No ID on file, so no ID check will be asked.)";
+      b.textContent = "Create a new link"; b.disabled = false;
+      clearInterval(timer); timer = setInterval(refresh, 5000); refresh();
+      repo.whatsappConnected(orgId).then((ok) => { if (ok && scrim.isConnected) $s("#rs-api").hidden = false; }).catch(() => {});
+    } catch (e) { $s("#rs-msg").textContent = "Couldn't create the link: " + ((e && e.message) || e); b.disabled = false; }
+  };
+  const until = () => new Date(current.expires).toLocaleDateString("en-ZA", { day: "numeric", month: "long" });
+  $s("#rs-copy").onclick = async () => { try { await navigator.clipboard.writeText(current.url); toast("Link copied."); } catch (e) { $s("#rs-url").select(); toast("Select the link and copy it.", true); } };
+  $s("#rs-wa").onclick = () => {
+    const n = numNow();
+    if (!n) { $s("#rs-msg").textContent = "Enter a valid South African cell number first (or copy the link)."; return; }
+    const text = `Hello ${first}, ${DATA.cpa.name || "your CPA"} needs your signature for your membership card. Please open this private link on your phone, check your name and sign with your finger: ${current.url}\n\nIt works once and is valid until ${until()}. Please don't share it.`;
+    window.open(`https://wa.me/${n}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  };
+  $s("#rs-api").onclick = async () => {
+    const n = numNow();
+    if (!n) { $s("#rs-msg").textContent = "Enter a valid South African cell number first."; return; }
+    const b = $s("#rs-api"); b.disabled = true; $s("#rs-msg").textContent = "Sending through your WhatsApp Business number…";
+    try {
+      const body = `Please sign your membership card on your phone: ${current.url} (works once, valid until ${until()}). Please don't share this link.`;
+      const m = await repo.createCommMessage(orgId, { title: `Signature request — ${r[1] || "member"}`, body, kind: "signature", channel: "whatsapp_api", audience: { member: r[0] || "" }, recipientCount: 1 });
+      const res = await repo.whatsappSend({ org_id: orgId, message_id: m.id, mode: "template", body, recipients: [{ beneficiary_id: r._id, name: r[1], phone: n }] });
+      $s("#rs-msg").textContent = res.sent ? "Sent on WhatsApp. This window updates when they have signed." : "Not sent: " + (((res.results || [])[0] || {}).error || "unknown error");
+    } catch (e) { $s("#rs-msg").textContent = "Not sent: " + ((e && e.message) || e); }
+    b.disabled = false;
+  };
+}
+
 function editBeneficiaryRow(r, after) {
   const cfg = BENE_EDITORS.register();
   const was = r[9];
@@ -3128,6 +3219,7 @@ function openMemberCard(startIdx, navIdx) {
     <div class="mc-ctl" style="margin-top:8px;"><span class="mc-lbl" style="margin:0;">Holder's signature</span>
       <button type="button" class="btn small primary" id="mc-sig-draw">Draw signature</button>
       <label class="btn small" style="cursor:pointer;">Attach signature image<input type="file" id="mc-sig-file" accept="image/*" hidden></label>
+      <button type="button" class="btn small" id="mc-sig-remote" title="Send the member a private link to sign on their own phone">Request signature remotely</button>
       <button type="button" class="btn small" id="mc-rm-sig" hidden>Remove signature</button><span class="hint" id="mc-sig-msg"></span></div>` : ""}`,
     `<span class="hint" id="mc-pos" style="margin-right:auto;"></span>
      <button class="btn" data-mc="prev" type="button">&lsaquo; Prev</button><button class="btn" data-mc="next" type="button">Next &rsaquo;</button>
@@ -3209,6 +3301,8 @@ function openMemberCard(startIdx, navIdx) {
     sigMsg.textContent = "";
     drawSignatureModal({ title: "Card holder's signature", who: r[1], onSave: async (blob) => { await storeSig(r, blob); sigMsg.textContent = "Signature saved."; } });
   };
+  const sr = $q("#mc-sig-remote");
+  if (sr) sr.onclick = () => requestSignatureModal(row(), () => paint());
   const sf = $q("#mc-sig-file");
   if (sf) sf.onchange = async () => {
     const f = sf.files[0]; sf.value = "";
