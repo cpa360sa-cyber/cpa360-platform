@@ -114,21 +114,37 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
 /* ============================ boot ============================ */
 (async function boot() {
   if (new URLSearchParams(location.search).has("preview")) return previewShell();
+  // A password-recovery link signs the person in AND fires PASSWORD_RECOVERY; without this
+  // guard the SIGNED_IN handler loads the dashboard over the "set a new password" screen, so
+  // the password never gets changed. Also surfaces expired / already-used links.
+  const hp = new URLSearchParams((location.hash || "").replace(/^#/, "") + "&" + (location.search || "").replace(/^\?/, ""));
+  let recovering = hp.get("type") === "recovery";
+  const linkError = hp.get("error_description") || (hp.get("error_code") ? "That link has expired or was already used." : "");
+  const finishRecovery = () => { recovering = false; history.replaceState(null, "", location.pathname); enterApp(); };
   state.session = await getSession();
   onAuth((event, session) => {
     state.session = session;
     if (event === "PASSWORD_RECOVERY") {
-      renderAuth(root, "setpw", enterApp);
+      recovering = true;
+      renderAuth(root, "setpw", finishRecovery);
     } else if (event === "SIGNED_IN") {
-      enterApp();
+      if (!recovering) enterApp();
     } else if (event === "SIGNED_OUT") {
+      recovering = false;
       dash.destroyDashboard();
       state.orgs = []; state.active = null; state.dashOrgId = null;
       renderAuth(root, "signin");
     }
   });
-  if (state.session) enterApp();
-  else renderAuth(root, "signin");
+  if (state.session && recovering) renderAuth(root, "setpw", finishRecovery);
+  else if (state.session) enterApp();
+  else {
+    renderAuth(root, "signin");
+    if (linkError) {
+      const m = root.querySelector("#auth-msg");
+      if (m) m.innerHTML = `<div class="msg err">${esc(linkError.replace(/\+/g, " "))} Request a new link with “Forgot password”.</div>`;
+    }
+  }
 })();
 
 window.addEventListener("hashchange", () => { if (state.session) renderView(); });

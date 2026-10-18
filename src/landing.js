@@ -1,6 +1,13 @@
 /* CPA360 landing page — interactions + lead capture. Plain script, no imports. */
 (function () {
   "use strict";
+  /* Auth e-mail links (password reset, magic link, confirm) land on whichever URL Supabase has as
+     its Site URL. If that is this public page, hand the link over to the app untouched. */
+  if (/(^|[#&?])(access_token|type=(recovery|signup|magiclink|invite)|error_code|code)=/.test(location.hash + location.search) &&
+      !/app\.html$/.test(location.pathname)) {
+    location.replace("app.html" + location.search + location.hash);
+    return;
+  }
   var env = window.__CPA360_ENV || {};
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
