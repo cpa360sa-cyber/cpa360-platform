@@ -124,6 +124,7 @@ export async function loadOrg(orgId) {
     pageAll((a, b) => supabase.from("documents").select("section, ref_id").eq("org_id", orgId).order("id", { ascending: true }).range(a, b)),
     pageAll((a, b) => supabase.from("bene_wishes").select("id, beneficiary_id, wish_year, created_at").eq("org_id", orgId)
       .eq("wish_year", new Date().getFullYear()).order("id", { ascending: true }).range(a, b)),
+    supabase.from("death_notices").select("id, beneficiary_id, member_name, created_at").eq("org_id", orgId).eq("status", "pending").order("created_at", { ascending: true }),
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
@@ -134,7 +135,7 @@ export async function loadOrg(orgId) {
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
          finPay, finBills, finQuotes, finContracts, finGrn, finAfs, finMemberPay, finBankRecon, finClose,
-         projects, markets, partnerships, revenue, impact, docs, wishes] =
+         projects, markets, partnerships, revenue, impact, docs, wishes, deathNotices] =
     results.map((r) => r.data);
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
@@ -218,6 +219,7 @@ export async function loadOrg(orgId) {
           households: num(bene.households), succession: num(bene.succession) }
       : { ...EMPTY_BENE },
     wishes: (wishes || []).map((w) => ({ id: w.id, beneficiary_id: w.beneficiary_id, year: w.wish_year, at: w.created_at })),
+    deathNotices: (deathNotices || []).map((n) => ({ id: n.id, beneficiary_id: n.beneficiary_id, name: n.member_name, at: n.created_at })),
     beneficiaryCentre: {
       register: (beneReg || []).map((r) => tagArr(
         [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
@@ -468,7 +470,7 @@ export async function loadComm(orgId) {
   for (const r of [msgs, inbound]) if (r.error) throw r.error;
   const counts = {};
   (stats.data || []).forEach((s) => { (counts[s.message_id] ||= {})[s.status] = Number(s.n); });
-  return { messages: msgs.data || [], counts, inbound: inbound.data || [], whatsapp: integ.data || null };
+  return { msgs: msgs.data || [], counts, inbound: inbound.data || [], wa: integ.data || null };
 }
 
 export async function createCommMessage(orgId, { title, body, kind, channel, audience, recipientCount }) {
@@ -505,6 +507,23 @@ export async function markCommInbound(id, status) {
   const { error } = await supabase.from("comm_inbound").update({ status }).eq("id", id);
   if (error) throw error;
 }
+/* ------------------------------------------------------------ death notices --- */
+/* One notice per member, ever (unique beneficiary_id): returns the new notice, or null when one
+   already existed (e.g. the member was marked Deceased before, then reverted and re-marked). */
+export async function addDeathNotice(orgId, beneficiaryId, name) {
+  const { data, error } = await supabase.from("death_notices")
+    .upsert({ org_id: orgId, beneficiary_id: beneficiaryId, member_name: name || "Member" }, { onConflict: "beneficiary_id", ignoreDuplicates: true })
+    .select("id, beneficiary_id, member_name, created_at");
+  if (error) throw error;
+  const n = (data || [])[0];
+  return n ? { id: n.id, beneficiary_id: n.beneficiary_id, name: n.member_name, at: n.created_at } : null;
+}
+export async function resolveDeathNotice(id, status, messageId) {
+  const { error } = await supabase.from("death_notices")
+    .update({ status, handled_at: new Date().toISOString(), ...(messageId ? { message_id: messageId } : {}) }).eq("id", id);
+  if (error) throw error;
+}
+
 /* ---------------------------------------------- remote card signing (sign-request) --- */
 export const signRequest = (payload) => callFn("sign-request", payload);
 export async function listSignatureRequests(beneficiaryId) {

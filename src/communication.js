@@ -113,7 +113,7 @@ export function renderCommunication(ctx) {
   const cur = h.SUBTAB.communication || "compose";
   const unread = S.inbound.filter((m) => m.status === "new").length;
   const tabs = [
-    { id: "compose", label: "Compose" },
+    { id: "compose", label: ctx.notices && ctx.notices().length ? `Compose (${ctx.notices().length})` : "Compose" },
     { id: "history", label: "History" },
     { id: "inbox", label: unread ? `Inbox (${unread})` : "Inbox" },
     { id: "channels", label: "Channels" },
@@ -147,7 +147,14 @@ function renderCompose(ctx) {
   const { h } = ctx, { esc } = h, d = S.draft, f = d.f;
   const roles = ["all", ...ctx.roles()];
   const sel = (id, opts, val) => `<select id="${id}">${opts.map(([v, l]) => `<option value="${esc(v)}"${v === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const pend = ctx.notices ? ctx.notices() : [];
   ctx.body.innerHTML = `${errBanner(ctx)}
+  ${pend.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--status-warning);">
+    <div class="card-head"><div><h3>Condolence notices waiting</h3><span class="hint">A member was marked Deceased. Nothing is sent until you review the message and confirm.</span></div></div>
+    ${pend.map((n, i) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border);">
+      <b style="flex:1;min-width:140px;">${esc(n.name)}</b><span class="hint">${esc(when(n.at))}</span>
+      ${ctx.canEdit ? `<button type="button" class="btn small primary" data-cm-notice="${i}">Review &amp; send</button><button type="button" class="btn small" data-cm-nodismiss="${i}">Don't send</button>` : ""}</div>`).join("")}
+  </div>` : ""}
   <div class="cm-grid">
     <div class="card">
       <div class="card-head"><div><h3>Message</h3><span class="hint">Write once — send by WhatsApp Business, one-by-one on WhatsApp, or print it as a notice.</span></div></div>
@@ -177,6 +184,8 @@ function renderCompose(ctx) {
     </div>
   </div>`;
   wireRetry(ctx);
+  ctx.body.querySelectorAll("[data-cm-notice]").forEach((b) => (b.onclick = () => deathDialog(ctx, pend[+b.dataset.cmNotice])));
+  ctx.body.querySelectorAll("[data-cm-nodismiss]").forEach((b) => (b.onclick = () => dismissNotice(ctx, pend[+b.dataset.cmNodismiss])));
 
   const $ = (s) => ctx.body.querySelector(s);
   const dyn = () => {
@@ -229,8 +238,8 @@ function renderCompose(ctx) {
 const audSnapshot = (f, aud) => ({ ...f, matching: aud.match.length, reachable: aud.reach.length, declined: aud.declined.length });
 
 /* ---- WhatsApp Business: confirm, then send in batches of 50 with progress ---- */
-function sendApi(ctx, aud) {
-  const { h } = ctx, { esc } = h, d = S.draft, list = aud.reach, body = resolve(ctx, d.body);
+function sendApi(ctx, aud, d = S.draft, opts = {}) {
+  const { h } = ctx, { esc } = h, list = aud.reach, body = resolve(ctx, d.body);
   const { scrim, close } = h.govModal("Send via WhatsApp Business", `
     <p style="margin:0 0 10px;">You are about to message <b>${list.length}</b> member${list.length === 1 ? "" : "s"} from <b>${esc(S.wa.account_label || "your business number")}</b>.</p>
     ${bubble(`Hello {first name}, a message from ${ctx.cpa().name || "your CPA"}: ${body}`)}
@@ -264,6 +273,7 @@ function sendApi(ctx, aud) {
     } catch (e) { fatal = (e && e.message) || String(e); }
     running = false;
     if (msg) { try { await api.updateCommMessage(msg.id, { status: stop || fatal ? "cancelled" : "sent", recipient_count: done }); } catch (e) {} }
+    if (sent > 0 && opts.onSent) { try { await opts.onSent(msg); } catch (e) {} }
     const top = [...new Set(errs)].slice(0, 3);
     if (scrim.isConnected) {
       prog.innerHTML = `<div class="${fatal || failed ? "illus-banner" : ""}" role="status" style="${fatal || failed ? "display:block;" : ""}">
@@ -278,9 +288,9 @@ function sendApi(ctx, aud) {
 }
 
 /* ---- WhatsApp one-by-one (wa.me): a person taps Send for each member ---- */
-function manualQueue(ctx, aud) {
-  const { h } = ctx, { esc } = h, d = S.draft, list = aud.reach, body = resolve(ctx, d.body);
-  let i = 0, msg = null, warned = false; const opened = new Set();
+function manualQueue(ctx, aud, d = S.draft, opts = {}) {
+  const { h } = ctx, { esc } = h, list = aud.reach, body = resolve(ctx, d.body);
+  let i = 0, msg = null, warned = false, notified = false; const opened = new Set();
   const { scrim, close } = h.govModal("Send one-by-one on WhatsApp", `<div id="mq"></div>`, `<button class="btn" data-act="close" type="button">Done</button>`, 560);
   const paint = () => {
     const r = list[i], num = ctx.h.waNumber(r[6]);
@@ -305,6 +315,7 @@ function manualQueue(ctx, aud) {
         if (!msg) msg = await api.createCommMessage(ctx.orgId, { title: d.title.trim(), body, kind: d.tpl, channel: "whatsapp_manual", audience: audSnapshot(d.f, aud), recipientCount: 0 });
         await api.logCommOpened(ctx.orgId, msg.id, { beneficiary_id: r._id || null, name: r[1], phone: num });
         await api.updateCommMessage(msg.id, { recipient_count: opened.size, status: "sent" });
+        if (opts.onSent && !notified) { notified = true; await opts.onSent(msg); }
       } catch (e) { if (!warned) { warned = true; h.toast("WhatsApp opened, but this couldn't be recorded in History: " + ((e && e.message) || e), true); } }
       next();
     };
@@ -563,4 +574,69 @@ function testModal(ctx) {
       msg.textContent = res.sent ? "Sent — check that phone." : "Not sent: " + (((res.results || [])[0] || {}).error || "unknown error");
     } catch (e) { msg.textContent = "Not sent: " + ((e && e.message) || e); }
   };
+}
+
+/* ------------------------------------------------- condolence notices --- */
+/* When a member is marked Deceased the dashboard queues one notice (death_notices). Nothing is
+   sent automatically: a person reviews the wording, confirms the family has been told, and sends
+   through WhatsApp Business or one-by-one. A notice can't be un-sent, so there is always this
+   confirmation. Defaults protect the family: the household of the deceased is skipped (tell them
+   personally), as are members who declined messages, minors and anyone without a cell number. */
+export async function openDeathNotice(ctx, notice) {
+  if (!S || S.orgId !== ctx.orgId) S = fresh(ctx.orgId);
+  if (!S.loaded) {
+    try { Object.assign(S, await api.loadComm(ctx.orgId)); S.error = ""; } catch (e) { S.error = (e && e.message) || String(e); }
+    S.loaded = true;
+  }
+  deathDialog(ctx, notice);
+}
+async function dismissNotice(ctx, n) {
+  ctx.h.confirmModal(`Don't send a condolence notice for ${n.name}? The notice is cleared and no message goes out.`, async () => {
+    try { await ctx.resolveNotice(n.id, "dismissed"); ctx.h.toast("Notice cleared."); } catch (e) { ctx.h.toast("Couldn't update: " + ((e && e.message) || e), true); }
+  });
+}
+function deathDialog(ctx, n) {
+  const { h } = ctx, { esc } = h;
+  const reg = ctx.register() || [], dead = reg.find((r) => r._id === n.beneficiary_id) || null;
+  const full = String((dead && dead[1]) || n.name || "the member").trim();
+  const d = { tpl: "condolence", title: `Condolences — ${full}`, f: { kind: "death_notice", member: (dead && dead[0]) || "", verif: "all", pos: "all", gender: "all", hh: "", adults: true },
+    body: `With deep sadness we share the passing of ${full}${dead && dead[0] ? ` (member no. ${dead[0]})` : ""}. The Committee and all members of {cpa} send their condolences to the family. [Funeral / memorial details]` };
+  let skipHh = true;
+  const narrow = () => {
+    const a = audienceOf(ctx, d.f);
+    const keep = (r) => r !== dead && !(skipHh && dead && dead[5] && r[5] === dead[5]);
+    const reach = a.reach.filter(keep);
+    return { match: a.match.filter(keep), declined: a.declined.filter(keep), reach, noNumber: a.noNumber, skipped: a.reach.length - reach.length };
+  };
+  const { scrim, close } = h.govModal("Condolence notice — " + full, `
+    <p class="hint" style="margin:0 0 8px;"><b>${esc(full)}</b> was marked <b>Deceased</b>. Review the message, then send it to the membership. This can't be unsent.</p>
+    <div class="field"><label for="dn-body">Message <span class="hint">(replace the [brackets] with the funeral or memorial details, or delete them)</span></label><textarea id="dn-body" rows="5"></textarea></div>
+    <label class="cm-check"><input type="checkbox" id="dn-hh" checked> Don't message the deceased's own household — tell the family personally</label>
+    <div id="dn-aud" class="hint" style="margin:8px 0;"></div>
+    <label class="cm-check"><input type="checkbox" id="dn-ok"> I have spoken to the family and the Committee agrees this can be announced.</label>
+    <div id="dn-msg" class="hint" role="status" style="margin-top:8px;"></div>`,
+    `<button class="btn" data-act="close" type="button">Not now</button>
+     <button class="btn" id="dn-skip" type="button">Don't send</button>
+     <button class="btn" id="dn-man" type="button" disabled>Send one-by-one</button>
+     <button class="btn primary" id="dn-api" type="button" disabled>Send via WhatsApp Business</button>`, 600);
+  const $s = (q) => scrim.querySelector(q);
+  $s("#dn-body").value = d.body;
+  const refresh = () => {
+    const a = narrow(), ok = $s("#dn-ok").checked, body = resolve(ctx, d.body);
+    $s("#dn-aud").textContent = `${a.reach.length} member${a.reach.length === 1 ? "" : "s"} will be messaged` +
+      `${a.skipped ? ` · ${a.skipped} in the family's household skipped` : ""}${a.declined.length ? ` · ${a.declined.length} declined messages` : ""}${a.noNumber ? ` · ${a.noNumber} have no usable cell number (use a printed notice)` : ""}.`;
+    const why = !ok ? "Confirm the family has been told first." : brackets(d.body) ? "Fill in or remove the [brackets] first." : !body ? "Write a message first." : !a.reach.length ? "No members can be reached." : "";
+    const apiWhy = why || (!waConnected() ? "Connect WhatsApp Business under Channels first." : body.length > MAX_API_CHARS ? `Shorten the message to ${MAX_API_CHARS} characters.` : "");
+    $s("#dn-man").disabled = !!why; $s("#dn-man").title = why;
+    $s("#dn-api").disabled = !!apiWhy; $s("#dn-api").title = apiWhy;
+    return a;
+  };
+  $s("#dn-body").oninput = (e) => { d.body = e.target.value; refresh(); };
+  $s("#dn-hh").onchange = (e) => { skipHh = e.target.checked; refresh(); };
+  $s("#dn-ok").onchange = refresh;
+  refresh();
+  const done = async (msg) => { try { await ctx.resolveNotice(n.id, "sent", msg && msg.id); } catch (e) {} close(); };
+  $s("#dn-api").onclick = () => sendApi(ctx, refresh(), d, { onSent: done });
+  $s("#dn-man").onclick = () => manualQueue(ctx, refresh(), d, { onSent: async (msg) => { try { await ctx.resolveNotice(n.id, "sent", msg && msg.id); } catch (e) {} } });
+  $s("#dn-skip").onclick = () => { close(); dismissNotice(ctx, n); };
 }

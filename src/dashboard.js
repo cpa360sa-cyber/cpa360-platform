@@ -12,7 +12,7 @@
    ============================================================================ */
 import * as repo from "./repo.js";
 import { qrSvg } from "./qr.js";
-import { renderCommunication } from "./communication.js";
+import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
 
 /* ============ constants ============ */
@@ -2526,7 +2526,12 @@ function renderBeneficiary() {
   strip.innerHTML = subtabStrip("beneficiary", tabs)
     + (due.length && cur !== "birthdays" ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <span>Birthday today: <b>${esc(names)}</b></span><button type="button" class="btn small" data-bday-go style="margin-left:auto;">Send wishes</button></div>` : "");
+  const pendDn = DATA.deathNotices || [];
+  if (pendDn.length && CAN_EDIT) strip.insertAdjacentHTML("beforeend", `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span>Condolence notice waiting: <b>${esc(pendDn.map((n) => n.name).slice(0, 2).join(", "))}${pendDn.length > 2 ? ` and ${pendDn.length - 2} more` : ""}</b></span><button type="button" class="btn small" data-dn-go style="margin-left:auto;">Review &amp; send</button></div>`);
   wireSubtabs(strip);
+  const dnGo = strip.querySelector("[data-dn-go]");
+  if (dnGo) dnGo.onclick = () => { location.hash = "#/v/communication"; };
   const go = strip.querySelector("[data-bday-go]");
   if (go) go.onclick = () => { SUBTAB.beneficiary = "birthdays"; renderCurrent(); };
   (BENE_PANELS[cur] || renderBeneRegister)($("beneficiary-body"));
@@ -6184,13 +6189,37 @@ const RENDERERS = {
 };
 
 /* Communication hub lives in communication.js; this hands it the live data + the shared UI helpers. */
-function renderCommunicationView() {
-  renderCommunication({
-    orgId, canEdit: CAN_EDIT, isAdmin: ROLE === "admin" || ROLE === "owner",
-    cpa: () => DATA.cpa, register: () => DATA.beneficiaryCentre.register, roles: () => HOUSEHOLD_ROLES.filter(Boolean),
-    strip: $("comm-subtabs"), body: $("comm-body"), rerender: () => renderCurrent(),
-    h: { esc, toast, pill, statTile, stateHtml, govModal, confirmModal, subtabStrip, wireSubtabs, SUBTAB, waNumber, prettyCell, printHtmlDoc, sigImg, chairName },
-  });
+const commCtx = () => ({
+  orgId, canEdit: CAN_EDIT, isAdmin: ROLE === "admin" || ROLE === "owner",
+  cpa: () => DATA.cpa, register: () => DATA.beneficiaryCentre.register, roles: () => HOUSEHOLD_ROLES.filter(Boolean),
+  notices: () => DATA.deathNotices || [], resolveNotice: resolveDeathNotice,
+  strip: $("comm-subtabs"), body: $("comm-body"), rerender: () => renderCurrent(),
+  h: { esc, toast, pill, statTile, stateHtml, govModal, confirmModal, subtabStrip, wireSubtabs, SUBTAB, waNumber, prettyCell, printHtmlDoc, sigImg, chairName },
+});
+function renderCommunicationView() { renderCommunication(commCtx()); }
+
+/* Condolence notices: marking a member Deceased (by any route) queues ONE notice for the CPA to
+   review and send — nothing goes out without a person confirming. See communication.js. */
+async function resolveDeathNotice(id, status, messageId) {
+  await repo.resolveDeathNotice(id, status, messageId);
+  DATA.deathNotices = (DATA.deathNotices || []).filter((n) => n.id !== id);
+  renderCurrent(); if (onChange) onChange();
+}
+async function queueDeathNotices(newlyDeceased) {
+  const made = [];
+  for (const r of newlyDeceased) {
+    try { const n = await repo.addDeathNotice(orgId, r._id, r[1]); if (n) made.push(n); } catch (e) { /* the status change itself is already saved */ }
+  }
+  // a member put back to a non-Deceased status cancels their waiting notice
+  for (const n of [...(DATA.deathNotices || [])]) {
+    const row = (DATA.beneficiaryCentre.register || []).find((x) => x._id === n.beneficiary_id);
+    if (row && row[8] !== "Deceased") { try { await resolveDeathNotice(n.id, "dismissed"); } catch (e) {} }
+  }
+  if (!made.length) return;
+  DATA.deathNotices = (DATA.deathNotices || []).concat(made);
+  renderCurrent(); if (onChange) onChange();
+  if (made.length === 1) setTimeout(() => openDeathNotice(commCtx(), made[0]), 250);
+  else toast(`${made.length} members marked Deceased — condolence notices are waiting in Communication.`);
 }
 
 /* CSV import specs — map spreadsheet columns onto each collection's row shape */
@@ -7281,13 +7310,21 @@ function stampVerifiedDates() {
 async function commit(section) {
   if (!CAN_EDIT || !orgId) return;
   if (section === "beneficiaries") stampVerifiedDates();
+  // members whose status is changing to Deceased in this save (compared with the row as loaded)
+  const newlyDeceased = section !== "beneficiaries" ? [] : (DATA.beneficiaryCentre.register || []).filter((r) => {
+    if (!r._id || !r._orig || r[8] !== "Deceased") return false;
+    try { return JSON.parse(r._orig)[8] !== "Deceased"; } catch (e) { return false; }
+  });
   suppressRemoteUntil = Date.now() + 2500;
+  let saved = true;
   try {
     await repo.saveSection(orgId, section, DATA);
   } catch (e) {
+    saved = false;
     toast("Couldn't save: " + (e?.message || e), true);
     try { DATA = await repo.loadOrg(orgId); } catch (_) {}
   }
+  if (section === "beneficiaries" && saved) queueDeathNotices(newlyDeceased);
   // The Institutional Score is a live reflection of the other registers —
   // any commit here may have moved an auto-scored criterion, so re-scan and
   // persist the score alongside whatever the caller just saved.
@@ -7378,6 +7415,8 @@ export function showView(name, tab) {
 function computeAlerts() {
   if (!DATA) return [];
   const now = new Date(), a = [];
+  const dn = (DATA.deathNotices || []).length;
+  if (dn) a.push({ tone: "warning", text: `${dn} condolence notice${dn > 1 ? "s" : ""} waiting to be reviewed and sent`, goto: "#/v/communication" });
   const overdue = DATA.actions.filter((x) => x[5] === "Overdue");
   if (overdue.length) a.push({ tone: "critical", text: `${overdue.length} action${overdue.length > 1 ? "s" : ""} overdue`, goto: "#/v/actions" });
   const soon = DATA.actions.filter((x) => {
