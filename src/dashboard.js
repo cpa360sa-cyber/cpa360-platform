@@ -15,6 +15,7 @@ import { qrSvg } from "./qr.js";
 import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
+import { openHouseholdImport } from "./household-import.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -3904,10 +3905,18 @@ function renderBeneHouseholds(host) {
     bulkKey: "bene-households", filterCol: 12, filterLabel: "Status", section: "households",
     search: "Search ODI, representative, descendants, ref…",
     rerender: () => renderBeneHouseholds(host),
-    extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} → Beneficiaries</button>`],
+    extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} → Beneficiaries</button>`,
+      ...(CAN_EDIT ? [`<button class="btn primary" data-hh-import type="button" title="Upload new family trees / a household register as PDF, Excel, CSV or a photo and match its columns">Import family trees (PDF / sheet)</button>`] : [])],
     afterRender: (h) => {
       const b = h.querySelector("[data-reg-extract]");
       if (b) b.onclick = () => extractHouseholdsAsBeneficiaries();
+      const imp = h.querySelector("[data-hh-import]");
+      if (imp) imp.onclick = () => openHouseholdImport({
+        orgId, canEdit: CAN_EDIT, targets: IMPORT.households.targets, make: IMPORT.households.make,
+        households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register, disputes: () => DATA.beneficiaryCentre.disputes,
+        parseCSV, parseXLSX, commit, nextRef: (k) => `MCPA-${String(householdMaxSeq() + 1 + k).padStart(3, "0")}`,
+        h: { esc, toast, statTile, govModal },
+      });
       h.querySelectorAll("[data-hh-members]").forEach((m) => (m.onclick = () => gotoHouseholdMembers(m.dataset.hhMembers)));
       h.querySelectorAll("[data-hh-tree]").forEach((b) => (b.onclick = () => openFamilyTreeFor(DATA.beneficiaryCentre.households.find((x) => x[0] === b.dataset.hhTree))));
     },
