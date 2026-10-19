@@ -16,6 +16,7 @@ import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
 import { openHouseholdImport } from "./household-import.js";
+import { openIdIntake } from "./id-intake.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -3748,6 +3749,7 @@ function renderBeneRegister(host) {
     ],
     rerender: () => renderBeneRegister(host),
     extraTools: [
+      ...(CAN_EDIT ? [`<button class="btn primary" data-bene-idscan type="button" title="Upload an ID copy — the details are read for you and the rest is completed by hand">Add from ID copy</button>`] : []),
       `<button class="btn" data-bene-export type="button" title="Official Beneficiary Master Register — PDF, Word or CSV">Export register</button>`,
       `<button class="btn" data-bene-print-sel type="button"${selRows.length ? "" : " disabled"}>Print cards${selRows.length ? ` (${selRows.length})` : ""}</button>`,
       `<button class="btn" data-bene-print-all type="button">Print all active</button>`,
@@ -3759,6 +3761,13 @@ function renderBeneRegister(host) {
       h.querySelectorAll("[data-bene-hh]").forEach((b) => (b.onclick = () => gotoHousehold(b.dataset.beneHh)));
       h.querySelectorAll("[data-bene-receipt]").forEach((b) => (b.onclick = () => openReceipt(reg[+b.dataset.beneReceipt])));
       h.querySelectorAll("[data-bene-docs]").forEach((b) => (b.onclick = () => openMemberDocs(reg[+b.dataset.beneDocs])));
+      const idb = h.querySelector("[data-bene-idscan]");
+      if (idb) idb.onclick = () => openIdIntake({
+        orgId, register: () => DATA.beneficiaryCentre.register, roles: HOUSEHOLD_ROLES, statuses: BENE_STATUSES, verifs: VERIF_STATUSES,
+        hhChoices, refFromHhLabel, maskId, inferRole: (hhRef, name) => inferHouseholdRole(householdOf(hhRef), name),
+        commit, rerender: () => renderCurrent(), after: (row) => { bulkState("bene-register").q = row[1] || ""; offerReceipt(row); },
+        h: { esc, toast, govModal, bumpDocCount },
+      });
       const ex = h.querySelector("[data-bene-export]");
       if (ex) ex.onclick = () => brmDialog(new Set(selRows.map((r) => String(r._id))));
       const ps = h.querySelector("[data-bene-print-sel]");

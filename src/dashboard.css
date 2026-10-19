@@ -467,3 +467,9 @@
 .cpa-dash .ft-chip.ok{ background:var(--status-good); color:#fff; }
 .cpa-dash .hi-dupe td{ background:color-mix(in srgb,var(--status-critical) 5%,transparent); }
 @media (max-width:720px){ .cpa-dash .hi-row{ grid-template-columns:1fr; } }
+
+/* ---- Add from ID copy ---- */
+.cpa-dash .ii-grid{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:16px; align-items:start; }
+@media (max-width:820px){ .cpa-dash .ii-grid{ grid-template-columns:1fr; } }
+.cpa-dash .field.id-read input, .cpa-dash .field.id-read select{ border-color:var(--status-warning); box-shadow:inset 3px 0 0 var(--status-warning); }
+.cpa-dash .ft-dup.ok{ border-left-color:var(--status-good); }
