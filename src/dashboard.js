@@ -14,6 +14,7 @@ import * as repo from "./repo.js";
 import { qrSvg } from "./qr.js";
 import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
+import { openFamilyTree } from "./family-tree.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -3859,6 +3860,18 @@ function extractHouseholdsAsBeneficiaries() {
   commit("beneficiaries");
   toast(`Extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""}.`);
 }
+const TREE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M12 7v5M6 17v-3a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/></svg>';
+/* Family tree upload / scan / review → family-tree.js (needs a saved household so files have somewhere to live). */
+function openFamilyTreeFor(h) {
+  if (!h) return;
+  if (!h._id) { toast("Save the household first.", true); return; }
+  openFamilyTree({
+    orgId, canEdit: CAN_EDIT, household: h,
+    register: () => DATA.beneficiaryCentre.register, disputes: () => DATA.beneficiaryCentre.disputes,
+    commit, rerender: () => renderCurrent(),
+    h: { esc, toast, pill, statTile, govModal, confirmModal, maskId, dobFromSaId, bumpDocCount, fmtDay },
+  });
+}
 function renderBeneHouseholds(host) {
   const reg = DATA.beneficiaryCentre.register || [];
   const bulk = bulkState("bene-households");
@@ -3871,7 +3884,7 @@ function renderBeneHouseholds(host) {
       + "creates each ODI, Family Representative and descendant as a beneficiary automatically. After manual edits, "
       + "select households below and use “Extract” to re-sync the Master Register.",
     columns: [{ label: "Household ID" }, { label: "ODI" }, { label: "Household Head" },
-      { label: "Members", cls: "num" }, { label: "Verification" }, { label: "Dispute" }, { label: "Resident?" }, { label: "Status" }],
+      { label: "Members", cls: "num" }, { label: "Family tree" }, { label: "Verification" }, { label: "Dispute" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
     cell: (r) => {
@@ -3881,6 +3894,7 @@ function renderBeneHouseholds(host) {
       return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
         `<span style="font-weight:600;">${esc(r[2])}</span>`,
         esc(r[1]), members ? `<button type="button" class="linkbtn mono" data-hh-members="${esc(r[0])}" title="Show these members in the Master Register">${members}</button>` : `<span class="mono">0</span>`,
+        `<button type="button" class="doc-chip${docCount("household-tree", r._id) ? "" : " missing"}" data-hh-tree="${esc(r[0])}" title="Family tree — upload, scan &amp; add members (${docCount("household-tree", r._id)} on file)" aria-label="Family tree for household ${esc(r[0])}">${TREE_ICON}${docCount("household-tree", r._id) ? `<span>${docCount("household-tree", r._id)}</span>` : ""}</button>`,
         statusPill(r[17] || "Pending"),
         r[22] ? pill(r[23] ? `Disputed (${esc(r[23])})` : "Disputed", "critical") : pill("None", "neutral"),
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
@@ -3895,6 +3909,7 @@ function renderBeneHouseholds(host) {
       const b = h.querySelector("[data-reg-extract]");
       if (b) b.onclick = () => extractHouseholdsAsBeneficiaries();
       h.querySelectorAll("[data-hh-members]").forEach((m) => (m.onclick = () => gotoHouseholdMembers(m.dataset.hhMembers)));
+      h.querySelectorAll("[data-hh-tree]").forEach((b) => (b.onclick = () => openFamilyTreeFor(DATA.beneficiaryCentre.households.find((x) => x[0] === b.dataset.hhTree))));
     },
   });
 }

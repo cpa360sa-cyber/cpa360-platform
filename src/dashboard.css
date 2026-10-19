@@ -443,3 +443,17 @@
 .cpa-dash .sg-wrap canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
 .cpa-dash .sg-line{ position:absolute; left:6%; right:6%; top:72%; border-top:1px solid #b8bfcc; pointer-events:none; }
 .cpa-dash .sg-x{ position:absolute; left:3%; top:calc(72% - 22px); font-size:18px; color:#8a93a6; pointer-events:none; }
+
+/* ---- Family tree scan & review ---- */
+.cpa-dash .ft-tree{ background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:10px 12px; overflow-x:auto; }
+.cpa-dash .ft-gen{ padding:6px 0; border-top:1px dashed var(--border); } .cpa-dash .ft-gen:first-child{ border-top:0; }
+.cpa-dash .ft-genlabel{ font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--ink-muted); font-weight:700; margin-bottom:6px; }
+.cpa-dash .ft-genrow{ display:flex; gap:8px; flex-wrap:wrap; }
+.cpa-dash .ft-card{ min-width:130px; max-width:190px; background:var(--surface); border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 10px; font-size:12.5px; }
+.cpa-dash .ft-card.new{ border-color:var(--status-good); } .cpa-dash .ft-card.warn{ border-color:var(--status-warning); background:color-mix(in srgb,var(--status-warning) 9%,var(--surface)); }
+.cpa-dash .ft-card.skip{ border-color:var(--status-critical); opacity:.72; background:color-mix(in srgb,var(--status-critical) 7%,var(--surface)); }
+.cpa-dash .ft-chip{ display:inline-block; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; padding:1px 6px; border-radius:99px; margin:3px 4px 0 0; background:var(--surface-3); }
+.cpa-dash .ft-chip.exact{ background:var(--status-critical); color:#fff; } .cpa-dash .ft-chip.possible{ background:var(--status-warning); color:#fff; } .cpa-dash .ft-chip.low{ background:#6b7386; color:#fff; }
+.cpa-dash .ft-dup{ font-size:12px; border-left:3px solid var(--status-warning); padding:2px 0 2px 8px; margin:2px 0; }
+.cpa-dash .ft-dup.exact{ border-left-color:var(--status-critical); }
+.cpa-dash .ft-low td{ background:color-mix(in srgb,var(--status-warning) 6%,transparent); }

@@ -455,7 +455,7 @@ async function callFn(name, payload) {
   if (!res.ok) {
     const m = String(out.error || "");
     if (/integrations_whatsapp_phone_uidx|duplicate key/i.test(m)) throw new Error("That WhatsApp number is already connected to another CPA.");
-    throw new Error(m || `request failed (${res.status})`);
+    throw Object.assign(new Error(out.message || m || `request failed (${res.status})`), { code: m });
   }
   return out;
 }
@@ -537,6 +537,7 @@ export async function whatsappConnected(orgId) {
   const { data } = await supabase.from("integrations").select("status").eq("org_id", orgId).eq("provider", "whatsapp").maybeSingle();
   return !!data && data.status === "connected";
 }
+export const scanFamilyTree = (payload) => callFn("scan-family-tree", payload);
 export const whatsappSend = (payload) => callFn("whatsapp-send", payload);
 export const whatsappConnect = (payload) => callFn("whatsapp-connect", payload);
 
