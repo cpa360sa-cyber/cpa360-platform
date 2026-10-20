@@ -14,7 +14,7 @@
    · Works without the AI too: the originals are still kept with the household and people can be typed
      or pasted into the same review screen. */
 import * as repo from "./repo.js";
-import { analyse, layoutTree, mergeFill } from "./family-tree-logic.js";
+import { analyse, layoutTree, mergeFill, nameSimilarity } from "./family-tree-logic.js";
 
 const SECTION = "household-tree";
 const ROLES = ["ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant", "5th Descendant", "6th Descendant", "7th Descendant", "Spouse", "Other family member"];
@@ -284,6 +284,15 @@ function openReview(ctx, scan) {
         if (ch.length) merged++;
       }
     }
+    // lineage: a person drawn under someone other than the ODI gets that person as their parent
+    const addedPairs = state.rows.filter((r) => r.action === "add" && r.name).map((r) => ({ r, row: R.find((x) => x[0] === r.ref && x[1] === r.name) })).filter((x) => x.row);
+    const household = R.filter((x) => x[5] === hhRef);
+    addedPairs.forEach(({ r, row }) => {
+      if (!r.parent || r.role === "ODI" || r.role === "Spouse") return;
+      let best = null;
+      household.forEach((c) => { if (c === row || c[11] === "ODI") return; const sc = nameSimilarity(r.parent, c[1]); if (sc >= 0.9 && (!best || sc > best.sc)) best = { c, sc }; });
+      if (best && best.c[0]) row[14] = best.c[0];
+    });
     try {
       await ctx.commit("beneficiaries");
       if (slotsChanged) await ctx.commit("households");

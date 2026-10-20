@@ -17,6 +17,7 @@ import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
+import { renderFamilyTrees } from "./family-trees.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -2492,6 +2493,7 @@ const BENE_TABS = [
   { id: "register", label: "Master Register" },
   { id: "verification", label: "Verification" },
   { id: "households", label: "Households" },
+  { id: "trees", label: "Family Trees" },
   { id: "succession", label: "Succession" },
   { id: "deceased", label: "Deceased Members" },
   { id: "birthdays", label: "Birthdays" },
@@ -2499,7 +2501,7 @@ const BENE_TABS = [
   { id: "evidence", label: "Verification Evidence" },
 ];
 const BENE_PANELS = {
-  register: renderBeneRegister, verification: renderBeneVerification, households: renderBeneHouseholds,
+  register: renderBeneRegister, verification: renderBeneVerification, households: renderBeneHouseholds, trees: renderBeneFamilyTrees,
   succession: renderBeneSuccession, deceased: renderBeneDeceased, birthdays: renderBeneBirthdays, disputes: renderBeneDisputes, evidence: renderBeneEvidence,
 };
 /* rollups: use the live register when it has rows, else the figures singleton */
@@ -2584,6 +2586,14 @@ function hhChoices(currentRef) {
   }
   return { options: ["", ...labels], current };
 }
+/* Lineage picker in the member form: the other people of the same household, labelled "Name · ref". */
+const parentMembers = (r) => (DATA.beneficiaryCentre.register || []).filter((x) => x !== r && r[5] && x[5] === r[5] && x[0] && x[8] !== "Removed");
+const parentLabel = (x) => `${x[1]} · ${x[0]}`;
+function parentOptions(r) {
+  const ms = parentMembers(r), cur = ms.find((x) => x[0] === (r[14] || ""));
+  return { options: ["", ...ms.map(parentLabel)], current: cur ? parentLabel(cur) : "" };
+}
+const refFromParentLabel = (label, r) => { const m = parentMembers(r).find((x) => parentLabel(x) === label); return m ? m[0] : ""; };
 const refFromHhLabel = (l) => String(l || "").split(" · ")[0].replace(/ \(not in the ODI register\)$/, "").trim();
 function inferHouseholdRole(h, name) {
   const n = String(name || "").trim().toLowerCase();
@@ -3880,6 +3890,14 @@ function openFamilyTreeFor(h) {
     register: () => DATA.beneficiaryCentre.register, disputes: () => DATA.beneficiaryCentre.disputes,
     commit, rerender: () => renderCurrent(),
     h: { esc, toast, pill, statTile, govModal, confirmModal, maskId, dobFromSaId, bumpDocCount, fmtDay },
+  });
+}
+/* Family Trees tab → family-trees.js (automatic trees + charts per household, PNG/PDF downloads) */
+function renderBeneFamilyTrees(host) {
+  renderFamilyTrees(host, {
+    cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
+    canEdit: CAN_EDIT, commit, rerender: () => renderCurrent(), editMember: (row, after) => editBeneficiaryRow(row, after),
+    h: { esc, statTile, toast, govModal },
   });
 }
 function renderBeneHouseholds(host) {
@@ -6710,10 +6728,12 @@ const BENE_EDITORS = {
       { key: "joined", label: "Joined on", type: "date", value: r[7] },
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
+      { key: "parent", label: "Parent in the family tree (lineage) — leave blank to place under the ODI", type: "select", options: parentOptions(r).options, value: parentOptions(r).current },
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
       { key: "wishes", label: "WhatsApp messages from the CPA (birthday wishes and announcements)", type: "select", options: ["Allowed", "Do not message (member declined)"], value: r[13] === true ? "Do not message (member declined)" : "Allowed" },
     ],
     write: (r, o) => {
+      r[14] = refFromHhLabel(o.hh) === (r[5] || "") ? refFromParentLabel(o.parent, r) : "";   // lineage — resolved against the household as it was opened; moving household resets it
       r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob || dobFromSaId(o.idm); r[4] = maskId(o.idm); r[5] = refFromHhLabel(o.hh);
       r[13] = /^Do not/.test(o.wishes || "");
       r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes;
