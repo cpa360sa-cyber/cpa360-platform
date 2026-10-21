@@ -18,6 +18,7 @@ import { openFamilyTree } from "./family-tree.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
+import { initDashLayout } from "./dash-layout.js";
 
 /* ============ constants ============ */
 const ICONS = {
@@ -5548,6 +5549,49 @@ function renderExec() {
 
   // recent documents
   renderExecDocs();
+  renderExecExtras();
+}
+
+/* Optional dashboard widgets (hidden until someone adds them via Customize dashboard). */
+function renderExecExtras() {
+  const reg = (DATA.beneficiaryCentre && DATA.beneficiaryCentre.register) || [];
+  const bene = $("exec-bene");
+  if (bene) {
+    const active = reg.filter((r) => r[8] === "Active"), ver = active.filter((r) => r[9] === "Verified").length;
+    const pct = active.length ? Math.round((ver / active.length) * 100) : 0, noId = active.filter((r) => !memberHasId(r)).length;
+    bene.innerHTML = `<div class="bs-top"><div><div class="bs-n">${active.length.toLocaleString("en-ZA")}</div><div class="hint">active members</div></div>
+      <div style="flex:1;min-width:140px;"><div class="hint" style="display:flex;justify-content:space-between;"><span>Verified</span><b>${pct}%</b></div>
+        <div class="progress"><span style="width:${pct}%"></span></div></div></div>
+      <div class="bs-row"><span>Awaiting verification</span><b>${(active.length - ver).toLocaleString("en-ZA")}</b></div>
+      <div class="bs-row"><span>No ID copy on file</span><b>${noId.toLocaleString("en-ZA")}</b></div>
+      <div class="bs-row"><span>No birth date</span><b>${active.filter((r) => !parseIso(r[3])).length.toLocaleString("en-ZA")}</b></div>
+      <div class="bs-row"><span>Households</span><b>${((DATA.beneficiaryCentre && DATA.beneficiaryCentre.households) || []).length.toLocaleString("en-ZA")}</b></div>`;
+  }
+  const bd = $("exec-bdays");
+  if (bd) {
+    const today = new Date();
+    const list = reg.filter((r) => r[8] === "Active").map((r) => ({ r, i: birthInfo(r, today) })).filter((x) => x.i && x.i.days <= 7).sort((a, b) => a.i.days - b.i.days || natCmp(a.r[1], b.r[1])).slice(0, 8);
+    bd.innerHTML = list.length ? list.map(({ r, i }) => `<li><span class="ea-desc"><b>${esc(r[1])}</b></span><span class="ea-cat">turns ${i.turns}</span><span class="mono ea-due">${i.days === 0 ? "today" : i.days === 1 ? "tomorrow" : "in " + i.days + " days"}</span></li>`).join("")
+      : `<li class="muted">No birthdays in the next 7 days.</li>`;
+  }
+  const ql = $("exec-quick");
+  if (ql) {
+    const links = [["Add a beneficiary", "#/v/beneficiary/register"], ["Add from an ID copy", "#/v/beneficiary/register"], ["Compose a message", "#/v/communication"], ["Family trees", "#/v/beneficiary/trees"], ["Households", "#/v/beneficiary/households"],
+      ["Action tracker", "#/v/actions"], ["Governance", "#/v/profile"], ["Finance", "#/v/finance"], ["Master File", "#/v/masterfile"]];
+    ql.innerHTML = links.map(([l, h]) => `<button type="button" class="ql view-ok" data-goto="${h}">${esc(l)}</button>`).join("");
+  }
+}
+let EXEC_LAYOUT = null;
+function ensureDashLayout() {
+  const grid = $("exec-grid");
+  if (!grid) return;
+  if (grid._dl) { grid._dl.refresh(); return; }
+  grid._dl = initDashLayout({
+    grid, bar: $("dash-bar"), isAdmin: ROLE === "admin" || ROLE === "owner", toast, cacheKey: `cpa360.dash.${orgId}.exec`,
+    load: () => repo.getDashLayouts(orgId, "exec"), save: (l) => repo.saveDashLayout(orgId, l), saveDefault: (l) => repo.saveDashLayout(orgId, l, { asDefault: true }),
+    clearOwn: () => repo.saveDashLayout(orgId, null), clearDefault: () => repo.saveDashLayout(orgId, null, { asDefault: true }),
+  });
+  EXEC_LAYOUT = grid._dl;
 }
 
 async function renderExecDocs() {
@@ -6232,7 +6276,7 @@ function comingSoon(title, items, foot) {
 }
 
 const RENDERERS = {
-  exec: renderExec, score: renderScore, journey: renderJourney,
+  exec: () => { renderExec(); ensureDashLayout(); }, score: renderScore, journey: renderJourney,
   profile: renderProfile, beneficiary: renderBeneficiary, administration: renderAdministration, hr: renderHR,
   finance: renderFinance, assets: renderAssets, productivity: renderProductivity, projects: renderProjects,
   masterfile: renderMasterFile, actions: renderActions, impact: renderImpact, gallery: renderGallery,
@@ -7574,42 +7618,48 @@ const VIEW_HTML = `
   <div class="print-only" id="print-header"></div>
 
   <section class="view" id="view-exec">
-    <div class="ex-next" id="exec-next"></div>
-    <div class="exec-top" id="exec-top"></div>
+    <div class="dash-bar" id="dash-bar"></div>
+    <div class="dash-grid" id="exec-grid">
+      <div class="dw" data-w="next"><div class="ex-next" id="exec-next"></div></div>
+      <div class="dw" data-w="score"><div class="exec-top" id="exec-top"></div></div>
 
-    <div class="card exec-priority">
-      <div class="card-head"><div><h3>Priority actions</h3>
-        <span class="hint">The open items that need the Committee's attention, most urgent first.</span></div>
-        <button class="btn view-ok" data-goto="#/v/actions" type="button">Open Action Tracker</button></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
-        <tbody id="exec-actions"></tbody>
-      </table></div>
-    </div>
+      <div class="dw" data-w="priority"><div class="card exec-priority">
+        <div class="card-head"><div><h3>Priority actions</h3>
+          <span class="hint">The open items that need the Committee's attention, most urgent first.</span></div>
+          <button class="btn view-ok" data-goto="#/v/actions" type="button">Open Action Tracker</button></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
+          <tbody id="exec-actions"></tbody>
+        </table></div>
+      </div></div>
 
-    <div class="grid grid-2" style="margin-top:14px;">
-      <div class="card"><div class="card-head"><h3>Performance by domain</h3>
+      <div class="dw" data-w="domains"><div class="card"><div class="card-head"><h3>Performance by domain</h3>
         <button class="btn view-ok" data-goto="#/v/score" type="button">View performance</button></div>
-        <div id="exec-domains"></div></div>
-      <div class="card"><div class="card-head"><h3>What needs attention</h3></div>
-        <ul class="exec-list" id="exec-attention"></ul></div>
-    </div>
+        <div id="exec-domains"></div></div></div>
+      <div class="dw" data-w="attention"><div class="card"><div class="card-head"><h3>What needs attention</h3></div>
+        <ul class="exec-list" id="exec-attention"></ul></div></div>
 
-    <div class="grid grid-2" style="margin-top:14px;">
-      <div class="card"><div class="card-head"><h3>Upcoming deadlines</h3></div>
-        <ul class="exec-list" id="exec-deadlines"></ul></div>
-      <div class="card"><div class="card-head"><h3>Financial alerts</h3>
+      <div class="dw" data-w="deadlines"><div class="card"><div class="card-head"><h3>Upcoming deadlines</h3></div>
+        <ul class="exec-list" id="exec-deadlines"></ul></div></div>
+      <div class="dw" data-w="finance"><div class="card"><div class="card-head"><h3>Financial alerts</h3>
         <button class="btn view-ok" data-goto="#/v/finance" type="button">Open finance</button></div>
-        <ul class="exec-list" id="exec-finance"></ul></div>
-    </div>
+        <ul class="exec-list" id="exec-finance"></ul></div></div>
 
-    <div class="grid grid-2" style="margin-top:14px;">
-      <div class="card"><div class="card-head"><h3>Project status</h3>
+      <div class="dw" data-w="projects"><div class="card"><div class="card-head"><h3>Project status</h3>
         <button class="btn view-ok" data-goto="#/v/projects" type="button">Open projects</button></div>
-        <ul class="exec-list" id="exec-projects"></ul></div>
-      <div class="card"><div class="card-head"><h3>Recent documents</h3>
+        <ul class="exec-list" id="exec-projects"></ul></div></div>
+      <div class="dw" data-w="docs"><div class="card"><div class="card-head"><h3>Recent documents</h3>
         <button class="btn view-ok" data-goto="#/v/masterfile" type="button">Master File</button></div>
-        <ul class="exec-list" id="exec-docs"></ul></div>
+        <ul class="exec-list" id="exec-docs"></ul></div></div>
+
+      <div class="dw" data-w="bene" hidden><div class="card"><div class="card-head"><h3>Beneficiary snapshot</h3>
+        <button class="btn view-ok" data-goto="#/v/beneficiary" type="button">Open register</button></div>
+        <div id="exec-bene"></div></div></div>
+      <div class="dw" data-w="birthdays" hidden><div class="card"><div class="card-head"><h3>Birthdays this week</h3>
+        <button class="btn view-ok" data-goto="#/v/beneficiary/birthdays" type="button">Open Birthdays</button></div>
+        <ul class="exec-list" id="exec-bdays"></ul></div></div>
+      <div class="dw" data-w="quick" hidden><div class="card"><div class="card-head"><h3>Quick links</h3></div>
+        <div class="ql-grid" id="exec-quick"></div></div></div>
     </div>
   </section>
 

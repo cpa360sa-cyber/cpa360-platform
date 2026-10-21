@@ -507,6 +507,32 @@ export async function markCommInbound(id, status) {
   const { error } = await supabase.from("comm_inbound").update({ status }).eq("id", id);
   if (error) throw error;
 }
+/* ------------------------------------------------- customisable dashboard layouts --- */
+/* → { own: layout|null, def: layout|null } — the person's own layout and the CPA's default (RLS returns only those two). */
+export async function getDashLayouts(orgId, view = "exec") {
+  const { data: { session } } = await supabase.auth.getSession();
+  const me = session && session.user && session.user.id;
+  const { data, error } = await supabase.from("dashboard_layouts").select("user_id, layout").eq("org_id", orgId).eq("view", view);
+  if (error) throw error;
+  const rows = data || [];
+  return { own: (rows.find((r) => r.user_id && r.user_id === me) || {}).layout || null, def: (rows.find((r) => !r.user_id) || {}).layout || null };
+}
+/** Saves (or, with layout = null, removes) the person's own layout — or, with asDefault, the CPA default (admins). */
+export async function saveDashLayout(orgId, layout, { view = "exec", asDefault = false } = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = asDefault ? null : session && session.user && session.user.id;
+  if (!asDefault && !uid) throw new Error("your session expired — sign in again");
+  let q = supabase.from("dashboard_layouts").select("id").eq("org_id", orgId).eq("view", view);
+  q = uid ? q.eq("user_id", uid) : q.is("user_id", null);
+  const { data: ex, error: e1 } = await q.maybeSingle();
+  if (e1) throw e1;
+  if (layout == null) { if (ex) { const { error } = await supabase.from("dashboard_layouts").delete().eq("id", ex.id); if (error) throw error; } return; }
+  const body = { layout, updated_at: new Date().toISOString() };
+  const { error } = ex ? await supabase.from("dashboard_layouts").update(body).eq("id", ex.id)
+    : await supabase.from("dashboard_layouts").insert({ org_id: orgId, user_id: uid, view, ...body });
+  if (error) throw error;
+}
+
 /* ------------------------------------------------------------ death notices --- */
 /* One notice per member, ever (unique beneficiary_id): returns the new notice, or null when one
    already existed (e.g. the member was marked Deceased before, then reverted and re-marked). */
