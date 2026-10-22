@@ -6,6 +6,7 @@
 import { householdPeople, layoutFamily, NODE_W } from "./family-tree-layout.js";
 import { treeSvg, themeFor, THEMES, familyTitle } from "./family-tree-svg.js";
 import { makePdf } from "./pdf-write.js";
+import { listGroups, listTotals, listCsv, listHtml } from "./family-tree-list.js";
 
 const UI = { q: "", filter: "all", sort: "name", shown: 24, theme: "brand", ids: false, paper: "fit" };
 const FILTERS = [["all", "All households"], ["desc", "With descendants"], ["odionly", "ODI only (no family recorded)"], ["virtual", "Named on the household record, not yet on the register"], ["pending", "Members awaiting verification"], ["deceased", "With deceased members"], ["noodi", "No ODI recorded"]];
@@ -131,7 +132,8 @@ export function renderFamilyTrees(host, ctx) {
     </div>
     <div class="card" style="margin-top:14px;">
       <div class="card-head" style="gap:8px;"><div><h3>Household family trees</h3><span class="hint">Open a tree to see it full size, fix lineage and download it. Descendants without a recorded parent hang under the ODI.</span></div>
-        <button type="button" class="btn primary" id="ft-book">Download all as a PDF book</button></div>
+        <span style="display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="btn" id="ft-list" title="The same list as the Beneficiary Master Register, grouped by household — PDF, Word or CSV (Excel)">Export as a list</button>
+        <button type="button" class="btn primary" id="ft-book">Download all as a PDF book</button></span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <input type="search" id="ft-q" placeholder="Search ODI, household or member name…" value="${esc(UI.q)}" style="flex:1;min-width:220px;">
         <select id="ft-f">${FILTERS.map(([v, l]) => `<option value="${v}"${v === UI.filter ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
@@ -168,6 +170,52 @@ export function renderFamilyTrees(host, ctx) {
   host.querySelector("#ft-f").onchange = (e) => { UI.filter = e.target.value; UI.shown = 24; paintGrid(); };
   host.querySelector("#ft-s").onchange = (e) => { UI.sort = e.target.value; paintGrid(); };
   host.querySelector("#ft-book").onclick = () => bookDialog(ctx, visible());
+  host.querySelector("#ft-list").onclick = () => listDialog(ctx, visible(), builds);
+}
+
+/* ------------------------------------------------------------------------------ list export --- */
+const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function exportList(ctx, builds, o) {
+  const { h: u } = ctx, cpa = ctx.cpa();
+  const groups = listGroups(builds, { order: o.order, members: o.members, virtual: o.virtual, fmtDay: u.fmtDay });
+  const t = listTotals(groups);
+  if (!t.members) { u.toast("Nobody matches those choices.", true); return false; }
+  const scopeNote = [o.scopeLabel, o.members === "active" ? "active members only" : o.members === "verified" ? "verified members only" : ""].filter(Boolean).join(", ");
+  const base = `Family-Tree-List-${safe(cpa.name)}-${o.asAt}`, lo = { cpa, mode: o.format, asAt: o.asAt, ids: o.ids, scopeNote, esc: u.esc };
+  if (o.format === "csv") { saveBlob(new Blob([listCsv(groups, { ids: o.ids })], { type: "text/csv;charset=utf-8" }), base + ".csv"); u.toast(`CSV exported — ${t.members} people in ${t.households} household${t.households === 1 ? "" : "s"}.`); return true; }
+  if (o.format === "word") { saveBlob(new Blob([listHtml(groups, lo)], { type: "application/msword;charset=utf-8" }), base + ".doc"); u.toast(`Word document exported — ${t.members} people in ${t.households} household${t.households === 1 ? "" : "s"}.`); return true; }
+  const url = URL.createObjectURL(new Blob([listHtml(groups, { ...lo, mode: "print" })], { type: "text/html" })), w = window.open(url, "_blank");
+  if (!w) { u.toast("Please allow pop-ups to open the print view.", true); URL.revokeObjectURL(url); return false; }
+  w.opener = null;
+  w.addEventListener("load", () => { setTimeout(() => { try { w.print(); } catch (e) { /* the print bar still works */ } }, 700); setTimeout(() => URL.revokeObjectURL(url), 120000); });
+  return true;
+}
+/** list = the households to offer by default (what the tab is showing); all = every household (omit for a single household). */
+function listDialog(ctx, list, all) {
+  const { h: u } = ctx, { esc } = u, many = !!all && all.length > list.length;
+  if (!list.length) { u.toast("There are no households to export — adjust the search or filter.", true); return; }
+  const one = list.length === 1 && !all;
+  const { scrim, close } = u.govModal(one ? `Export ${list[0].title} as a list` : "Export the family trees as a list", `
+    <p class="hint" style="margin:0 0 10px;">The same list as the Beneficiary Master Register — <b>every column</b> — with the <b>household name</b> on a banner for each household and on every row, and each family in tree order (ODI first, then their children and grandchildren).</p>
+    <div class="cm-filters">
+      ${one ? "" : `<div class="field"><label for="ls-scope">Households</label><select id="ls-scope"><option value="shown">The ${list.length} household${list.length === 1 ? "" : "s"} shown now</option>${many ? `<option value="all">All ${all.length} households</option>` : ""}</select></div>`}
+      <div class="field"><label for="ls-mem">People</label><select id="ls-mem"><option value="all">Everyone (incl. deceased)</option><option value="active">Active members only</option><option value="verified">Verified members only</option></select></div>
+      <div class="field"><label for="ls-ord">Order</label><select id="ls-ord"><option value="name">By household name</option><option value="ref">By household number</option></select></div>
+      <div class="field"><label for="ls-fmt">Format</label><select id="ls-fmt"><option value="print">PDF (print view)</option><option value="word">Word (.doc)</option><option value="csv">CSV (Excel)</option></select></div>
+      <div class="field"><label for="ls-asat">As at</label><input type="date" id="ls-asat" value="${localDay()}"></div></div>
+    <label class="cm-check"><input type="checkbox" id="ls-ids" checked> Include the ID number column (masked — last 4 digits only, as on the register)</label>
+    <label class="cm-check"><input type="checkbox" id="ls-virt" checked> Include people named on the household record who aren't on the register yet</label>`,
+    `<button class="btn" data-act="close" type="button">Close</button><button class="btn primary" id="ls-go" type="button">Export</button>`, 560);
+  const $s = (q) => scrim.querySelector(q);
+  $s("#ls-go").onclick = () => {
+    const scope = one ? "shown" : $s("#ls-scope").value, picked = scope === "all" ? all : list;
+    const ok = exportList(ctx, picked, {
+      order: $s("#ls-ord").value, members: $s("#ls-mem").value, format: $s("#ls-fmt").value, asAt: $s("#ls-asat").value || localDay(),
+      ids: $s("#ls-ids").checked, virtual: $s("#ls-virt").checked,
+      scopeLabel: one ? list[0].title : scope === "all" ? `all ${all.length} households` : `${list.length} household${list.length === 1 ? "" : "s"}`,
+    });
+    if (ok) close();
+  };
 }
 
 /* ------------------------------------------------------------------------------ book dialog --- */
@@ -208,7 +256,7 @@ function openDetail(ctx, b0) {
     <div class="ftv-stage" id="fv-stage" tabindex="0" aria-label="Family tree chart"></div>
     <p class="hint" style="margin:8px 0 0;">Click a person to set their parent (lineage), edit them or add them to the register. People without a recorded parent hang under the ODI.</p>`,
     `<label style="margin-right:auto;font-size:12px;">PDF page <select id="fv-paper"><option value="fit">fit the tree</option><option value="a4">A4 landscape</option><option value="a3">A3 landscape</option></select></label>
-     <button class="btn" data-act="close" type="button">Close</button><button class="btn" id="fv-png" type="button">Download photo (PNG)</button><button class="btn primary" id="fv-pdf" type="button">Download PDF</button>`, 1180);
+     <button class="btn" data-act="close" type="button">Close</button><button class="btn" id="fv-list" type="button" title="This household's members as a list — PDF, Word or CSV">Export as a list</button><button class="btn" id="fv-png" type="button">Download photo (PNG)</button><button class="btn primary" id="fv-pdf" type="button">Download PDF</button>`, 1180);
   const $s = (q) => scrim.querySelector(q), stage = $s("#fv-stage");
   $s("#fv-paper").value = UI.paper;
   function paint() {
@@ -227,6 +275,7 @@ function openDetail(ctx, b0) {
   $s("#fv-fit").onclick = () => { zoom = 0; paint(); };
   $s("#fv-paper").onchange = (e) => { UI.paper = e.target.value; };
   const run = (id, fn) => { $s(id).onclick = async () => { const btn = $s(id), old = btn.textContent; btn.disabled = true; btn.textContent = "Creating…"; try { await fn(); } catch (e) { u.toast("Couldn't create the file: " + ((e && e.message) || e), true); } btn.disabled = false; btn.textContent = old; }; };
+  $s("#fv-list").onclick = () => listDialog(ctx, [cur()], null);
   run("#fv-png", () => downloadPng(ctx, cur()));
   run("#fv-pdf", () => downloadPdf(ctx, cur(), UI.paper));
 }

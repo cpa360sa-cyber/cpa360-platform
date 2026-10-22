@@ -3898,7 +3898,7 @@ function renderBeneFamilyTrees(host) {
   renderFamilyTrees(host, {
     cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
     canEdit: CAN_EDIT, commit, rerender: () => renderCurrent(), editMember: (row, after) => editBeneficiaryRow(row, after),
-    h: { esc, statTile, toast, govModal },
+    h: { esc, statTile, toast, govModal, fmtDay },
   });
 }
 function renderBeneHouseholds(host) {
