@@ -74,6 +74,7 @@ export async function renderIntake(host, ctx) {
   }
 
   async function paint() {
+    if (ctx.setNewCount && count("new") !== ctx.newCount()) ctx.setNewCount(count("new"));       // the tab label / banner / dashboard alert follow the inbox
     const list = D.subs.filter((s) => UI.filter === "all" || s.status === UI.filter);
     const tab = (k, l, n) => `<button type="button" class="btn small${UI.filter === k ? " primary" : ""}" data-f="${k}">${l}${n != null ? ` (${n})` : ""}</button>`;
     host.innerHTML = `${linkCard()}

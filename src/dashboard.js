@@ -2525,11 +2525,12 @@ function beneRollup() {
     fromRegister: true,
   };
 }
-function renderBeneficiary() {
+/* the strip of sub-tabs + the banners above the panel (also redrawn on its own when the Intake count changes) */
+function paintBeneStrip() {
   const strip = $("beneficiary-subtabs");
   const cur = SUBTAB.beneficiary || "register";
-  const due = birthdayDue(0);
-  const tabs = BENE_TABS.map((t) => (t.id === "birthdays" && due.length ? { ...t, label: `Birthdays (${due.length})` } : t));
+  const due = birthdayDue(0), inNew = DATA.intakeNew || 0;
+  const tabs = BENE_TABS.map((t) => (t.id === "birthdays" && due.length ? { ...t, label: `Birthdays (${due.length})` } : t.id === "intake" && inNew ? { ...t, label: `Intake (${inNew} new)` } : t));
   const names = due.slice(0, 3).map((x) => `${(String(x.r[1]).trim().split(/\s+/)[0] || "")} (${x.info.turns})`).join(", ") + (due.length > 3 ? ` and ${due.length - 3} more` : "");
   strip.innerHTML = subtabStrip("beneficiary", tabs)
     + (due.length && cur !== "birthdays" ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -2537,12 +2538,19 @@ function renderBeneficiary() {
   const pendDn = DATA.deathNotices || [];
   if (pendDn.length && CAN_EDIT) strip.insertAdjacentHTML("beforeend", `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <span>Condolence notice waiting: <b>${esc(pendDn.map((n) => n.name).slice(0, 2).join(", "))}${pendDn.length > 2 ? ` and ${pendDn.length - 2} more` : ""}</b></span><button type="button" class="btn small" data-dn-go style="margin-left:auto;">Review &amp; send</button></div>`);
+  if (inNew && CAN_EDIT && cur !== "intake") strip.insertAdjacentHTML("beforeend", `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span>Documents waiting in Intake: <b>${inNew} new submission${inNew > 1 ? "s" : ""}</b> from members</span><button type="button" class="btn small" data-intake-go style="margin-left:auto;">Review</button></div>`);
   wireSubtabs(strip);
   const dnGo = strip.querySelector("[data-dn-go]");
   if (dnGo) dnGo.onclick = () => { location.hash = "#/v/communication"; };
   const go = strip.querySelector("[data-bday-go]");
   if (go) go.onclick = () => { SUBTAB.beneficiary = "birthdays"; renderCurrent(); };
-  (BENE_PANELS[cur] || renderBeneRegister)($("beneficiary-body"));
+  const ig = strip.querySelector("[data-intake-go]");
+  if (ig) ig.onclick = () => { SUBTAB.beneficiary = "intake"; renderCurrent(); };
+}
+function renderBeneficiary() {
+  paintBeneStrip();
+  (BENE_PANELS[SUBTAB.beneficiary || "register"] || renderBeneRegister)($("beneficiary-body"));
 }
 const BENE_STATUSES = ["Active", "Deceased", "Removed", "Transferred"];
 const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
@@ -3900,6 +3908,9 @@ function renderBeneIntake(host) {
   renderIntake(host, {
     orgId, canEdit: CAN_EDIT, cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
     rerender: () => renderCurrent(), openFamilyTree: (h) => openFamilyTreeFor(h),
+    /* keep the tab's "(n new)" count, the banner and the dashboard alert in step with what the inbox shows */
+    newCount: () => DATA.intakeNew || 0,
+    setNewCount: (n) => { DATA.intakeNew = n; paintBeneStrip(); if (onChange) onChange(); },
     openIdIntake: (o) => openIdIntake({
       orgId, register: () => DATA.beneficiaryCentre.register, roles: HOUSEHOLD_ROLES, statuses: BENE_STATUSES, verifs: VERIF_STATUSES,
       hhChoices, refFromHhLabel, maskId, inferRole: (hhRef, name) => inferHouseholdRole(householdOf(hhRef), name),
@@ -7530,6 +7541,8 @@ function computeAlerts() {
   const now = new Date(), a = [];
   const dn = (DATA.deathNotices || []).length;
   if (dn) a.push({ tone: "warning", text: `${dn} condolence notice${dn > 1 ? "s" : ""} waiting to be reviewed and sent`, goto: "#/v/communication" });
+  const inNew = DATA.intakeNew || 0;
+  if (inNew) a.push({ tone: "warning", text: `${inNew} document submission${inNew > 1 ? "s" : ""} from members waiting in Intake`, goto: "#/v/beneficiary/intake" });
   const overdue = DATA.actions.filter((x) => x[5] === "Overdue");
   if (overdue.length) a.push({ tone: "critical", text: `${overdue.length} action${overdue.length > 1 ? "s" : ""} overdue`, goto: "#/v/actions" });
   const soon = DATA.actions.filter((x) => {

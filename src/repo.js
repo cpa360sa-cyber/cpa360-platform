@@ -137,6 +137,7 @@ export async function loadOrg(orgId) {
          finPay, finBills, finQuotes, finContracts, finGrn, finAfs, finMemberPay, finBankRecon, finClose,
          projects, markets, partnerships, revenue, impact, docs, wishes, deathNotices] =
     results.map((r) => r.data);
+  const intakeNew = await countNewIntake(orgId);     // documents members sent through the submission link, waiting for review (never fatal)
 
   // { section: { ref_id-or-"_": count } } — drives the paperclip badges
   const docCounts = {};
@@ -220,6 +221,7 @@ export async function loadOrg(orgId) {
       : { ...EMPTY_BENE },
     wishes: (wishes || []).map((w) => ({ id: w.id, beneficiary_id: w.beneficiary_id, year: w.wish_year, at: w.created_at })),
     deathNotices: (deathNotices || []).map((n) => ({ id: n.id, beneficiary_id: n.beneficiary_id, name: n.member_name, at: n.created_at })),
+    intakeNew,
     beneficiaryCentre: {
       register: (beneReg || []).map((r) => tagArr(
         [r.ref || "", r.full_name, r.gender || "", r.dob || "", r.id_masked || "", r.household_ref || "",
