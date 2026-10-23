@@ -3898,6 +3898,7 @@ function renderBeneFamilyTrees(host) {
   renderFamilyTrees(host, {
     cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
     canEdit: CAN_EDIT, commit, rerender: () => renderCurrent(), editMember: (row, after) => editBeneficiaryRow(row, after),
+    signers: () => ({ chair: chairName(), secretary: secName(), chairSig: DATA.cpa.chairSig, secretarySig: DATA.cpa.secretarySig }),
     h: { esc, statTile, toast, govModal, fmtDay },
   });
 }

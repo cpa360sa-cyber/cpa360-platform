@@ -138,7 +138,12 @@ export function listHtml(groups, o) {
     table.reg td.hhb span{font-weight:normal;font-size:8pt;opacity:.92;margin-left:8pt;}
     table.reg tr.p:nth-child(even) td{background:#f6f8fb;} table.reg tr.nr td{font-style:italic;color:#555;}
     thead{display:table-header-group;} tr{page-break-inside:avoid;break-inside:avoid;} tr.hh{page-break-after:avoid;break-after:avoid;}
-    .fine{font-size:8pt;color:#666;margin-top:10pt;}`;
+    .fine{font-size:8pt;color:#666;margin-top:10pt;}
+    .cert{page-break-before:always;break-before:page;} .cert p{font-size:10.5pt;line-height:1.5;margin:6pt 0;}
+    .sig{width:100%;margin-top:18pt;} .sig td{border:0;width:50%;padding:0 18pt 0 0;vertical-align:bottom;height:64pt;}
+    .sigline{border-top:.75pt solid #333;padding-top:3pt;font-size:9pt;} .sigline b{font-size:9.5pt;}
+    .stamp{border:1pt dashed #888;width:120pt;height:90pt;text-align:center;color:#999;font-size:8.5pt;padding-top:36pt;}
+    .box td{border:.5pt solid #999;padding:6pt 8pt;font-size:9.5pt;height:24pt;}`;
   const head = cols.map((c) => `<th>${esc(c[0])}</th>`).join("");
   let n = 0;
   const body = groups.map((g) => {
@@ -147,6 +152,19 @@ export function listHtml(groups, o) {
     return banner + g.rows.map((r) => { n++; return `<tr class="p${r.onRegister === "Yes" ? "" : " nr"}">${cols.map((c) => `<td>${esc(c[1](r, n))}</td>`).join("")}</tr>`; }).join("");
   }).join("");
   const stat = (k, v) => `<td class="k">${esc(k)}</td><td class="v">${esc(v)}</td>`;
+  /* certification page — same wording and layout as the Beneficiary Master Register's; o.cert = { chairName, secName, chairSig, secSig, apply, date } or falsy for none */
+  const c = o.cert;
+  const sigCell = (label, nm, img) => `<td>${c && c.apply && img ? `<img src="${esc(img)}" height="46" alt="" style="height:46px;">` : '<div style="height:46px"></div>'}<div class="sigline"><b>${esc(label)}</b><br>${esc(nm || "")}<br>Date: ${c && c.apply && img ? esc(c.date || "") : "________________"}</div></td>`;
+  const certHtml = !c ? "" : `<div class="cert">
+    <div class="hdr"><div class="org">${esc(cpa.name || "")}${cpa.reg ? " · " + esc(cpa.reg) : ""}</div><h1 style="font-size:17pt;">Certification of the ${esc(title)}</h1></div>
+    <p>We, the undersigned office bearers of <b>${esc(cpa.name || "the association")}</b>${cpa.reg ? ` (registration no. ${esc(cpa.reg)})` : ""}, certify that this ${esc(title)} (document no. <b>${esc(no)}</b>) has been extracted from the association's household and membership records, lists <b>${t.members}</b> ${t.members === 1 ? "person" : "people"} in <b>${t.households}</b> household${t.households === 1 ? "" : "s"} as at <b>${esc(asAtLong)}</b> — of whom <b>${t.verified}</b> ${t.verified === 1 ? "has" : "have"} been verified by the association${t.notOnRegister ? `, and <b>${t.notOnRegister}</b> ${t.notOnRegister === 1 ? "is" : "are"} named on a household record but not yet entered in the Master Register` : ""} — and is a true and accurate record to the best of our knowledge.</p>
+    <p>Identity numbers are shown masked (last four digits), as held on the association's register. The full register, with supporting identity documents, is available from the association's records on request.</p>
+    <table class="sig"><tr>${sigCell("Chairperson", c.chairName, c.chairSig)}${sigCell("Secretary", c.secName, c.secSig)}</tr></table>
+    <table style="width:100%;margin-top:14pt;"><tr><td style="border:0;vertical-align:top;"><div class="stamp">Official stamp<br>of the Association</div></td>
+      <td style="border:0;vertical-align:top;padding-left:20pt;"><table class="box"><tr><td style="width:40%;"><b>Date of the AGM at which the list was presented</b></td><td>&nbsp;</td></tr>
+        <tr><td><b>For official use — reference no.</b></td><td>&nbsp;</td></tr><tr><td><b>Date received / received by</b></td><td>&nbsp;</td></tr></table></td></tr></table>
+    <p class="fine">Document no. ${esc(no)} · ${t.members} record${t.members === 1 ? "" : "s"} · generated ${esc(new Date().toLocaleString("en-ZA", { dateStyle: "long", timeStyle: "short" }))} from ${esc(cpa.name || "the CPA")}'s CPA360™ records. The document number changes if any member's name, ID, household, status or verification in this list changes, so a printed copy can be compared with the live records.</p>
+  </div>`;
   return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(title)} — ${esc(cpa.name || "")}</title>
   <style>${css}</style></head><body>
   ${word ? "" : `<div class="bar"><button onclick="window.print()">Print / Save as PDF</button><span>${t.members} people in ${t.households} household${t.households === 1 ? "" : "s"} · A4 landscape · choose “Save as PDF” as the printer · header and footer are built in — turn off the browser's own Headers and footers</span></div>`}
@@ -161,5 +179,5 @@ export function listHtml(groups, o) {
   <h2>Households and their families</h2>
   <table class="reg"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}">No households match the chosen scope.</td></tr>`}</tbody></table>
   <p class="fine">Document no. ${esc(no)} · ${t.members} record${t.members === 1 ? "" : "s"} in ${t.households} household${t.households === 1 ? "" : "s"} · generated ${esc(new Date().toLocaleString("en-ZA", { dateStyle: "long", timeStyle: "short" }))} from ${esc(cpa.name || "the CPA")}'s CPA360™ records. Identity numbers are shown masked (last four digits), as held on the register. People marked “No” under “On the register” are named on the household record but are not yet in the Master Register.</p>
-  </div></body></html>`;
+  ${certHtml}</div></body></html>`;
 }

@@ -181,7 +181,9 @@ function exportList(ctx, builds, o) {
   const t = listTotals(groups);
   if (!t.members) { u.toast("Nobody matches those choices.", true); return false; }
   const scopeNote = [o.scopeLabel, o.members === "active" ? "active members only" : o.members === "verified" ? "verified members only" : ""].filter(Boolean).join(", ");
-  const base = `Family-Tree-List-${safe(cpa.name)}-${o.asAt}`, lo = { cpa, mode: o.format, asAt: o.asAt, ids: o.ids, scopeNote, esc: u.esc };
+  const sg = ctx.signers ? ctx.signers() : {};
+  const cert = o.cert === "none" ? null : { chairName: sg.chair, secName: sg.secretary, chairSig: sg.chairSig, secSig: sg.secretarySig, apply: o.cert === "sign", date: u.fmtDay ? u.fmtDay(localDay()) : localDay() };
+  const base = `Family-Tree-List-${safe(cpa.name)}-${o.asAt}`, lo = { cpa, mode: o.format, asAt: o.asAt, ids: o.ids, scopeNote, esc: u.esc, cert };
   if (o.format === "csv") { saveBlob(new Blob([listCsv(groups, { ids: o.ids })], { type: "text/csv;charset=utf-8" }), base + ".csv"); u.toast(`CSV exported — ${t.members} people in ${t.households} household${t.households === 1 ? "" : "s"}.`); return true; }
   if (o.format === "word") { saveBlob(new Blob([listHtml(groups, lo)], { type: "application/msword;charset=utf-8" }), base + ".doc"); u.toast(`Word document exported — ${t.members} people in ${t.households} household${t.households === 1 ? "" : "s"}.`); return true; }
   const url = URL.createObjectURL(new Blob([listHtml(groups, { ...lo, mode: "print" })], { type: "text/html" })), w = window.open(url, "_blank");
@@ -194,7 +196,7 @@ function exportList(ctx, builds, o) {
 function listDialog(ctx, list, all) {
   const { h: u } = ctx, { esc } = u, many = !!all && all.length > list.length;
   if (!list.length) { u.toast("There are no households to export — adjust the search or filter.", true); return; }
-  const one = list.length === 1 && !all;
+  const one = list.length === 1 && !all, sg = ctx.signers ? ctx.signers() : {}, signed = !!(sg.chairSig || sg.secretarySig);
   const { scrim, close } = u.govModal(one ? `Export ${list[0].title} as a list` : "Export the family trees as a list", `
     <p class="hint" style="margin:0 0 10px;">The same list as the Beneficiary Master Register — <b>every column</b> — with the <b>household name</b> on a banner for each household and on every row, and each family in tree order (ODI first, then their children and grandchildren).</p>
     <div class="cm-filters">
@@ -202,16 +204,19 @@ function listDialog(ctx, list, all) {
       <div class="field"><label for="ls-mem">People</label><select id="ls-mem"><option value="all">Everyone (incl. deceased)</option><option value="active">Active members only</option><option value="verified">Verified members only</option></select></div>
       <div class="field"><label for="ls-ord">Order</label><select id="ls-ord"><option value="name">By household name</option><option value="ref">By household number</option></select></div>
       <div class="field"><label for="ls-fmt">Format</label><select id="ls-fmt"><option value="print">PDF (print view)</option><option value="word">Word (.doc)</option><option value="csv">CSV (Excel)</option></select></div>
-      <div class="field"><label for="ls-asat">As at</label><input type="date" id="ls-asat" value="${localDay()}"></div></div>
+      <div class="field"><label for="ls-asat">As at</label><input type="date" id="ls-asat" value="${localDay()}"></div>
+      <div class="field" id="ls-certf"><label for="ls-cert">Certification page (PDF / Word)</label><select id="ls-cert">${signed ? `<option value="sign">Apply the Chairperson &amp; Secretary signatures from Brand Box</option>` : ""}<option value="blank">Leave the signatures blank — I will sign by hand</option><option value="none">No certification page</option></select></div></div>
     <label class="cm-check"><input type="checkbox" id="ls-ids" checked> Include the ID number column (masked — last 4 digits only, as on the register)</label>
     <label class="cm-check"><input type="checkbox" id="ls-virt" checked> Include people named on the household record who aren't on the register yet</label>`,
     `<button class="btn" data-act="close" type="button">Close</button><button class="btn primary" id="ls-go" type="button">Export</button>`, 560);
   const $s = (q) => scrim.querySelector(q);
+  const syncCert = () => { $s("#ls-certf").style.display = $s("#ls-fmt").value === "csv" ? "none" : ""; };
+  $s("#ls-fmt").onchange = syncCert; syncCert();
   $s("#ls-go").onclick = () => {
     const scope = one ? "shown" : $s("#ls-scope").value, picked = scope === "all" ? all : list;
     const ok = exportList(ctx, picked, {
       order: $s("#ls-ord").value, members: $s("#ls-mem").value, format: $s("#ls-fmt").value, asAt: $s("#ls-asat").value || localDay(),
-      ids: $s("#ls-ids").checked, virtual: $s("#ls-virt").checked,
+      ids: $s("#ls-ids").checked, virtual: $s("#ls-virt").checked, cert: $s("#ls-cert").value,
       scopeLabel: one ? list[0].title : scope === "all" ? `all ${all.length} households` : `${list.length} household${list.length === 1 ? "" : "s"}`,
     });
     if (ok) close();
