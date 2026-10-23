@@ -18,6 +18,7 @@ import { openFamilyTree } from "./family-tree.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
+import { renderIntake } from "./intake.js";
 import { initDashLayout } from "./dash-layout.js";
 
 /* ============ constants ============ */
@@ -2492,6 +2493,7 @@ function openLightbox(list, index) {
 
 const BENE_TABS = [
   { id: "register", label: "Master Register" },
+  { id: "intake", label: "Intake" },
   { id: "verification", label: "Verification" },
   { id: "households", label: "Households" },
   { id: "trees", label: "Family Trees" },
@@ -2502,7 +2504,7 @@ const BENE_TABS = [
   { id: "evidence", label: "Verification Evidence" },
 ];
 const BENE_PANELS = {
-  register: renderBeneRegister, verification: renderBeneVerification, households: renderBeneHouseholds, trees: renderBeneFamilyTrees,
+  register: renderBeneRegister, intake: renderBeneIntake, verification: renderBeneVerification, households: renderBeneHouseholds, trees: renderBeneFamilyTrees,
   succession: renderBeneSuccession, deceased: renderBeneDeceased, birthdays: renderBeneBirthdays, disputes: renderBeneDisputes, evidence: renderBeneEvidence,
 };
 /* rollups: use the live register when it has rows, else the figures singleton */
@@ -3891,6 +3893,19 @@ function openFamilyTreeFor(h) {
     register: () => DATA.beneficiaryCentre.register, disputes: () => DATA.beneficiaryCentre.disputes,
     commit, rerender: () => renderCurrent(),
     h: { esc, toast, pill, statTile, govModal, confirmModal, maskId, dobFromSaId, bumpDocCount, fmtDay },
+  });
+}
+/* Intake tab → intake.js: documents members send through the CPA's private submission link (WhatsApp-friendly), reviewed here */
+function renderBeneIntake(host) {
+  renderIntake(host, {
+    orgId, canEdit: CAN_EDIT, cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
+    rerender: () => renderCurrent(), openFamilyTree: (h) => openFamilyTreeFor(h),
+    openIdIntake: (o) => openIdIntake({
+      orgId, register: () => DATA.beneficiaryCentre.register, roles: HOUSEHOLD_ROLES, statuses: BENE_STATUSES, verifs: VERIF_STATUSES,
+      hhChoices, refFromHhLabel, maskId, inferRole: (hhRef, name) => inferHouseholdRole(householdOf(hhRef), name),
+      commit, rerender: () => renderCurrent(), h: { esc, toast, govModal, bumpDocCount }, ...o,
+    }),
+    h: { esc, toast, govModal, confirmModal, bumpDocCount },
   });
 }
 /* Family Trees tab → family-trees.js (automatic trees + charts per household, PNG/PDF downloads) */

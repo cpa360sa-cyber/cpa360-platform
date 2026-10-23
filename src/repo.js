@@ -401,6 +401,51 @@ export async function docPreviewUrls(paths) {
   return map;
 }
 
+/* ---------------------------------------------------------------- intake --- */
+/* Beneficiaries → Intake: what members sent through the CPA's submission link (see intake-submit).
+   The files are ordinary `documents` rows in section "intake" (ref_id = the submission id). */
+export async function loadIntake(orgId) {
+  const [link, subs, docs] = await Promise.all([
+    supabase.from("intake_links").select("*").eq("org_id", orgId).maybeSingle(),
+    supabase.from("intake_submissions").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(400),
+    listDocsBySection(orgId, "intake"),
+  ]);
+  for (const r of [link, subs]) if (r.error) throw r.error;
+  const byId = new Map();
+  docs.forEach((d) => { if (!byId.has(d.ref_id)) byId.set(d.ref_id, []); byId.get(d.ref_id).push(d); });
+  byId.forEach((arr) => arr.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true })));
+  return { link: link.data || null, subs: subs.data || [], docs: byId };
+}
+/** Create the CPA's link, switch it on/off, or replace its code (the old link stops working). */
+export async function saveIntakeLink(orgId, patch) {
+  const { data, error } = await supabase.from("intake_links").upsert({ org_id: orgId, ...patch }, { onConflict: "org_id" }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function reviewIntake(id, patch) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase.from("intake_submissions").update({ ...patch, reviewed_by: user?.id || null, reviewed_at: new Date().toISOString() }).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function updateIntake(id, patch) {
+  const { data, error } = await supabase.from("intake_submissions").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+/** Re-file documents (their file stays where it is; only the section / owner changes). */
+export async function moveDocs(docs, section, refId) {
+  const ids = docs.map((d) => d.id);
+  if (!ids.length) return;
+  const { error } = await supabase.from("documents").update({ section, ref_id: String(refId) }).in("id", ids);
+  if (error) throw error;
+}
+export async function countNewIntake(orgId) {
+  const { count, error } = await supabase.from("intake_submissions").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "new");
+  if (error) return 0;
+  return count || 0;
+}
+
 /* ---------------------------------------------------------- permit email --- */
 /* Emails a generated document (the issued permit) to an applicant via the
    send-permit-email Edge Function. Throws with the function's own error

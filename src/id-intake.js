@@ -60,6 +60,8 @@ export function openIdIntake(ctx) {
     $s("#ii-manual").onclick = () => paintForm();
     $s("#ii-ocr").onclick = runOcr;
     $s("#ii-ai").onclick = runAi;
+    // files already in hand (e.g. from the Intake inbox) are loaded as if they had just been chosen
+    if (ctx.preload && ctx.preload.length && !S.pre) { S.pre = true; add(ctx.preload); }
   }
   function paintPicked() {
     const box = $s("#ii-picked"); if (!box) return;
@@ -137,6 +139,11 @@ export function openIdIntake(ctx) {
         </div>
       </div>`;
     const $i = (id) => $s("#" + id);
+    if (!S.defaulted) {                                   // suggestions from the Intake inbox: the household and cell number the sender gave
+      S.defaulted = true;
+      if (ctx.defaultHh) { const o = hhc.options.find((x) => ctx.refFromHhLabel(x) === ctx.defaultHh); if (o != null) $i("ii-hh").value = o; }
+      if (ctx.defaultContact) $i("ii-contact").value = ctx.defaultContact;
+    }
     // date of birth / gender come from a valid ID number unless the user has typed their own
     const sync = () => {
       const info = saIdInfo($i("ii-id").value), box = $i("ii-idinfo"), raw = $i("ii-id").value.replace(/\D/g, "");
