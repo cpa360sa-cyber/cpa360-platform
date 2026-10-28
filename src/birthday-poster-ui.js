@@ -1,11 +1,16 @@
 /* CPA360 — Birthdays → "Birthday shoutout": the dialog around birthday-poster.js.
    Who is on the poster comes from the Birthdays rules (active adults who haven't opted out; under-18s are never listed).
    The person posting sees a live preview, can untick or correct a name, switch ages / languages / colours, then:
-     · Share to WhatsApp Status — on a phone this opens WhatsApp's share sheet (choose "My status")
-     · Download — the PNG(s), for posting from a computer through WhatsApp Web, or from a phone's gallery
+     · Publish via WhatsApp — ONE button for both situations:
+         on a phone it opens WhatsApp's share sheet straight away (tap WhatsApp → My status → Send);
+         on a computer it shows a QR code — scan it with the phone, the poster opens there with a "Share to WhatsApp Status"
+         button, and again it's WhatsApp → My status → Send. (WhatsApp has no way to open its Status screen from a computer.)
+     · Download — the PNG(s), if you'd rather post them yourself
      · Copy caption — wording to paste under the Status
-   WhatsApp gives software no way to publish a Status itself, so nothing is ever posted without a person doing it. */
-import { splitPosters, posterSvg, posterPng, captionText, GREETINGS, WISH } from "./birthday-poster.js";
+   WhatsApp gives software no way to publish a Status itself, so nothing is ever posted without a person pressing Send. */
+import * as repo from "./repo.js";
+import { qrSvg } from "./qr.js";
+import { splitPosters, posterSvg, posterPng, captionText, isPhone, GREETINGS, WISH } from "./birthday-poster.js";
 import { THEMES, themeFor } from "./family-tree-svg.js";
 
 const dayName = (d) => d.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" });
@@ -17,6 +22,7 @@ export function openBirthdayPoster(ctx) {
   const load = (k, d) => { try { const v = localStorage.getItem("cpa360.bposter." + k + "." + ctx.orgId); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
   const S = { day: 0, rows: [], info: null, theme: load("theme", "brand"), ages: load("ages", true), langs: load("langs", ["en", "zu", "ss"]), text: { ...Object.fromEntries(Object.entries(GREETINGS).map(([k, v]) => [k, v.text])), ...load("text", {}) }, page: 0, busy: false };
   const canShare = (() => { try { return typeof navigator !== "undefined" && !!navigator.canShare && navigator.canShare({ files: [new File([new Blob(["x"])], "x.png", { type: "image/png" })] }); } catch (e) { return false; } })();
+  const phone = isPhone();
   const cache = new Map();                                    // poster index → { key, blob }
 
   const pick = (d) => { S.info = ctx.people(d); S.rows = S.info.people.map((p) => ({ ...p, on: true })); S.page = 0; cache.clear(); };
@@ -30,7 +36,7 @@ export function openBirthdayPoster(ctx) {
         <div id="bp-pager" style="margin-top:8px;"></div></div></div>`,
     `<span id="bp-foot" class="hint" style="margin-right:auto;"></span><button class="btn" data-act="close" type="button">Close</button>
      <button class="btn" id="bp-cap" type="button">Copy caption</button><button class="btn" id="bp-dl" type="button">Download</button>
-     ${canShare ? `<button class="btn primary" id="bp-share" type="button">Share to WhatsApp Status</button>` : ""}`, 1020);
+     <button class="btn primary" id="bp-share" type="button" style="background:#25d366;border-color:#25d366;color:#06361a;">Publish via WhatsApp</button>`, 1020);
   const $s = (q) => scrim.querySelector(q);
   const cpa = () => ctx.cpa();
   const included = () => S.rows.filter((r) => r.on && String(r.name).trim());
@@ -80,7 +86,7 @@ export function openBirthdayPoster(ctx) {
     const pp = $s("#bp-prevp"); if (pp) pp.onclick = () => { S.page--; paint(); };
     const np = $s("#bp-nextp"); if (np) np.onclick = () => { S.page++; paint(); };
     ["#bp-cap", "#bp-dl", "#bp-share"].forEach((q) => { const b = $s(q); if (b) b.disabled = !ps.length; });
-    $s("#bp-foot").textContent = ps.length ? (canShare ? "" : "On a computer: download, then in WhatsApp Web open Status and add the picture.") : "";
+    $s("#bp-foot").textContent = ps.length ? (phone && canShare ? "Tap Publish via WhatsApp, choose WhatsApp, then My status." : "Publish via WhatsApp shows a code — scan it with your phone, then tap Share.") : "";
     clearTimeout(timer); timer = setTimeout(() => ps.forEach((_, i) => pngFor(i, ps).catch(() => {})), 400);     // pre-render so Share is instant
   }
   const run = (id, fn) => { const b = $s(id); if (!b) return; b.onclick = async () => { if (S.busy) return; S.busy = true; const old = b.textContent; b.disabled = true; b.textContent = "…"; try { await fn(); } catch (e) { if (!(e && e.name === "AbortError")) u.toast("Couldn't do that: " + ((e && e.message) || e), true); } S.busy = false; b.disabled = false; b.textContent = old; }; };
@@ -97,11 +103,34 @@ export function openBirthdayPoster(ctx) {
     u.toast(ps.length > 1 ? `${ps.length} posters downloaded.` : "Poster downloaded.");
     if (S.day === 0 && ctx.markDone) ctx.markDone();               // today's shoutout is made — quieten the reminder
   });
+  /* a computer can't open WhatsApp's Status screen — so the poster goes to the phone through a code, where it's one tap */
+  function showPhoneCode(code) {
+    const link = new URL("poster.html", location.href).href + "#c=" + code;
+    let qr = ""; try { qr = qrSvg(link, { dark: "#14203a", quiet: 3 }); } catch (e) { qr = ""; }
+    const { scrim: s2 } = u.govModal("Publish via WhatsApp — scan with your phone", `
+      <div style="text-align:center;">
+        ${qr ? `<div style="display:inline-block;width:min(260px,70vw);background:#fff;padding:6px;border-radius:12px;border:1px solid var(--border);line-height:0;">${qr}</div>` : `<p class="hint">The code couldn't be drawn — type or copy the link below into your phone.</p>`}
+        <ol style="text-align:left;margin:14px auto 8px;max-width:340px;line-height:1.7;padding-left:20px;"><li>Point your phone's <b>camera</b> at this code and tap the link that appears.</li><li>Your poster opens — tap <b>Share to WhatsApp Status</b>.</li><li>Choose <b>WhatsApp</b> → <b>My status</b> → <b>Send</b>.</li></ol>
+        <div class="hint">The code works for 12 hours. Nothing is posted until you press Send in WhatsApp.</div>
+        <div style="display:flex;gap:6px;margin-top:10px;"><input type="text" readonly value="${esc(link)}" aria-label="Link" style="flex:1 1 auto;width:auto;min-width:0;"><button class="btn small" id="pc-copy" type="button">Copy link</button></div></div>`,
+      `<button class="btn primary" data-act="close" type="button">Done</button>`, 460);
+    s2.querySelector("#pc-copy").onclick = async () => { try { await navigator.clipboard.writeText(link); u.toast("Link copied — send it to your phone."); } catch (e) { window.prompt("Copy this link:", link); } };
+  }
   run("#bp-share", async () => {
-    const ps = posters(), files = [];
-    for (let i = 0; i < ps.length; i++) files.push(new File([await pngFor(i, ps)], fileName(i, ps.length), { type: "image/png" }));
-    if (!navigator.canShare({ files })) { u.toast("This phone can't share these pictures directly — use Download instead.", true); return; }
-    await navigator.share({ files, text: caption(), title: "Birthday shoutout" });
+    const ps = posters();
+    if (phone && canShare) {                                              // on the phone itself: straight to WhatsApp's share sheet
+      const files = [];
+      for (let i = 0; i < ps.length; i++) files.push(new File([await pngFor(i, ps)], fileName(i, ps.length), { type: "image/png" }));
+      if (!navigator.canShare({ files })) { u.toast("This phone can't share these pictures directly — use Download instead.", true); return; }
+      await navigator.share({ files, text: caption(), title: "Birthday shoutout" });
+      if (S.day === 0 && ctx.markDone) ctx.markDone();
+      return;
+    }
+    const blobs = [];
+    for (let i = 0; i < ps.length; i++) blobs.push(await pngFor(i, ps));
+    if (ps.length > 4) { u.toast("That's more than 4 posters — use Download for this many.", true); return; }
+    const { code } = await repo.sharePosterToPhone(ctx.orgId, blobs, caption());
+    showPhoneCode(code);
     if (S.day === 0 && ctx.markDone) ctx.markDone();
   });
 

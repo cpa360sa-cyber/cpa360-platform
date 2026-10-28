@@ -442,6 +442,29 @@ export async function moveDocs(docs, section, refId) {
   const { error } = await supabase.from("documents").update({ section, ref_id: String(refId) }).in("id", ids);
   if (error) throw error;
 }
+/* ------------------------------------- birthday poster → phone (WhatsApp Status) --- */
+/** Stores the finished poster picture(s) privately under the CPA's folder and returns a short code the phone page
+ *  (poster.html#c=<code>) uses to fetch them for 12 hours. See the poster-share Edge Function. */
+export async function sharePosterToPhone(orgId, blobs, caption) {
+  const ABC = "abcdefghijklmnopqrstuvwxyz0123456789", rnd = crypto.getRandomValues(new Uint8Array(14));
+  let code = "";
+  for (const x of rnd) code += ABC[x % ABC.length];
+  const paths = [];
+  try {
+    for (let i = 0; i < blobs.length; i++) {
+      const path = `${orgId}/birthday-posters/${code}-${i + 1}.png`;
+      const up = await supabase.storage.from(BUCKET).upload(path, blobs[i], { contentType: "image/png", upsert: false });
+      if (up.error) throw up.error;
+      paths.push(path);
+    }
+    const out = await callFn("poster-share", { action: "create", org_id: orgId, code, paths, caption: caption || "" });
+    return { code, expires_at: out.expires_at };
+  } catch (e) {
+    if (paths.length) await supabase.storage.from(BUCKET).remove(paths).catch(() => {});
+    throw e;
+  }
+}
+
 /* ------------------------------------------------- daily birthday reminder --- */
 export async function loadReminder(orgId) {
   const [r, w] = await Promise.all([

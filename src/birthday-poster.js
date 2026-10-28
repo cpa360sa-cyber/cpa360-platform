@@ -117,6 +117,11 @@ export function captionText(people, cpaName, dateLabel, showAges) {
   return `🎉 Happy Birthday to ${list}! ${WISH} — ${cpaName || "Your CPA"}${dateLabel ? " · " + dateLabel : ""}`;
 }
 
+/** A phone or tablet (where the share sheet can reach WhatsApp's Status), as opposed to a computer — a computer's share
+ *  window can't open Status, so it gets the "scan a code with your phone" route instead. iPadOS pretends to be a Mac, hence the touch check. */
+export const isPhone = (nav = typeof navigator !== "undefined" ? navigator : {}) =>
+  /Android|iPhone|iPad|iPod/i.test(nav.userAgent || "") || (/Macintosh/.test(nav.userAgent || "") && (nav.maxTouchPoints || 0) > 1);
+
 /** DOM only (not unit-tested): the SVG as a PNG blob. */
 export async function posterPng(p) {
   const img = new Image();
