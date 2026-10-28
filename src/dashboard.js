@@ -19,6 +19,7 @@ import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
 import { renderIntake } from "./intake.js";
+import { openBirthdayPoster } from "./birthday-poster-ui.js";
 import { initDashLayout } from "./dash-layout.js";
 
 /* ============ constants ============ */
@@ -3498,6 +3499,21 @@ function birthdayDue(maxDays) {
     .filter((x) => x.info && x.info.days <= maxDays && x.info.turns >= 18 && !wishThisYear(x.r))
     .sort((a, b) => a.info.days - b.info.days || natCmp(a.r[1], b.r[1]));
 }
+/* Who goes on the Birthday shoutout poster for the day `days` ahead (0 = today): the Birthdays rules — active, not opted out —
+   plus: under-18s are never listed (only counted, so the dialog can say how many were left off). */
+function posterPeople(days) {
+  const today = new Date(), out = { people: [], minors: 0, optedOut: 0, date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + days) };
+  (DATA.beneficiaryCentre.register || []).forEach((r) => {
+    if (r[8] !== "Active") return;
+    const i = birthInfo(r, today);
+    if (!i || i.days !== days) return;
+    if (r[13] === true) { out.optedOut++; return; }
+    if (i.turns < 18) { out.minors++; return; }
+    out.people.push({ name: String(r[1] || "").trim().replace(/\s+/g, " "), age: i.turns, ref: r[0] });
+  });
+  out.people.sort((a, b) => natCmp(a.name, b.name));
+  return out;
+}
 async function sendBirthdayWish(r, info) {
   const num = waNumber(r[6]);
   if (!num) { toast("This member has no WhatsApp-able cell number — add one via Edit.", true); return; }
@@ -3568,7 +3584,7 @@ function renderBeneBirthdays(host) {
     },
     manage: () => listEditor(BENE_EDITORS.register()),
     rerender: () => renderBeneBirthdays(host),
-    extraTools: CAN_EDIT ? [`<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
+    extraTools: CAN_EDIT ? [`<button class="btn primary" data-bday-poster type="button" title="One poster listing everyone whose birthday it is — ready for WhatsApp Status">Birthday shoutout</button>`, `<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
     afterRender: (h) => {
       const reg = DATA.beneficiaryCentre.register;
       h.querySelectorAll("[data-bday-send]").forEach((b) => (b.onclick = () => { const r = reg[+b.dataset.bdaySend]; sendBirthdayWish(r, info.get(r)); }));
@@ -3580,6 +3596,8 @@ function renderBeneBirthdays(host) {
         catch (e) { toast("Couldn't undo: " + (e.message || e), true); }
       }));
       const mb = h.querySelector("[data-bday-msg]"); if (mb) mb.onclick = editWishMessage;
+      const pb = h.querySelector("[data-bday-poster]");
+      if (pb) pb.onclick = () => openBirthdayPoster({ orgId, cpa: () => DATA.cpa, people: posterPeople, h: { esc, toast, govModal } });
     },
   });
 }
