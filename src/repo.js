@@ -442,6 +442,23 @@ export async function moveDocs(docs, section, refId) {
   const { error } = await supabase.from("documents").update({ section, ref_id: String(refId) }).in("id", ids);
   if (error) throw error;
 }
+/* ------------------------------------------------- daily birthday reminder --- */
+export async function loadReminder(orgId) {
+  const [r, w] = await Promise.all([
+    supabase.from("birthday_reminders").select("*").eq("org_id", orgId).maybeSingle(),
+    supabase.from("integrations").select("status").eq("org_id", orgId).eq("provider", "whatsapp").maybeSingle(),
+  ]);
+  if (r.error) throw r.error;
+  return { row: r.data || null, waConnected: !!(w.data && w.data.status === "connected") };
+}
+export async function saveReminder(orgId, patch) {
+  const { data, error } = await supabase.from("birthday_reminders").upsert({ org_id: orgId, ...patch }, { onConflict: "org_id" }).select().single();
+  if (error) throw error;
+  return data;
+}
+/** Sends the reminder right now (even if nobody has a birthday) so the CPA can check the channels work. */
+export const testReminder = (orgId) => callFn("birthday-reminder", { action: "test", org_id: orgId });
+
 export async function countNewIntake(orgId) {
   const { count, error } = await supabase.from("intake_submissions").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "new");
   if (error) return 0;

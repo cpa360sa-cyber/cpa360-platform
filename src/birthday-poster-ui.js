@@ -40,7 +40,8 @@ export function openBirthdayPoster(ctx) {
     const th = themeFor(S.theme, cpa()), date = longDate(S.info.date);
     return pages.map((people, i) => ({ people, svg: posterSvg({ people, theme: th, cpaName: cpa().name || "", logo: cpa().logoDataUrl || "", dateLabel: date, greetings: greetings(), showAges: S.ages, page: i + 1, pages: pages.length, seed: 11 + i * 7 }), key: JSON.stringify([people, S.theme, S.ages, greetings(), i, pages.length]) }));
   };
-  const fileName = (i, n) => `Birthday-Shoutout-${safe(cpa().name)}-${S.info.date.toISOString().slice(0, 10)}${n > 1 ? "-" + (i + 1) : ""}.png`;
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;     // the local day, not UTC
+  const fileName = (i, n) => `Birthday-Shoutout-${safe(cpa().name)}-${ymd(S.info.date)}${n > 1 ? "-" + (i + 1) : ""}.png`;
   async function pngFor(i, ps) {
     const c = cache.get(i);
     if (c && c.key === ps[i].key) return c.blob;
@@ -94,12 +95,14 @@ export function openBirthdayPoster(ctx) {
       await new Promise((r) => setTimeout(r, 350));
     }
     u.toast(ps.length > 1 ? `${ps.length} posters downloaded.` : "Poster downloaded.");
+    if (S.day === 0 && ctx.markDone) ctx.markDone();               // today's shoutout is made — quieten the reminder
   });
   run("#bp-share", async () => {
     const ps = posters(), files = [];
     for (let i = 0; i < ps.length; i++) files.push(new File([await pngFor(i, ps)], fileName(i, ps.length), { type: "image/png" }));
     if (!navigator.canShare({ files })) { u.toast("This phone can't share these pictures directly — use Download instead.", true); return; }
     await navigator.share({ files, text: caption(), title: "Birthday shoutout" });
+    if (S.day === 0 && ctx.markDone) ctx.markDone();
   });
 
   paintCtl(); paint();

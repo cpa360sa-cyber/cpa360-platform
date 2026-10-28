@@ -20,6 +20,8 @@ import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
 import { renderIntake } from "./intake.js";
 import { openBirthdayPoster } from "./birthday-poster-ui.js";
+import { openReminderDialog } from "./birthday-reminder-ui.js";
+import { posterDoneToday, markPosterDone } from "./birthday-reminder.js";
 import { initDashLayout } from "./dash-layout.js";
 
 /* ============ constants ============ */
@@ -2533,9 +2535,13 @@ function paintBeneStrip() {
   const due = birthdayDue(0), inNew = DATA.intakeNew || 0;
   const tabs = BENE_TABS.map((t) => (t.id === "birthdays" && due.length ? { ...t, label: `Birthdays (${due.length})` } : t.id === "intake" && inNew ? { ...t, label: `Intake (${inNew} new)` } : t));
   const names = due.slice(0, 3).map((x) => `${(String(x.r[1]).trim().split(/\s+/)[0] || "")} (${x.info.turns})`).join(", ") + (due.length > 3 ? ` and ${due.length - 3} more` : "");
+  const posterN = CAN_EDIT && cur !== "birthdays" && !posterDoneToday(orgId, isoDay(new Date())) ? posterPeople(0).people.length : 0;
+  const posterBtn = posterN ? `<button type="button" class="btn small primary" data-bposter-go title="One poster listing everyone whose birthday it is, ready for WhatsApp Status">Create the poster</button>` : "";
   strip.innerHTML = subtabStrip("beneficiary", tabs)
     + (due.length && cur !== "birthdays" ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <span>Birthday today: <b>${esc(names)}</b></span><button type="button" class="btn small" data-bday-go style="margin-left:auto;">Send wishes</button></div>` : "");
+        <span>Birthday today: <b>${esc(names)}</b></span><span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">${posterBtn}<button type="button" class="btn small" data-bday-go>Send wishes</button></span></div>`
+      : posterN ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span>${posterN} birthday${posterN > 1 ? "s" : ""} today — time for the <b>shoutout poster</b> on WhatsApp Status</span><span style="margin-left:auto;">${posterBtn}</span></div>` : "");
   const pendDn = DATA.deathNotices || [];
   if (pendDn.length && CAN_EDIT) strip.insertAdjacentHTML("beforeend", `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <span>Condolence notice waiting: <b>${esc(pendDn.map((n) => n.name).slice(0, 2).join(", "))}${pendDn.length > 2 ? ` and ${pendDn.length - 2} more` : ""}</b></span><button type="button" class="btn small" data-dn-go style="margin-left:auto;">Review &amp; send</button></div>`);
@@ -2548,6 +2554,8 @@ function paintBeneStrip() {
   if (go) go.onclick = () => { SUBTAB.beneficiary = "birthdays"; renderCurrent(); };
   const ig = strip.querySelector("[data-intake-go]");
   if (ig) ig.onclick = () => { SUBTAB.beneficiary = "intake"; renderCurrent(); };
+  const bp = strip.querySelector("[data-bposter-go]");
+  if (bp) bp.onclick = openShoutout;
 }
 function renderBeneficiary() {
   paintBeneStrip();
@@ -3514,6 +3522,14 @@ function posterPeople(days) {
   out.people.sort((a, b) => natCmp(a.name, b.name));
   return out;
 }
+/* The poster dialog (Birthdays toolbar, the banner and the dashboard alert all open this one). Sharing or downloading a poster
+   marks today's shoutout as done, which quietens the banner and the alert until tomorrow. */
+function openShoutout() {
+  openBirthdayPoster({
+    orgId, cpa: () => DATA.cpa, people: posterPeople, h: { esc, toast, govModal },
+    markDone: () => { markPosterDone(orgId, isoDay(new Date())); paintBeneStrip(); if (onChange) onChange(); },
+  });
+}
 async function sendBirthdayWish(r, info) {
   const num = waNumber(r[6]);
   if (!num) { toast("This member has no WhatsApp-able cell number — add one via Edit.", true); return; }
@@ -3584,7 +3600,7 @@ function renderBeneBirthdays(host) {
     },
     manage: () => listEditor(BENE_EDITORS.register()),
     rerender: () => renderBeneBirthdays(host),
-    extraTools: CAN_EDIT ? [`<button class="btn primary" data-bday-poster type="button" title="One poster listing everyone whose birthday it is — ready for WhatsApp Status">Birthday shoutout</button>`, `<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
+    extraTools: CAN_EDIT ? [`<button class="btn primary" data-bday-poster type="button" title="One poster listing everyone whose birthday it is — ready for WhatsApp Status">Birthday shoutout</button>`, `<button class="btn" data-bday-reminder type="button" title="Get a reminder every morning — in the platform, your phone calendar, email or WhatsApp">Daily reminder</button>`, `<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
     afterRender: (h) => {
       const reg = DATA.beneficiaryCentre.register;
       h.querySelectorAll("[data-bday-send]").forEach((b) => (b.onclick = () => { const r = reg[+b.dataset.bdaySend]; sendBirthdayWish(r, info.get(r)); }));
@@ -3597,7 +3613,9 @@ function renderBeneBirthdays(host) {
       }));
       const mb = h.querySelector("[data-bday-msg]"); if (mb) mb.onclick = editWishMessage;
       const pb = h.querySelector("[data-bday-poster]");
-      if (pb) pb.onclick = () => openBirthdayPoster({ orgId, cpa: () => DATA.cpa, people: posterPeople, h: { esc, toast, govModal } });
+      if (pb) pb.onclick = openShoutout;
+      const rb = h.querySelector("[data-bday-reminder]");
+      if (rb) rb.onclick = () => openReminderDialog({ orgId, cpa: () => DATA.cpa, canEdit: CAN_EDIT, h: { esc, toast, govModal, fmtDay } });
     },
   });
 }
@@ -7584,6 +7602,8 @@ function computeAlerts() {
   const bdToday = birthdayDue(0).length, bdWeek = birthdayDue(7).length;
   if (bdToday) a.push({ tone: "info", text: `${bdToday} member birthday${bdToday > 1 ? "s" : ""} today — send a wish`, goto: "#/v/beneficiary/birthdays" });
   else if (bdWeek) a.push({ tone: "info", text: `${bdWeek} member birthday${bdWeek > 1 ? "s" : ""} in the next 7 days`, goto: "#/v/beneficiary/birthdays" });
+  const posterN = CAN_EDIT && !posterDoneToday(orgId, isoDay(now)) ? posterPeople(0).people.length : 0;
+  if (posterN) a.push({ tone: "info", text: `${posterN} birthday${posterN > 1 ? "s" : ""} today — make the shoutout poster for WhatsApp Status`, goto: "#/v/beneficiary/birthdays" });
   const pend = (DATA.beneficiaryCentre?.register || []).filter((r) => r[9] === "Pending").length;
   if (pend) a.push({ tone: "info", text: `${pend} beneficiar${pend > 1 ? "ies" : "y"} pending verification`, goto: "#/v/beneficiary" });
   const noReqPO = (DATA.finProc?.pos || []).filter((r) => !r[5] && r[6] !== "Cancelled").length;
