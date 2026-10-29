@@ -56,7 +56,7 @@ export async function removeMember(orgId, userId) {
 /** WhatsApp "click to chat" link with the invite text ready — opens WhatsApp with the message waiting. */
 export function whatsappInviteUrl({ cell, cpaName, link, inviterName }) {
   const text = `Hi! ${inviterName ? inviterName + " has invited you" : "You have been invited"} to join ${cpaName} on CPA360.\n\n` +
-    `Tap this link, then add your name, cell number and a password:\n${link}\n\n(The link is personal to you — please don't share it.)`;
+    `Tap this link, press "Accept invitation", then add your name, cell number and a password:\n${link}\n\n(The link is personal to you — please don't share it.)`;
   const digits = String(cell || "").replace(/\D/g, "").replace(/^0/, "27");
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
 }

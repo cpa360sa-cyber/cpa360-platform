@@ -21,6 +21,7 @@ const COPY = {
   reset:   { h: "Reset your password", sub: "We'll email you a link to set a new one." },
   setpw:   { h: "Set a new password", sub: "Choose a password for your account." },
   join:    { h: "Welcome — set up your profile", sub: "Tell us who you are and choose a password. You'll use this email and password to sign in from now on." },
+  accept:  { h: "You've been invited", sub: "Press the button to accept and set up your profile." },
 };
 
 /**
@@ -32,8 +33,12 @@ const COPY = {
 export function renderAuth(root, mode = "signin", onSignedIn, ctx = {}) {
   const c = { ...(COPY[mode] || COPY.signin) };
   if (mode === "join" && ctx.orgName) c.h = `Welcome to ${ctx.orgName}`;
+  if (mode === "accept") {
+    c.h = ctx.orgName ? `Join ${ctx.orgName}` : c.h;
+    c.sub = ctx.error ? "" : `${ctx.email ? ctx.email + " has" : "You have"} been invited${ctx.role ? " as " + ctx.role : ""}. Press the button to accept, then add your name, cell number and a password.`;
+  }
   const needsPw = mode === "signin" || mode === "signup" || mode === "setpw" || mode === "join";
-  const needsEmail = mode !== "setpw" && mode !== "join";
+  const needsEmail = mode !== "setpw" && mode !== "join" && mode !== "accept";
 
   root.className = "";
   root.innerHTML = `
@@ -91,7 +96,7 @@ export function renderAuth(root, mode = "signin", onSignedIn, ctx = {}) {
               <label for="au-pw2">Type the password again</label>
               <input id="au-pw2" type="password" minlength="8" autocomplete="new-password" required />
             </div>` : ""}` : ""}
-          <button class="btn primary" type="submit" id="au-submit">${esc(c.h)}</button>
+          ${ctx.error ? "" : `<button class="btn primary" type="submit" id="au-submit">${mode === "accept" ? "Accept invitation" : esc(c.h)}</button>`}
         </form>
         <div class="auth-alt" id="auth-alt"></div>
       </div></div>
@@ -105,14 +110,16 @@ export function renderAuth(root, mode = "signin", onSignedIn, ctx = {}) {
     reset:   [["signin", "Back to sign in"]],
     setpw:   [],
     join:    [],
+    accept:  ctx.error ? [["signin", "Go to sign in"]] : [["signin", "I already have a password — sign in"]],
   }[mode] || [];
   alt.innerHTML = links.map(([m, label]) => `<button class="linkbtn" data-mode="${m}">${esc(label)}</button>`).join("");
   alt.querySelectorAll("[data-mode]").forEach((b) =>
     b.addEventListener("click", () => renderAuth(root, b.dataset.mode, onSignedIn)));
 
   const msg = root.querySelector("#auth-msg");
-  const submit = root.querySelector("#au-submit");
+  const submit = root.querySelector("#au-submit") || document.createElement("button");
   const show = (text, kind = "err") => { msg.innerHTML = `<div class="msg ${kind}">${esc(text)}</div>`; };
+  if (ctx.error) show(ctx.error);
 
   const gbtn = root.querySelector("#au-google");
   if (gbtn) gbtn.addEventListener("click", async () => {
@@ -153,6 +160,8 @@ export function renderAuth(root, mode = "signin", onSignedIn, ctx = {}) {
         const { error } = await sendReset(email);
         if (error) throw error;
         show("If that address has an account, a reset link is on its way.", "ok");
+      } else if (mode === "accept") {
+        await (onSignedIn && onSignedIn());   // app.js does the sign-in; a thrown error is shown below
       } else if (mode === "join") {
         const fullName = (root.querySelector("#au-name")?.value || "").trim().replace(/\s+/g, " ");
         const phone = (root.querySelector("#au-phone")?.value || "").trim();

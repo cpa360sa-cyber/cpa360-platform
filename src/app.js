@@ -1,4 +1,4 @@
-import { supabase } from "./supabase.js";
+import { supabase, FUNCTIONS_URL } from "./supabase.js";
 import { onAuth, getSession, signOut, needsProfile } from "./auth.js";
 import { renderAuth } from "./auth-ui.js";
 import {
@@ -157,6 +157,34 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
       renderAuth(root, "signin");
     }
   });
+  // The personal invite link (#join=<code>) only opens this screen. The sign-in is created when the person
+  // presses "Accept invitation" — so WhatsApp / mail-scanner link previews can't use it up.
+  const joinCode = (/[#&]join=([A-Za-z0-9_-]+)/.exec(location.hash) || [])[1];
+  const callAccept = async (action) => {
+    const res = await fetch(`${FUNCTIONS_URL}/invite-accept`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, code: joinCode }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || "We couldn't open this invitation. Please try again.");
+    return out;
+  };
+  if (joinCode) {
+    root.className = "";
+    root.innerHTML = `<div class="booting">Opening your invitation…</div>`;
+    let info;
+    try { info = await callAccept("peek"); }
+    catch (e) { renderAuth(root, "accept", null, { error: e.message }); return; }
+    if (info.done) { renderAuth(root, "accept", null, { error: "You've already joined — sign in with your email and password." }); return; }
+    joining = true;                                           // the welcome screen follows the sign-in
+    renderAuth(root, "accept", async () => {
+      const out = await callAccept("accept");
+      joining = false;
+      const { error } = await supabase.auth.verifyOtp({ token_hash: out.token_hash, type: out.type });
+      if (error) throw new Error("That didn't work — please ask for a new invitation. (" + error.message + ")");
+      history.replaceState(null, "", location.pathname);     // drop the code from the address bar; SIGNED_IN shows the welcome screen
+    }, { email: info.email, orgName: info.org_name, role: ROLE_INFO[info.role]?.label || "" });
+    return;
+  }
   if (state.session && recovering) renderAuth(root, "setpw", finishRecovery);
   else if (state.session) gateAndEnter();
   else {
@@ -1050,16 +1078,7 @@ async function renderMembers(view) {
       if (r.existing) {
         msg.innerHTML = `<div class="msg ok">${esc(email)} already has a CPA360 account, so no invitation was needed — they now have <b>${esc(ROLE_INFO[role].label)}</b> access to ${esc(org.name)}. They'll see it the next time they sign in (the CPA switcher at the top lists every CPA they belong to).</div>`;
       } else {
-        msg.innerHTML = `<div class="msg ok">Invitation emailed to <b>${esc(email)}</b>. Ask them to check their inbox (and Spam).
-          <div style="margin-top:8px"><button class="btn" type="button" data-getlink>Prefer WhatsApp? Get a link to send instead</button></div>
-          <span class="hint">Making a new link cancels the emailed one.</span></div>`;
-        msg.querySelector("[data-getlink]").addEventListener("click", async (ev) => {
-          ev.target.disabled = true;
-          try {
-            const l = await addMember(org.id, email, role, "link");
-            showLink(msg, email, l.link, `Link for <b>${esc(email)}</b> — send it to them:`);
-          } catch (err) { msg.innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
-        });
+        showLink(msg, email, r.link, inviteNote(email, r) );
       }
       view.querySelector("#m-email").value = "";
       btn.disabled = false; btn.textContent = "Send invitation";
@@ -1071,6 +1090,14 @@ async function renderMembers(view) {
   });
 
   wireTeamTable(view, org, myName, showLink);
+}
+
+/* what to tell the inviter once an invitation exists */
+function inviteNote(email, r) {
+  const head = r.emailed
+    ? `Invitation emailed to <b>${esc(email)}</b> (ask them to check Spam too). To be sure they get it, you can also send this link on WhatsApp:`
+    : `<b>${esc(email)}</b> is ready to join.${r.emailNote ? ` (The email couldn't be sent: ${esc(r.emailNote)}.)` : ""} Send them this link on WhatsApp:`;
+  return `${head}<br><span class="hint">They tap the link, press <b>Accept invitation</b>, then add their name, cell number and a password. The link works for 14 days.</span>`;
 }
 
 /* the personal invite link, with Copy + WhatsApp */
@@ -1121,8 +1148,8 @@ function wireTeamTable(view, org, myName, showLink) {
       b.disabled = true;
       try {
         const r = await addMember(org.id, b.dataset.resend, b.dataset.role, b.dataset.how);
-        if (b.dataset.how === "link" && r.link) showLink(msg, b.dataset.resend, r.link, `New link for <b>${esc(b.dataset.resend)}</b> — send it to them:`);
-        else msg.innerHTML = `<div class="msg ok">Invitation emailed again to <b>${esc(b.dataset.resend)}</b>.</div>`;
+        if (r.link) showLink(msg, b.dataset.resend, r.link, inviteNote(b.dataset.resend, r));
+        else msg.innerHTML = `<div class="msg ok"><b>${esc(b.dataset.resend)}</b> already has a working account — nothing to send.</div>`;
         msg.scrollIntoView({ block: "center", behavior: "smooth" });
       } catch (err) { msg.innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
       b.disabled = false;
