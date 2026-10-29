@@ -1,14 +1,14 @@
 /* ============================================================================
-   dashboard.js â€” the nine-view CPA360 dashboard, ported from the Command Center
+   dashboard.js — the nine-view CPA360 dashboard, ported from the Command Center
    to run inside the platform shell, backed by Supabase (see repo.js).
 
    Changed from the standalone version:
-     Â· DATA is loaded from / saved to Postgres, one section per edit
-     Â· commit(section) writes just that section, then re-renders
-     Â· realtime (postgres_changes) re-hydrates on other members' edits
-     Â· CAN_EDIT (role !== 'viewer') hides every edit control
-     Â· the sidebar, theme toggle, hash router and demo/JSON tools are the shell's
-   Everything else â€” renderers, charts, editors, modals, print â€” is unchanged.
+     · DATA is loaded from / saved to Postgres, one section per edit
+     · commit(section) writes just that section, then re-renders
+     · realtime (postgres_changes) re-hydrates on other members' edits
+     · CAN_EDIT (role !== 'viewer') hides every edit control
+     · the sidebar, theme toggle, hash router and demo/JSON tools are the shell's
+   Everything else — renderers, charts, editors, modals, print — is unchanged.
    ============================================================================ */
 import * as repo from "./repo.js";
 import { qrSvg } from "./qr.js";
@@ -61,31 +61,31 @@ const PROJECT_STATUSES = ["Not Started", "On Track", "At Risk", "Delayed", "Comp
 
 export const NAV = [
   { id: "exec", label: "Executive Dashboard", group: "Overview", eyebrow: "Overview", title: "CPA Executive Dashboard", sub: "Institutional score, journey stage and the alerts that need the Committee's attention." },
-  { id: "score", label: "Institutional Performance", group: "Performance", eyebrow: "Performance", title: "Institutional Performance", sub: "The CPA360â„¢ 100-point institutional score across nine weighted domains." },
-  { id: "journey", label: "CPA360 Journey", group: "Performance", eyebrow: "Performance", title: "The CPA360â„¢ Journey", sub: "Seven stages from Assess to Scale â€” where this CPA is, and what comes next." },
+  { id: "score", label: "Institutional Performance", group: "Performance", eyebrow: "Performance", title: "Institutional Performance", sub: "The CPA360™ 100-point institutional score across nine weighted domains." },
+  { id: "journey", label: "CPA360 Journey", group: "Performance", eyebrow: "Performance", title: "The CPA360™ Journey", sub: "Seven stages from Assess to Scale — where this CPA is, and what comes next." },
   { id: "profile", label: "Governance Centre", group: "Operations", eyebrow: "Operations", title: "Governance Centre", sub: "Institutional identity, EXCO and office bearers, committees, resolutions, meetings and the governance calendar." },
-  { id: "beneficiary", label: "Beneficiary Centre", group: "Operations", eyebrow: "Operations", title: "Beneficiary Centre", sub: "The Master Beneficiary Register â€” verification, households, succession, deceased members and disputes." },
-  { id: "communication", label: "Communication", group: "Operations", eyebrow: "Operations", title: "Communication Centre", sub: "Announcements, notices and member replies â€” WhatsApp Business, one-by-one WhatsApp and printed notices in one place." },
+  { id: "beneficiary", label: "Beneficiary Centre", group: "Operations", eyebrow: "Operations", title: "Beneficiary Centre", sub: "The Master Beneficiary Register — verification, households, succession, deceased members and disputes." },
+  { id: "communication", label: "Communication", group: "Operations", eyebrow: "Operations", title: "Communication Centre", sub: "Announcements, notices and member replies — WhatsApp Business, one-by-one WhatsApp and printed notices in one place." },
   { id: "administration", label: "Administration", group: "Operations", eyebrow: "Operations", title: "Administration Centre", sub: "Correspondence, the delegation-of-authority matrix, policies & SOPs and the institutional records index." },
   { id: "hr", label: "HR", group: "Operations", eyebrow: "Operations", title: "HR Centre", sub: "Staff register, positions and the organogram, and monthly payroll summaries." },
   { id: "finance", label: "Finance & Procurement", group: "Operations", eyebrow: "Operations", title: "Finance & Procurement", sub: "Budget, transactions, requisitions, purchase orders, suppliers, payments and procurement compliance." },
   { id: "assets", label: "Land & Assets", group: "Operations", eyebrow: "Operations", title: "Land & Assets", sub: "Land parcels, allocations, leases, permits, infrastructure, the asset register and maintenance." },
   { id: "productivity", label: "Productivity Centre", group: "Operations", eyebrow: "Operations", title: "Productivity Centre", sub: "Crops, orchards, timber, livestock, water, labour, inputs, harvest, sales and cost of production." },
   { id: "projects", label: "Projects & Commercialisation", group: "Operations", eyebrow: "Operations", title: "Projects & Commercialisation", sub: "Project pipeline and scorecards, business cases, funding readiness, markets, partnerships and revenue." },
-  { id: "masterfile", label: "CPA Master File", group: "Records", eyebrow: "Records", title: "CPA Master File", sub: "The complete institutional record, indexed to the CPA360â„¢ Master File structure." },
-  { id: "gallery", label: "Gallery / Media", group: "Records", eyebrow: "Records", title: "Gallery & Media", sub: "Photos, videos and audio â€” meeting evidence, site visits, verification photos â€” organized automatically by date." },
+  { id: "masterfile", label: "CPA Master File", group: "Records", eyebrow: "Records", title: "CPA Master File", sub: "The complete institutional record, indexed to the CPA360™ Master File structure." },
+  { id: "gallery", label: "Gallery / Media", group: "Records", eyebrow: "Records", title: "Gallery & Media", sub: "Photos, videos and audio — meeting evidence, site visits, verification photos — organized automatically by date." },
   { id: "actions", label: "Action Tracker", group: "Tools", eyebrow: "Tools", title: "Action Tracker", sub: "Open items from resolutions, assessments and Committee decisions, in one place." },
-  { id: "impact", label: "Impact & M&E", group: "Tools", eyebrow: "Tools", title: "Impact & M&E", sub: "The outcomes CPA360â„¢ implementation is producing on the ground." },
+  { id: "impact", label: "Impact & M&E", group: "Tools", eyebrow: "Tools", title: "Impact & M&E", sub: "The outcomes CPA360™ implementation is producing on the ground." },
 ];
 
-/* The CPA360 journey â€” 7 stages. `n` matches gates.n from the DB. */
+/* The CPA360 journey — 7 stages. `n` matches gates.n from the DB. */
 const JOURNEY = [
   { n: 1, key: "Assess",          blurb: "Baseline the institution: assessment, master-file audit, beneficiary and land position established." },
-  { n: 2, key: "Recover",         blurb: "Restore legal standing and control â€” constitution, EXCO, banking, and the most urgent compliance gaps closed." },
+  { n: 2, key: "Recover",         blurb: "Restore legal standing and control — constitution, EXCO, banking, and the most urgent compliance gaps closed." },
   { n: 3, key: "Stabilise",       blurb: "Core systems run consistently: minuted meetings, bookkeeping, records management, a working action tracker." },
-  { n: 4, key: "Professionalise", blurb: "Institutionalise the systems â€” delegation of authority, budgeting, audited finances, full registers." },
+  { n: 4, key: "Professionalise", blurb: "Institutionalise the systems — delegation of authority, budgeting, audited finances, full registers." },
   { n: 5, key: "Productivise",    blurb: "Put the land to work: enterprises identified, production planned and recorded, cost of production tracked." },
-  { n: 6, key: "Commercialise",   blurb: "Turn production into income â€” market linkages, off-take agreements, partnerships, diversified revenue." },
+  { n: 6, key: "Commercialise",   blurb: "Turn production into income — market linkages, off-take agreements, partnerships, diversified revenue." },
   { n: 7, key: "Scale",           blurb: "Investment-ready: a bankable business plan, investment-grade governance and finance, a funding pipeline." },
 ];
 
@@ -220,7 +220,7 @@ function lineChart(containerId, months, values, { width = 560, height = 210 } = 
       tip.style.opacity = 1;
       tip.style.left = (pts[i][0] * scale + 8) + "px";
       tip.style.top = (pts[i][1] * scale - 30) + "px";
-      tip.textContent = `${months[i]} â€” ${fmtR(values[i])}`;
+      tip.textContent = `${months[i]} — ${fmtR(values[i])}`;
       crosshair.setAttribute("x1", pts[i][0]); crosshair.setAttribute("x2", pts[i][0]);
       crosshair.setAttribute("opacity", 1);
     };
@@ -309,7 +309,7 @@ function docCount(section, refId) {
 /* Reusable file manager. section: 'masterfile'|'action'|'score'|'general'|....
    opts.accept: input "accept" attribute (e.g. "application/pdf,.pdf") to steer the file
    picker; opts.match: a RegExp tested against the chosen file's name/type before upload
-   (client-side only â€” the storage bucket itself accepts any file type). Both optional. */
+   (client-side only — the storage bucket itself accepts any file type). Both optional. */
 function attachmentsModal(section, refId, title, opts) {
   opts = opts || {};
   const scrim = document.createElement("div");
@@ -317,7 +317,7 @@ function attachmentsModal(section, refId, title, opts) {
   scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
     <h3>${esc(title)}</h3>
     <div class="modal-body" style="display:block;">
-      <div id="att-list">${stateHtml("loading", "Loadingâ€¦")}</div>
+      <div id="att-list">${stateHtml("loading", "Loading…")}</div>
       ${CAN_EDIT ? `<label class="btn primary" style="margin-top:12px;display:inline-flex;cursor:pointer;">
         ${esc(opts.label || "Upload a file")}<input type="file" id="att-file" hidden${opts.accept ? ` accept="${esc(opts.accept)}"` : ""}></label>
         <span id="att-msg" style="font-size:11.5px;color:var(--ink-muted);margin-left:8px;"></span>` : ""}
@@ -368,7 +368,7 @@ function attachmentsModal(section, refId, title, opts) {
       msg.textContent = opts.matchMsg || "Unsupported file type."; fileInput.value = ""; return;
     }
     if (f.size > 25 * 1048576) { msg.textContent = "Max 25 MB."; fileInput.value = ""; return; }
-    msg.textContent = "Uploadingâ€¦";
+    msg.textContent = "Uploading…";
     try {
       await repo.uploadDoc(orgId, section, refId, f);
       bumpDocCount(section, refId, 1);
@@ -383,14 +383,14 @@ function attachmentsModal(section, refId, title, opts) {
   };
 }
 
-/* Inline file manager for a section/ref â€” used as a sub-tab panel. */
+/* Inline file manager for a section/ref — used as a sub-tab panel. */
 function mountFileList(host, section, refId, title, hint) {
   host.innerHTML = `
     <div class="card">
       <div class="card-head"><div><h3>${esc(title)}</h3>${hint ? `<span class="hint">${esc(hint)}</span>` : ""}</div>
         ${CAN_EDIT ? `<label class="btn primary" style="cursor:pointer;">Upload a file<input type="file" id="fl-file" hidden></label>` : ""}</div>
       <div id="fl-msg" style="font-size:11.5px;color:var(--ink-muted);margin-bottom:8px;"></div>
-      <div id="fl-list">${stateHtml("loading", "Loading documentsâ€¦")}</div>
+      <div id="fl-list">${stateHtml("loading", "Loading documents…")}</div>
     </div>`;
   const listEl = host.querySelector("#fl-list");
   const msg = host.querySelector("#fl-msg");
@@ -424,7 +424,7 @@ function mountFileList(host, section, refId, title, hint) {
     const f = fi.files[0];
     if (!f) return;
     if (f.size > 25 * 1048576) { msg.textContent = "Max 25 MB."; fi.value = ""; return; }
-    msg.textContent = "Uploadingâ€¦";
+    msg.textContent = "Uploading…";
     try { await repo.uploadDoc(orgId, section, refId, f); bumpDocCount(section, refId, 1); msg.textContent = ""; fi.value = ""; refresh(); if (onChange) onChange(); }
     catch (e) { msg.textContent = "Failed: " + (e.message || e); }
   };
@@ -441,7 +441,7 @@ function bumpDocCount(section, refId, delta) {
 function parseCSV(text) {
   const rows = [];
   let row = [], field = "", inQ = false;
-  text = text.replace(/^ï»¿/, "");
+  text = text.replace(/^﻿/, "");
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (inQ) {
@@ -456,7 +456,7 @@ function parseCSV(text) {
   return rows.filter((r) => r.some((v) => v.trim() !== ""));
 }
 
-/* ============ spreadsheet (XLSX) import â€” no library: a minimal in-browser
+/* ============ spreadsheet (XLSX) import — no library: a minimal in-browser
    .xlsx reader. An .xlsx is a zip of XML parts; this walks the zip's central
    directory, inflates just the two parts needed (styles + the first
    worksheet's shared strings + cells) with the browser's built-in
@@ -528,7 +528,7 @@ async function xlsxDateStyles(z) {
 }
 async function parseXLSX(buf) {
   if (typeof DecompressionStream === "undefined")
-    throw new Error("This browser can't read Excel files â€” try Chrome, Edge or Safari 16.4+, or export as CSV.");
+    throw new Error("This browser can't read Excel files — try Chrome, Edge or Safari 16.4+, or export as CSV.");
   const z = zipEntries(buf);
   const sstXml = await zipReadText(z, "xl/sharedStrings.xml");
   const sst = [];
@@ -607,18 +607,18 @@ function importModal(cfg) {
     const f = e.target.files[0];
     if (!f) return;
     scrim.querySelector("#imp-name").textContent = f.name;
-    msg.textContent = "Readingâ€¦";
+    msg.textContent = "Reading…";
     let rows;
     try {
       rows = /\.xlsx$/i.test(f.name) ? await parseXLSX(await f.arrayBuffer()) : parseCSV(await f.text());
     } catch (err) {
-      msg.textContent = "Couldn't read that file â€” " + (err.message || err);
+      msg.textContent = "Couldn't read that file — " + (err.message || err);
       return;
     }
     if (rows.length < 2) { msg.textContent = "That file has no data rows."; return; }
     headers = rows[0].map((h) => h.trim());
     dataRows = rows.slice(1);
-    const opts = ['<option value="">â€” skip â€”</option>']
+    const opts = ['<option value="">— skip —</option>']
       .concat(headers.map((h, i) => `<option value="${i}">${esc(h)}</option>`)).join("");
     mapEl.innerHTML = cfg.targets.map((t) => {
       const guess = headers.findIndex((h) => h.toLowerCase().replace(/[^a-z]/g, "").includes(
@@ -684,7 +684,7 @@ function listEditor(cfg) {
   scrim.querySelector('[data-act="close"]').onclick = close;
   function editRow(i) {
     const row = i == null ? cfg.blank() : cfg.arr[i];
-    openModal(i == null ? "Add â€” " + cfg.title : "Edit â€” " + cfg.title, cfg.fields(row), (out) => {
+    openModal(i == null ? "Add — " + cfg.title : "Edit — " + cfg.title, cfg.fields(row), (out) => {
       cfg.write(row, out);
       if (i == null) cfg.arr.push(row);
       commit(cfg.section);
@@ -697,11 +697,11 @@ function listEditor(cfg) {
         <span class="row-actions">
           <button type="button" data-e="${i}" title="Edit" aria-label="Edit entry">${PENCIL}</button>
           <button type="button" data-d="${i}" title="Delete" aria-label="Delete entry">${TRASH}</button>
-        </span></div>`).join("") : `<p class="muted">Nothing recorded yet â€” use â€œAddâ€.</p>`;
+        </span></div>`).join("") : `<p class="muted">Nothing recorded yet — use “Add”.</p>`;
     body.querySelectorAll("[data-e]").forEach((b) => (b.onclick = () => editRow(+b.dataset.e)));
     body.querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => {
       const i = +b.dataset.d;
-      confirmModal("Delete â€œ" + cfg.rowLabel(cfg.arr[i]) + "â€?", () => { cfg.arr.splice(i, 1); commit(cfg.section); build(); });
+      confirmModal("Delete “" + cfg.rowLabel(cfg.arr[i]) + "”?", () => { cfg.arr.splice(i, 1); commit(cfg.section); build(); });
     }));
   }
   scrim.querySelector('[data-act="add"]').onclick = () => editRow(null);
@@ -726,25 +726,25 @@ function wireSubtabs(host) {
 }
 
 /* A read table + Import/Manage buttons wired to an editor. cfg:
-   { title, hint, columns:[{label,cls}], rows:()=>arr, cell:(row)=>[htmlCell,â€¦],
-     manage:()=>void, importKey?, stats?:()=>[htmlTile,â€¦] } */
+   { title, hint, columns:[{label,cls}], rows:()=>arr, cell:(row)=>[htmlCell,…],
+     manage:()=>void, importKey?, stats?:()=>[htmlTile,…] } */
 /* Bulk filter + multi-select state, kept outside mountRegister so it survives
    the full-innerHTML re-renders this app does after every change. Opt-in via
-   cfg.bulkKey â€” every existing mountRegister call that doesn't set it renders
+   cfg.bulkKey — every existing mountRegister call that doesn't set it renders
    exactly as before. */
 const BULK_STATE = {};
 function bulkState(key) { return (BULK_STATE[key] ||= { selected: new Set(), filter: null, filterSeen: new Set(), filterOpen: false }); }
 function filterPopoverHtml(values, activeSet, label) {
   return `<div class="reg-filter-pop" data-reg-filterpop>
-    <div class="reg-filter-head">${esc(label)}<span><button type="button" data-fall>All</button> Â· <button type="button" data-fnone>None</button></span></div>
+    <div class="reg-filter-head">${esc(label)}<span><button type="button" data-fall>All</button> · <button type="button" data-fnone>None</button></span></div>
     ${values.map((v) => `<label><input type="checkbox" data-fval="${esc(v)}" ${activeSet.has(v) ? "checked" : ""}> ${esc(v)}</label>`).join("")}
   </div>`;
 }
 
 function mountRegister(host, cfg) {
   const allRows = cfg.rows();
-  const bulk = cfg.bulkKey ? bulkState(cfg.bulkKey) : null;      // filtering â€” available to everyone
-  const canDelete = bulk && CAN_EDIT;                            // selecting + deleting â€” editors only
+  const bulk = cfg.bulkKey ? bulkState(cfg.bulkKey) : null;      // filtering — available to everyone
+  const canDelete = bulk && CAN_EDIT;                            // selecting + deleting — editors only
   const rid = cfg.rowId || ((r) => r._id);
 
   let rows = allRows;
@@ -757,8 +757,8 @@ function mountRegister(host, cfg) {
   }
 
   // Free-text search (opt-in via cfg.search): every word typed must appear somewhere in the
-  // row's data â€” names, refs, masked IDs, household, contact, notes â€” in any order.
-  // Quick toggles (opt-in via cfg.toggles: [{key,label,test}]) â€” each narrows the list to rows passing `test`.
+  // row's data — names, refs, masked IDs, household, contact, notes — in any order.
+  // Quick toggles (opt-in via cfg.toggles: [{key,label,test}]) — each narrows the list to rows passing `test`.
   const togs = cfg.toggles || [];
   const tstate = togs.length ? bulkState(cfg.bulkKey || "toggle:" + cfg.title) : null;
   if (tstate) { tstate.tog ||= {}; togs.forEach((t) => { if (tstate.tog[t.key]) rows = rows.filter(t.test); }); }
@@ -778,16 +778,16 @@ function mountRegister(host, cfg) {
 
   const tools = [];
   if (sstate) tools.push(`<span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off"
-      placeholder="${esc(cfg.search === true ? "Search this listâ€¦" : cfg.search)}" value="${esc(sstate.q || "")}" aria-label="Search ${esc(cfg.title)}">${q ? `<span class="hint reg-search-n">${rows.length} of ${pool.length}</span>` : ""}</span>`);
+      placeholder="${esc(cfg.search === true ? "Search this list…" : cfg.search)}" value="${esc(sstate.q || "")}" aria-label="Search ${esc(cfg.title)}">${q ? `<span class="hint reg-search-n">${rows.length} of ${pool.length}</span>` : ""}</span>`);
   togs.forEach((t) => {
     const on = !!tstate.tog[t.key], n = allRows.filter(t.test).length;
-    tools.push(`<button class="btn${on ? " active" : ""}" data-reg-tog="${esc(t.key)}" type="button" aria-pressed="${on}" title="${on ? "Showing only these â€” click to show everyone" : "Show only these"}">${esc(t.label)} (${n})</button>`);
+    tools.push(`<button class="btn${on ? " active" : ""}" data-reg-tog="${esc(t.key)}" type="button" aria-pressed="${on}" title="${on ? "Showing only these — click to show everyone" : "Show only these"}">${esc(t.label)} (${n})</button>`);
   });
   if (CAN_EDIT && cfg.addNew) tools.push(`<button class="btn primary" data-reg-add type="button">+ ${esc(cfg.addNew.label)}</button>`);
   if (CAN_EDIT && cfg.importKey) tools.push(`<button class="btn" data-reg-import type="button">Import CSV / Excel</button>`);
   if (bulk && distinctVals.length > 1) {
     const on = bulk.filter.size < distinctVals.length;
-    tools.push(`<button class="btn${on ? " active" : ""}" data-reg-filter type="button">Filter${on ? ` Â· ${bulk.filter.size}/${distinctVals.length}` : ""}</button>`);
+    tools.push(`<button class="btn${on ? " active" : ""}" data-reg-filter type="button">Filter${on ? ` · ${bulk.filter.size}/${distinctVals.length}` : ""}</button>`);
   }
   if (CAN_EDIT) tools.push(`<button class="btn" data-reg-manage type="button">Manage</button>`);
   if (CAN_EDIT && cfg.extraTools) tools.push(...cfg.extraTools);
@@ -812,7 +812,7 @@ function mountRegister(host, cfg) {
             const chk = canDelete ? `<td class="chk"><input type="checkbox" data-reg-sel="${esc(id)}" ${bulk.selected.has(id) ? "checked" : ""} aria-label="Select row"></td>` : "";
             return `<tr>${chk}${cfg.cell(r).map((cell, i) => `<td class="${cfg.columns[i].cls || ""}">${cell}</td>`).join("")}</tr>`;
           }).join("")
-        : emptyRow(cfg.columns.length + (canDelete ? 1 : 0), q ? `No match for â€œ${sstate.q.trim()}â€ â€” try fewer or shorter words.` : (cfg.empty || "Nothing recorded yet."))}</tbody>
+        : emptyRow(cfg.columns.length + (canDelete ? 1 : 0), q ? `No match for “${sstate.q.trim()}” — try fewer or shorter words.` : (cfg.empty || "Nothing recorded yet."))}</tbody>
     </table></div>`;
   const si = host.querySelector("[data-reg-search]");
   if (si) {
@@ -836,7 +836,7 @@ function mountRegister(host, cfg) {
   if (ab) ab.onclick = () => {
     const ed = cfg.addNew.editor();
     const row = ed.blank();
-    openModal("Add â€” " + cfg.addNew.label.replace(/^Add /i, ""), ed.fields(row), (out) => {
+    openModal("Add — " + cfg.addNew.label.replace(/^Add /i, ""), ed.fields(row), (out) => {
       ed.write(row, out);
       ed.arr.push(row);
       if (cfg.addNew.after) cfg.addNew.after(row);
@@ -900,7 +900,7 @@ function householdMaxSeq() {
 }
 function nextHouseholdRef() { return `MCPA-${String(householdMaxSeq() + 1).padStart(3, "0")}`; }
 /* Enforced ID masking: keeps only the last 4 characters typed, replaces the
-   rest with *. Idempotent â€” re-saving an already-masked value (e.g. ****1234)
+   rest with *. Idempotent — re-saving an already-masked value (e.g. ****1234)
    produces the same result, so it's safe to run on every save. */
 function maskId(raw) {
   const s = (raw || "").trim();
@@ -954,8 +954,8 @@ function editIdentity() {
 function editCommittee() {
   listEditor({
     title: "EXCO & office bearers", arr: DATA.committee, section: "committee",
-    rowLabel: (r) => `${r[1] || "â€”"} Â· ${r[0]} (${r[3] || "EXCO"})`,
-    blank: () => ["Additional Member", "", new Date().getFullYear() + " â€“ present", "EXCO"],
+    rowLabel: (r) => `${r[1] || "—"} · ${r[0]} (${r[3] || "EXCO"})`,
+    blank: () => ["Additional Member", "", new Date().getFullYear() + " – present", "EXCO"],
     fields: (r) => [
       { key: "body", label: "Body", type: "select", options: ["EXCO", "Office Bearer", "Sub-committee"], value: r[3] || "EXCO" },
       { key: "role", label: "Role / portfolio", type: "text", value: r[0], required: true },
@@ -991,7 +991,7 @@ function editBeneficiary() {
 function editLand() {
   listEditor({
     title: "Land portions", arr: DATA.assets.land, section: "land",
-    rowLabel: (r) => `${r[0]} â€” ${r[1] || "â€”"} (${(+r[2] || 0).toLocaleString()} ha)`,
+    rowLabel: (r) => `${r[0]} — ${r[1] || "—"} (${(+r[2] || 0).toLocaleString()} ha)`,
     blank: () => ["Portion " + (DATA.assets.land.length + 1), "", 0, "", "Active"],
     fields: (r) => [
       { key: "portion", label: "Portion", type: "text", value: r[0], required: true },
@@ -1006,7 +1006,7 @@ function editLand() {
 function editLeases() {
   listEditor({
     title: "Land leases", arr: DATA.assets.leases, section: "leases",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[1] || "â€”"} (${(+r[3] || 0).toLocaleString()} ha)`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[1] || "—"} (${(+r[3] || 0).toLocaleString()} ha)`,
     blank: () => ["", "", "", 0, "", "", 0, "Active"],
     fields: (r) => [
       { key: "party", label: "Lessee / party", type: "text", value: r[0], required: true },
@@ -1027,7 +1027,7 @@ function editLeases() {
 function editAllocations() {
   listEditor({
     title: "Land allocated to beneficiaries", arr: DATA.assets.allocations, section: "allocations",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[1] || "â€”"} (${(+r[3] || 0).toLocaleString()} ha)`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[1] || "—"} (${(+r[3] || 0).toLocaleString()} ha)`,
     blank: () => ["", "", "", 0, "", "", "Active"],
     fields: (r) => [
       { key: "beneficiary", label: "Beneficiary / household", type: "text", value: r[0], required: true },
@@ -1047,7 +1047,7 @@ function editAllocations() {
 function editMovable() {
   listEditor({
     title: "Movable assets", arr: DATA.assets.movable, section: "movable",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[1]}`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[1]}`,
     blank: () => ["", 0, "Serviceable"],
     fields: (r) => [
       { key: "cls", label: "Asset class", type: "text", value: r[0], required: true },
@@ -1058,13 +1058,13 @@ function editMovable() {
   });
 }
 /* ============ Timber Permit workflow (Permits & Licences) ============
-   A permit row can carry an optional applicationâ†’verificationâ†’issuance
+   A permit row can carry an optional application→verification→issuance
    workflow, used when commodity = "Timber" (water use / grazing /
    environmental permits just ignore these fields and behave exactly as
    before). Modelled on the real DFFE "Application for a Licence Regarding
-   Protected/Indigenous Trees" (National Forests Act 84 of 1998) structure â€”
+   Protected/Indigenous Trees" (National Forests Act 84 of 1998) structure —
    applicant particulars, site description, species/quantity table, method
-   statement, attachments checklist, declaration, office-use verification â€”
+   statement, attachments checklist, declaration, office-use verification —
    but generated as the CPA's OWN internal permit, not a government form:
    it explicitly does not replace any statutory licence the applicant may
    still need. */
@@ -1132,7 +1132,7 @@ function permitApplicationBodyHtml(r) {
   return `
 <p class="warn"><b>Please read carefully.</b> This is ${esc(DATA.cpa.name || "the CPA")}'s own internal permit application for
 harvesting timber on its communal land. Completing and lodging this form does <b>not</b> exempt the applicant from any
-licence required under the National Forests Act, 84 of 1998, or other legislation (e.g. NEMA, provincial permits) â€” the
+licence required under the National Forests Act, 84 of 1998, or other legislation (e.g. NEMA, provincial permits) — the
 applicant remains solely responsible for their own statutory compliance.</p>
 
 <h2>A &nbsp;Particulars of Applicant</h2>
@@ -1166,7 +1166,7 @@ applicant remains solely responsible for their own statutory compliance.</p>
 <p class="fill">_____________________________________________________________________________________</p>
 <p>Transport arrangements from the harvesting site to its destination:</p>
 <p class="fill">_____________________________________________________________________________________</p>
-<p>If for sale â€” buyer/purchaser name, address and contact details:</p>
+<p>If for sale — buyer/purchaser name, address and contact details:</p>
 <p class="fill">_____________________________________________________________________________________</p>
 
 <h2>E &nbsp;Attachments</h2>
@@ -1191,7 +1191,7 @@ remain responsible for obtaining any licence required by law before commencing a
   <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
 </table>`;
 }
-/* Chairperson / Secretary signatures (Brand Box â†’ Signatures). Printed names come from the
+/* Chairperson / Secretary signatures (Brand Box → Signatures). Printed names come from the
    Governance office-bearers register. */
 const sigImg = (which, h = 40) => {
   const u = which === "chair" ? DATA.cpa.chairSig : DATA.cpa.secretarySig;
@@ -1202,7 +1202,7 @@ const chairName = () => signerName(/chair/i, /vice|deputy/i);
 const secName = () => signerName(/secretar/i, /assistant|deputy/i);
 const sigCell = (which) => `${sigImg(which)}<div style="font-size:8pt;color:#555;">${esc(which === "chair" ? chairName() : secName())}</div>`;
 function permitCertificateBodyHtml(r) {
-  const validRange = r[1] ? "Until " + esc(r[1]) : "â€”";
+  const validRange = r[1] ? "Until " + esc(r[1]) : "—";
   return `
 <div class="cert">
   <h1>Timber Harvesting Permit</h1>
@@ -1221,7 +1221,7 @@ function permitCertificateBodyHtml(r) {
   <ol>
     <li>This permit is issued under ${esc(DATA.cpa.name || "the CPA")}'s own institutional governance and land-allocation
       authority. It does <b>not</b> constitute, and does not replace, any licence required under the National Forests Act,
-      84 of 1998, or any other applicable legislation â€” the holder remains solely responsible for obtaining any such
+      84 of 1998, or any other applicable legislation — the holder remains solely responsible for obtaining any such
       statutory licence before commencing harvesting.</li>
     <li>Harvesting is confined strictly to the species, quantity and site specified above.</li>
     <li>This permit may be suspended or revoked by ${esc(DATA.cpa.name || "the CPA")} for breach of its conditions.</li>
@@ -1265,13 +1265,13 @@ function issuePermit(idx) {
 }
 async function emailPermitToApplicant(idx) {
   const r = DATA.assets.permits[idx];
-  if (!(r[5] || "").trim()) { toast("Add the applicant's e-mail address first (Manage â†’ edit this row).", true); return; }
+  if (!(r[5] || "").trim()) { toast("Add the applicant's e-mail address first (Manage → edit this row).", true); return; }
   const bodyHtml = permitCertificateBodyHtml(r);
   const html = permitDocShell("Timber Harvesting Permit", `Permit ${r[11] || ""}`, bodyHtml);
-  toast("Sendingâ€¦");
+  toast("Sending…");
   try {
     await repo.sendPermitEmail({
-      orgId, to: r[5], subject: `${DATA.cpa.name || "CPA360"} â€” Timber Harvesting Permit ${r[11] || ""}`,
+      orgId, to: r[5], subject: `${DATA.cpa.name || "CPA360"} — Timber Harvesting Permit ${r[11] || ""}`,
       html: `<p>Dear ${esc(r[4] || "Applicant")},</p><p>Please find attached your timber harvesting permit, ${esc(r[11] || "")}.</p>${bodyHtml}`,
       filename: `Timber-Permit-${r[11] || ""}.doc`,
       fileBase64: btoa(unescape(encodeURIComponent(html))),
@@ -1287,7 +1287,7 @@ async function emailPermitToApplicant(idx) {
 function editPermits() {
   listEditor({
     title: "Permits & licences", arr: DATA.assets.permits, section: "permits",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[2]}`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[2]}`,
     blank: () => ["", "", "Not Started", "Other", "", "", "", "", "", "", "Not Started", "", "", ""],
     fields: (r) => [
       { key: "name", label: "Permit / licence", type: "text", value: r[0], required: true },
@@ -1315,13 +1315,13 @@ function editFinanceFigures() {
   const f = DATA.finance;
   openModal("Finance figures", [
     { key: "annualBudget", label: "Annual budget (R)", type: "number", value: f.annualBudget },
-    { key: "ytdIncomeBudget", label: "YTD income â€” budget (R)", type: "number", value: f.ytdIncomeBudget },
-    { key: "ytdIncomeActual", label: "YTD income â€” actual (R)", type: "number", value: f.ytdIncomeActual },
-    { key: "ytdExpBudget", label: "YTD expenditure â€” budget (R)", type: "number", value: f.ytdExpBudget },
-    { key: "ytdExpActual", label: "YTD expenditure â€” actual (R)", type: "number", value: f.ytdExpActual },
+    { key: "ytdIncomeBudget", label: "YTD income — budget (R)", type: "number", value: f.ytdIncomeBudget },
+    { key: "ytdIncomeActual", label: "YTD income — actual (R)", type: "number", value: f.ytdIncomeActual },
+    { key: "ytdExpBudget", label: "YTD expenditure — budget (R)", type: "number", value: f.ytdExpBudget },
+    { key: "ytdExpActual", label: "YTD expenditure — actual (R)", type: "number", value: f.ytdExpActual },
     { key: "cashBalance", label: "Current cash balance (R)", type: "number", value: f.cashBalance },
-    { key: "cashMonths", label: "Cash chart â€” month labels (comma-separated)", type: "text", value: f.cashMonths.join(", ") },
-    { key: "cashTrend", label: "Cash chart â€” monthly balances (comma-separated R)", type: "textarea", value: f.cashTrend.join(", ") },
+    { key: "cashMonths", label: "Cash chart — month labels (comma-separated)", type: "text", value: f.cashMonths.join(", ") },
+    { key: "cashTrend", label: "Cash chart — monthly balances (comma-separated R)", type: "textarea", value: f.cashTrend.join(", ") },
   ], (out) => {
     ["annualBudget", "ytdIncomeBudget", "ytdIncomeActual", "ytdExpBudget", "ytdExpActual", "cashBalance"].forEach((k) => {
       const v = parseFloat(out[k]); if (!isNaN(v)) f[k] = v;
@@ -1336,7 +1336,7 @@ function editFinanceFigures() {
 function editCategories() {
   listEditor({
     title: "Budget categories", arr: DATA.finance.categories, section: "categories",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${fmtR(r[2])} / ${fmtR(r[1])}`,
+    rowLabel: (r) => `${r[0] || "—"} — ${fmtR(r[2])} / ${fmtR(r[1])}`,
     blank: () => ["", 0, 0],
     fields: (r) => [
       { key: "name", label: "Category", type: "text", value: r[0], required: true },
@@ -1373,7 +1373,7 @@ function editProject(idx) {
   });
 }
 function deleteProject(idx) {
-  confirmModal(`Delete project â€œ${(DATA.projects[idx] || [])[0] || ""}â€?`, () => { DATA.projects.splice(idx, 1); commit("projects"); });
+  confirmModal(`Delete project “${(DATA.projects[idx] || [])[0] || ""}”?`, () => { DATA.projects.splice(idx, 1); commit("projects"); });
 }
 function editImpactFigures() {
   objectEditor("Impact figures", DATA.impact, [
@@ -1390,7 +1390,7 @@ function editImpactFigures() {
 function editJobsByYear() {
   listEditor({
     title: "Jobs created by year", arr: DATA.impact.jobsByYear, section: "impact",
-    rowLabel: (r) => `${r[0]} â€” ${r[1]} FTE`,
+    rowLabel: (r) => `${r[0]} — ${r[1]} FTE`,
     blank: () => [String(new Date().getFullYear()), 0],
     fields: (r) => [
       { key: "year", label: "Year", type: "text", value: r[0], required: true },
@@ -1433,7 +1433,7 @@ function renderProfile() {
 function renderGovIdentity(host) {
   const c = DATA.cpa;
   const total = scoreTotal();
-  const gCur = DATA.gates.find((g) => g.state === "current") || DATA.gates[DATA.gates.length - 1] || { n: "â€“", name: "â€”" };
+  const gCur = DATA.gates.find((g) => g.state === "current") || DATA.gates[DATA.gates.length - 1] || { n: "–", name: "—" };
   const now = new Date();
   const overdue = DATA.actions.filter((a) => a[5] === "Overdue");
   const dueSoon = DATA.actions.filter((a) => {
@@ -1459,7 +1459,7 @@ function renderGovIdentity(host) {
     </div>
     ${parts.length ? `<div class="callout" style="margin-top:14px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3.5 22 20H2z"/><path d="M12 10v4M12 17.2v.1"/></svg>
-      <div>Attention needed â€” ${parts.join(" Â· ")}. Open the <a href="#/v/actions" style="font-weight:600;text-decoration:underline;">Action Tracker</a>.</div></div>` : ""}
+      <div>Attention needed — ${parts.join(" · ")}. Open the <a href="#/v/actions" style="font-weight:600;text-decoration:underline;">Action Tracker</a>.</div></div>` : ""}
     <div class="grid grid-2" style="margin-top:16px;">
       <div class="card">
         <div class="card-head"><h3>Institutional Identity</h3>${CAN_EDIT ? `<button class="btn" id="gov-edit-identity" type="button">Edit</button>` : ""}</div>
@@ -1476,7 +1476,7 @@ function renderGovIdentity(host) {
         <div class="card-head"><h3>Office Bearers</h3><span class="hint">${DATA.committee.filter((r) => r[3] === "Office Bearer").length || DATA.committee.length} on record</span></div>
         ${DATA.committee.length ? `<table><tbody>${DATA.committee.map(([role, name, term]) =>
           `<tr><td style="color:var(--ink-2);font-size:12px;">${esc(role)}</td><td style="font-weight:600;">${esc(name)}</td><td style="color:var(--ink-muted);font-size:11.5px;">${esc(term)}</td></tr>`).join("")}</tbody></table>`
-          : `<p class="muted">No members recorded â€” see the EXCO tab.</p>`}
+          : `<p class="muted">No members recorded — see the EXCO tab.</p>`}
       </div>
     </div>`;
   const eb = host.querySelector("#gov-edit-identity");
@@ -1506,14 +1506,14 @@ function renderGovCommittees(host) {
     manage: () => listEditor(GOV_EDITORS.committees()),
   });
 }
-/* A resolution can always be saved with no attachments â€” these are two
+/* A resolution can always be saved with no attachments — these are two
    optional, independently-tracked evidence slots layered on top of the row
    via the generic documents store (section "resolution" / "resolution-attendance"). */
 function resDocCellHtml(refId) {
   const doc = docCount("resolution", refId);
   const att = docCount("resolution-attendance", refId);
   const chip = (kind, icon, n, label) => `<button type="button" class="doc-chip${n ? "" : " missing"}"
-      data-res-${kind}="${esc(refId)}" title="${label}${n ? ` â€” ${n} file${n > 1 ? "s" : ""} attached` : " â€” missing"}"
+      data-res-${kind}="${esc(refId)}" title="${label}${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
       aria-label="${label}${n ? "" : ", missing"}">${icon}${n ? `<span>${n}</span>` : ""}</button>`;
   return `<div class="row-actions doc-chips">
     ${chip("doc", CLIP, doc, "Signed resolution")}
@@ -1526,7 +1526,7 @@ function renderGovResolutions(host) {
   const missingDoc = rows.filter((r) => docCount("resolution", r._id) === 0).length;
   mountRegister(host, {
     title: "Resolutions Register", importKey: "gov_resolutions",
-    hint: "Decisions of the EXCO and general meetings â€” with their implementation status. Attach the signed resolution and the meeting's attendance register once they're available; a resolution can be recorded before either is ready.",
+    hint: "Decisions of the EXCO and general meetings — with their implementation status. Attach the signed resolution and the meeting's attendance register once they're available; a resolution can be recorded before either is ready.",
     stats: () => [
       statTile("Resolutions", rows.length, "On record", ""),
       statTile("Still Open", open, "Not yet implemented", open ? "warning" : "good"),
@@ -1543,16 +1543,16 @@ function renderGovResolutions(host) {
     afterRender: (h) => {
       h.querySelectorAll("[data-res-doc]").forEach((b) => (b.onclick = () => {
         const r = rows.find((x) => String(x._id) === b.dataset.resDoc);
-        attachmentsModal("resolution", r._id, "Signed resolution â€” " + (r[0] || r[3].slice(0, 40)));
+        attachmentsModal("resolution", r._id, "Signed resolution — " + (r[0] || r[3].slice(0, 40)));
       }));
       h.querySelectorAll("[data-res-att]").forEach((b) => (b.onclick = () => {
         const r = rows.find((x) => String(x._id) === b.dataset.resAtt);
-        attachmentsModal("resolution-attendance", r._id, "Attendance register â€” " + (r[0] || r[3].slice(0, 40)));
+        attachmentsModal("resolution-attendance", r._id, "Attendance register — " + (r[0] || r[3].slice(0, 40)));
       }));
     },
   });
 }
-/* A meeting can always be saved with no attachment â€” the scanned attendance
+/* A meeting can always be saved with no attachment — the scanned attendance
    register is an optional evidence slot layered on top of the row via the
    generic documents store (section "meeting-attendance"), same pattern as
    the Resolutions register's doc chips. */
@@ -1560,7 +1560,7 @@ function meetingDocCellHtml(refId) {
   const att = docCount("meeting-attendance", refId);
   return `<div class="row-actions doc-chips">
     <button type="button" class="doc-chip${att ? "" : " missing"}"
-      data-meet-att="${esc(refId)}" title="Attendance register${att ? ` â€” ${att} file${att > 1 ? "s" : ""} attached` : " â€” missing"}"
+      data-meet-att="${esc(refId)}" title="Attendance register${att ? ` — ${att} file${att > 1 ? "s" : ""} attached` : " — missing"}"
       aria-label="Attendance register${att ? "" : ", missing"}">${ATTENDEES}${att ? `<span>${att}</span>` : ""}</button>
   </div>`;
 }
@@ -1572,8 +1572,8 @@ function renderGovMeetingList(host, kinds) {
   const nextAgm = (DATA.governance.calendar || []).find((r) => /general meeting/i.test(r[0]));
   mountRegister(host, {
     title: kinds ? "AGM / SGM Records" : "Meetings Register", importKey: "gov_meetings",
-    hint: (kinds && nextAgm ? `Next AGM due ${nextAgm[2] || "â€”"}. ` : (kinds ? "Annual and special general meetings. " : "All governance meetings and their minute status. "))
-      + "Attach the scanned attendance register once it's available â€” a meeting can be recorded before it's ready.",
+    hint: (kinds && nextAgm ? `Next AGM due ${nextAgm[2] || "—"}. ` : (kinds ? "Annual and special general meetings. " : "All governance meetings and their minute status. "))
+      + "Attach the scanned attendance register once it's available — a meeting can be recorded before it's ready.",
     columns: [{ label: "Type" }, { label: "Date" }, { label: "Venue" }, { label: "Quorum" }, { label: "Attendance", cls: "num" }, { label: "Minutes" }, { label: "Notes" }, { label: "Attendance reg." }],
     rows: () => rows,
     empty: kinds ? "No general meetings recorded." : "No meetings recorded.",
@@ -1584,7 +1584,7 @@ function renderGovMeetingList(host, kinds) {
     afterRender: (h) => {
       h.querySelectorAll("[data-meet-att]").forEach((b) => (b.onclick = () => {
         const r = rows.find((x) => String(x._id) === b.dataset.meetAtt);
-        attachmentsModal("meeting-attendance", r._id, "Attendance register â€” " + (r[0] || "Meeting") + " " + (r[1] || ""), {
+        attachmentsModal("meeting-attendance", r._id, "Attendance register — " + (r[0] || "Meeting") + " " + (r[1] || ""), {
           accept: "application/pdf,.pdf", label: "Upload the scanned register (PDF)",
           match: /\.pdf$|^application\/pdf$/i, matchMsg: "Please choose a PDF file.",
         });
@@ -1638,14 +1638,14 @@ function renderGovCalendar(host) {
   });
 }
 
-/* ============ Government Reports (Governance â†’ Gov. Reports) ============
-   What a CPA owes the Department â€” the CPA Office / Registrar of Communal
+/* ============ Government Reports (Governance → Gov. Reports) ============
+   What a CPA owes the Department — the CPA Office / Registrar of Communal
    Property Associations (Dept. of Land Reform and Rural Development). Each row
    is one obligation instance (e.g. "Annual financial statements, FY2025/26");
    the catalogue below holds the legal basis, what goes in the pack, and an
    auto-scan that checks the CPA's own registers for readiness. Annual returns
    fall due two months after the AGM (CPA Act regulations 8, 9 & 11 as applied
-   by the Department). This is guidance, not legal advice â€” the tab says so and
+   by the Department). This is guidance, not legal advice — the tab says so and
    points users to the CPA Office for prescribed forms.
    "Collaborate" never calls a meeting API (no secrets needed): it deep-links
    into Teams / Google Calendar / Zoom pre-filled, and also offers an .ics file
@@ -1685,9 +1685,9 @@ const GOV_REPORT_TYPES = [
     enclosures: ["Notice of the AGM and proof members were notified", "Signed (or adopted) minutes of the AGM", "Attendance register", "Resolutions passed at the AGM"],
     ready: () => {
       const a = latestAgm();
-      if (!a) return { ratio: 0, gaps: ["No AGM recorded â€” add it under Governance â†’ AGM / SGM"] };
+      if (!a) return { ratio: 0, gaps: ["No AGM recorded — add it under Governance → AGM / SGM"] };
       const gaps = [];
-      if (a[5] === "Draft") gaps.push("AGM minutes are still a draft â€” get them adopted and signed");
+      if (a[5] === "Draft") gaps.push("AGM minutes are still a draft — get them adopted and signed");
       if (a[5] === "Pending") gaps.push("AGM minutes have not been written up yet");
       const att = docCount("meeting-attendance", a._id) > 0;
       if (!att) gaps.push("Scanned attendance register not attached to the AGM record");
@@ -1695,25 +1695,25 @@ const GOV_REPORT_TYPES = [
       return { ratio: base * 0.85 + (att ? 0.15 : 0), gaps };
     } },
   { type: "committee_return", title: "Governing body (committee) return", category: "Statutory", annual: true,
-    basis: "Names â€” and, where readily available, ID numbers and addresses â€” of the governing body members elected at the AGM must reach the Director-General within two months of that AGM.",
+    basis: "Names — and, where readily available, ID numbers and addresses — of the governing body members elected at the AGM must reach the Director-General within two months of that AGM.",
     enclosures: ["List of governing body members elected at the AGM (name, ID number, address, position)", "Extract of the AGM minutes recording the election", "Certified ID copies where available"],
     ready: () => {
       const c = (DATA.committee || []).filter((r) => (r[1] || "").trim());
-      if (!c.length) return { ratio: 0, gaps: ["No office bearers recorded â€” add them under Governance â†’ EXCO & Office Bearers"] };
+      if (!c.length) return { ratio: 0, gaps: ["No office bearers recorded — add them under Governance → EXCO & Office Bearers"] };
       const missing = [["Chairperson", /chair/i], ["Secretary", /secretar/i], ["Treasurer", /treasur/i]].filter(([, re]) => !c.some((r) => re.test(r[0] || ""))).map(([n]) => n);
       return { ratio: 1 - missing.length / 3, gaps: missing.map((n) => `No ${n} recorded`),
-        note: "The register holds names and roles â€” add each member's ID number and address to the return itself." };
+        note: "The register holds names and roles — add each member's ID number and address to the return itself." };
     } },
   { type: "afs", title: "Annual financial statements (independently verified)", category: "Statutory", annual: true,
     basis: "Annual balance sheet / financial statements, independently verified, must be furnished to the Director-General within two months of the AGM (CPA Act regulations).",
     enclosures: ["Annual financial statements for the year", "Independent auditor's / reviewer's report", "Members' resolution adopting the statements"],
     ready: () => {
       const afs = DATA.finProc?.afs || [];
-      if (!afs.length) return { ratio: 0, gaps: ["No financial year recorded â€” add one under Finance â†’ Annual Financial Statements"] };
+      if (!afs.length) return { ratio: 0, gaps: ["No financial year recorded — add one under Finance → Annual Financial Statements"] };
       const latest = [...afs].sort((a, b) => String(b[0]).localeCompare(String(a[0])))[0];
       const by = { "Draft": 0.3, "Under Audit": 0.5, "Audited": 0.85, "Adopted": 0.95, "Filed": 1 };
       const gaps = [];
-      if (!["Audited", "Adopted", "Filed"].includes(latest[1])) gaps.push(`FY ${latest[0]} is "${latest[1]}" â€” the Department expects independently verified statements`);
+      if (!["Audited", "Adopted", "Filed"].includes(latest[1])) gaps.push(`FY ${latest[0]} is "${latest[1]}" — the Department expects independently verified statements`);
       if (latest[1] !== "Adopted" && latest[1] !== "Filed") gaps.push("Statements not yet adopted by the members");
       return { ratio: by[latest[1]] ?? 0, gaps };
     } },
@@ -1722,15 +1722,15 @@ const GOV_REPORT_TYPES = [
     enclosures: ["Schedule of land transactions in the year (leases, allocations, disposals, encumbrances)", "Copies of lease / allocation agreements concluded", "Members' resolutions approving any disposal"],
     ready: () => {
       const n = (DATA.assets.leases || []).length, m = (DATA.assets.allocations || []).length;
-      if (n + m) return { ratio: 1, gaps: [], note: `${n} lease(s) and ${m} allocation(s) are on record â€” confirm which fall in this reporting year.` };
-      return { ratio: 0.5, gaps: ["No leases or allocations recorded â€” if there were none this year, file a nil return"] };
+      if (n + m) return { ratio: 1, gaps: [], note: `${n} lease(s) and ${m} allocation(s) are on record — confirm which fall in this reporting year.` };
+      return { ratio: 0.5, gaps: ["No leases or allocations recorded — if there were none this year, file a nil return"] };
     } },
   { type: "membership", title: "Membership list update", category: "Statutory", annual: true,
     basis: "The membership list must be updated and furnished to the Director-General every year (CPA Act regulations).",
     enclosures: ["Updated membership register (name, ID number, household, status)", "Changes since the last return (new, deceased, resigned, succession)"],
     ready: () => {
       const reg = DATA.beneficiaryCentre?.register || [];
-      if (!reg.length) return { ratio: 0, gaps: ["No members on the register â€” build it under Beneficiaries"] };
+      if (!reg.length) return { ratio: 0, gaps: ["No members on the register — build it under Beneficiaries"] };
       const ver = reg.filter((r) => /^verified$/i.test(r[9] || "")).length;
       const gaps = ver < reg.length ? [`${reg.length - ver} of ${reg.length} members not yet verified`] : [];
       return { ratio: 0.5 + 0.5 * (ver / reg.length), gaps };
@@ -1788,8 +1788,8 @@ function openMailto(to, subject, body, cc) {
   const mk = (b) => `mailto:${encodeURIComponent(to || "").replace(/%2C/g, ",").replace(/%40/g, "@")}?subject=${encodeURIComponent(subject)}${cc ? `&cc=${encodeURIComponent(cc)}` : ""}&body=${encodeURIComponent(b)}`;
   let url = mk(body);
   if (url.length > 1900) {
-    copyText(body).then((ok) => toast(ok ? "Long message â€” full text copied; paste it into the e-mail." : "Long message â€” use \u201CCopy e-mail text\u201D and paste it in.", false));
-    url = mk("(Full text copied to your clipboard â€” paste it here.)");
+    copyText(body).then((ok) => toast(ok ? "Long message — full text copied; paste it into the e-mail." : "Long message — use \u201CCopy e-mail text\u201D and paste it in.", false));
+    url = mk("(Full text copied to your clipboard — paste it here.)");
   }
   window.location.href = url;
 }
@@ -1803,26 +1803,26 @@ function govEnclosureTable(rows) {
   return `<table><tr><th style="width:8%;">No.</th><th>Document</th><th style="width:14%;">Enclosed</th></tr>${rows.map((r) => {
     const t = govType(r);
     const list = t ? t.enclosures : ["Supporting documents"];
-    return `${rows.length > 1 ? `<tr><td colspan="3" style="background:#eef2f7;"><b>${esc(r[1])}${r[3] ? " â€” " + esc(r[3]) : ""}</b></td></tr>` : ""}${list.map((e) => `<tr><td>${++n}</td><td>${esc(e)}</td><td>&#9744;</td></tr>`).join("")}`;
+    return `${rows.length > 1 ? `<tr><td colspan="3" style="background:#eef2f7;"><b>${esc(r[1])}${r[3] ? " — " + esc(r[3]) : ""}</b></td></tr>` : ""}${list.map((e) => `<tr><td>${++n}</td><td>${esc(e)}</td><td>&#9744;</td></tr>`).join("")}`;
   }).join("")}</table>`;
 }
 function govPackBody(rows) {
   const single = rows.length === 1 ? rows[0] : null;
-  const subject = single ? `${single[1]}${single[3] ? " â€” " + single[3] : ""}` : `Annual return â€” ${rows[0][3] || "current year"}`;
+  const subject = single ? `${single[1]}${single[3] ? " — " + single[3] : ""}` : `Annual return — ${rows[0][3] || "current year"}`;
   const dues = rows.map((r) => r[4]).filter(Boolean).sort();
   return `${govLetterHead(single)}
-    <p><b>Re: ${esc(subject)} â€” ${esc(DATA.cpa.name)}${DATA.cpa.reg ? ` (${esc(DATA.cpa.reg)})` : ""}</b></p>
+    <p><b>Re: ${esc(subject)} — ${esc(DATA.cpa.name)}${DATA.cpa.reg ? ` (${esc(DATA.cpa.reg)})` : ""}</b></p>
     <p>Dear Registrar,</p>
     <p>${esc(DATA.cpa.name)} hereby submits ${single ? `its <b>${esc(single[1])}</b>${single[3] ? ` for <b>${esc(single[3])}</b>` : ""}` : `its <b>annual return</b>${rows[0][3] ? ` for <b>${esc(rows[0][3])}</b>` : ""}`},
       in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), as amended, and its regulations.${dues.length ? ` The return falls due on ${esc(fmtDay(dues[0]))}.` : ""}</p>
     <h2>Enclosures</h2>${govEnclosureTable(rows)}
     <p>Kindly acknowledge receipt and quote your reference number in future correspondence.</p>
     <p>Yours faithfully,</p>
-    <table class="sig"><tr><th>Chairperson â€” signature</th><th>Secretary â€” signature</th><th>Date</th></tr><tr><td>${sigCell("chair")}&nbsp;</td><td>${sigCell("secretary")}&nbsp;</td><td>${esc(fmtDay(isoDay(new Date())))}</td></tr></table>
+    <table class="sig"><tr><th>Chairperson — signature</th><th>Secretary — signature</th><th>Date</th></tr><tr><td>${sigCell("chair")}&nbsp;</td><td>${sigCell("secretary")}&nbsp;</td><td>${esc(fmtDay(isoDay(new Date())))}</td></tr></table>
     <p class="note">Department reference no.: ________________________</p>`;
 }
 function govDownloadPack(rows, filename) {
-  const html = permitDocShell("Submission to the Department", `${DATA.cpa.name}${DATA.cpa.reg ? " Â· " + DATA.cpa.reg : ""}`, govPackBody(rows), "Prepared with CPA360â„¢ from the association's own records. Confirm prescribed forms and requirements with the CPA Office.");
+  const html = permitDocShell("Submission to the Department", `${DATA.cpa.name}${DATA.cpa.reg ? " · " + DATA.cpa.reg : ""}`, govPackBody(rows), "Prepared with CPA360™ from the association's own records. Confirm prescribed forms and requirements with the CPA Office.");
   downloadFile(filename, html, "application/msword");
 }
 const govSafe = (s) => String(s || "").replace(/[^\w\- ]+/g, "_");
@@ -1843,7 +1843,7 @@ function govAnnualPack() {
   commit("gov_reports");
 }
 function govSubject(r) {
-  return `${DATA.cpa.name}${DATA.cpa.reg ? ` (${DATA.cpa.reg})` : ""} â€” ${r ? r[1] + (r[3] ? " â€” " + r[3] : "") : "Enquiry"}`;
+  return `${DATA.cpa.name}${DATA.cpa.reg ? ` (${DATA.cpa.reg})` : ""} — ${r ? r[1] + (r[3] ? " — " + r[3] : "") : "Enquiry"}`;
 }
 function govEmailBody(r) {
   const t = r && govType(r);
@@ -1862,31 +1862,31 @@ function govEmailModal(i) {
   const r = i == null ? null : DATA.governance.reports[i];
   const contacts = (DATA.governance.contacts || []).filter((c) => c[2]);
   const to0 = (r && r[9]) || (contacts[0] && contacts[0][2]) || "";
-  const { scrim, close } = govModal("Email the Department" + (r ? " â€” " + r[1] : ""), `
+  const { scrim, close } = govModal("Email the Department" + (r ? " — " + r[1] : ""), `
     <p class="hint" style="margin:0 0 10px;">Opens a ready-written e-mail in your own e-mail app (nothing is sent from here). Attach the downloaded pack and any proof documents, then send.</p>
     <div class="field"><label for="ge-to">To</label><input id="ge-to" type="text" list="ge-dl" value="${esc(to0)}" placeholder="Registrar / CPA Office e-mail"><datalist id="ge-dl">${contacts.map((c) => `<option value="${esc(c[2])}">${esc(c[0])}</option>`).join("")}</datalist></div>
     <div class="field"><label for="ge-cc">Cc (optional)</label><input id="ge-cc" type="text" placeholder="e.g. your provincial CPA office"></div>
     <div class="field"><label for="ge-sub">Subject</label><input id="ge-sub" type="text" value="${esc(govSubject(r))}"></div>
     <div class="field"><label for="ge-body">Message</label><textarea id="ge-body" rows="11">${esc(govEmailBody(r))}</textarea></div>
-    ${contacts.length ? "" : `<p class="hint">No department contact saved yet â€” add the Registrar / provincial office e-mail under <b>Contacts</b> (find it at <a href="${GOV_DEPT_SITE}" target="_blank" rel="noopener">dlrrd.gov.za</a>).</p>`}`,
+    ${contacts.length ? "" : `<p class="hint">No department contact saved yet — add the Registrar / provincial office e-mail under <b>Contacts</b> (find it at <a href="${GOV_DEPT_SITE}" target="_blank" rel="noopener">dlrrd.gov.za</a>).</p>`}`,
     `<button class="btn" data-act="close" type="button">Close</button>
      ${r ? '<button class="btn" data-ge="pack" type="button">Download pack (.doc)</button>' : ""}
      <button class="btn" data-ge="copy" type="button">Copy e-mail text</button>
      <button class="btn primary" data-ge="open" type="button">Open in my e-mail app</button>
-     ${r ? '<button class="btn good" data-ge="sent" type="button">I\'ve sent it â€” mark Submitted</button>' : ""}`, 640);
+     ${r ? '<button class="btn good" data-ge="sent" type="button">I\'ve sent it — mark Submitted</button>' : ""}`, 640);
   const v = (id) => scrim.querySelector("#" + id).value;
   scrim.querySelector('[data-ge="open"]').onclick = () => {
     openMailto(v("ge-to").trim(), v("ge-sub"), v("ge-body"), v("ge-cc").trim());
     if (r) { if (v("ge-to").trim()) r[9] = v("ge-to").trim(); if (r[5] === "Not Started") r[5] = "In Preparation"; govLog(r, `E-mail drafted to ${v("ge-to").trim() || "(no address)"}`); commit("gov_reports"); }
   };
-  scrim.querySelector('[data-ge="copy"]').onclick = async () => toast((await copyText(`Subject: ${v("ge-sub")}\r\n\r\n${v("ge-body")}`)) ? "E-mail text copied." : "Couldn't copy â€” select the text and copy it manually.", false);
+  scrim.querySelector('[data-ge="copy"]').onclick = async () => toast((await copyText(`Subject: ${v("ge-sub")}\r\n\r\n${v("ge-body")}`)) ? "E-mail text copied." : "Couldn't copy — select the text and copy it manually.", false);
   const pk = scrim.querySelector('[data-ge="pack"]');
   if (pk) pk.onclick = () => govDownloadPack([r], `Dept-submission-${govSafe(r[1])}${r[3] ? "-" + govSafe(r[3]) : ""}.doc`);
   const sent = scrim.querySelector('[data-ge="sent"]');
   if (sent) sent.onclick = () => {
     r[5] = "Submitted"; r[6] = isoDay(new Date()); r[7] = "Email"; if (v("ge-to").trim()) r[9] = v("ge-to").trim();
     govLog(r, `Submitted by e-mail to ${r[9] || "the Department"}`);
-    commit("gov_reports"); close(); toast("Marked as submitted â€” add the Department's reference when it replies.");
+    commit("gov_reports"); close(); toast("Marked as submitted — add the Department's reference when it replies.");
   };
 }
 function govAgenda(r) {
@@ -1899,8 +1899,8 @@ function govMeetModal(i) {
   const r = i == null ? null : DATA.governance.reports[i];
   const emails = [...new Set([r && r[9], ...(DATA.governance.contacts || []).map((c) => c[2])].filter(Boolean))];
   const [sd, st] = r && r[11] ? String(r[11]).split("T") : ["", ""];
-  const { scrim, close } = govModal("Collaborate with the Department" + (r ? " â€” " + r[1] : ""), `
-    <p class="hint" style="margin:0 0 10px;">Propose a meeting and create it on Teams, Zoom or Google Meet in one click â€” the invite opens pre-filled (nothing is created until you confirm it there). Paste the join link back here to keep it with the report.</p>
+  const { scrim, close } = govModal("Collaborate with the Department" + (r ? " — " + r[1] : ""), `
+    <p class="hint" style="margin:0 0 10px;">Propose a meeting and create it on Teams, Zoom or Google Meet in one click — the invite opens pre-filled (nothing is created until you confirm it there). Paste the join link back here to keep it with the report.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
       <div class="field" style="flex:1 1 170px;"><label for="gm-plat">Platform</label><select id="gm-plat">${GOV_PLATFORMS.map((p) => `<option${p === ((r && r[10]) || GOV_PLATFORMS[0]) ? " selected" : ""}>${p}</option>`).join("")}</select></div>
       <div class="field" style="flex:1 1 140px;"><label for="gm-date">Date</label><input id="gm-date" type="date" value="${esc(sd)}"></div>
@@ -1909,7 +1909,7 @@ function govMeetModal(i) {
     </div>
     <div class="field"><label for="gm-att">Invite (department e-mails, comma-separated)</label><input id="gm-att" type="text" value="${esc(emails.join(", "))}"></div>
     <div class="field"><label for="gm-agenda">Agenda</label><textarea id="gm-agenda" rows="7">${esc(govAgenda(r))}</textarea></div>
-    <div class="field"><label for="gm-url">Meeting link (paste after creating it)</label><input id="gm-url" type="url" value="${esc((r && r[12]) || "")}" placeholder="https://â€¦"></div>
+    <div class="field"><label for="gm-url">Meeting link (paste after creating it)</label><input id="gm-url" type="url" value="${esc((r && r[12]) || "")}" placeholder="https://…"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn primary" data-gm="create" type="button"></button>
       <button class="btn" data-gm="meetnew" type="button">New Google Meet link</button>
@@ -1926,7 +1926,7 @@ function govMeetModal(i) {
     $q('[data-gm="create"]').textContent = p === "Google Meet" ? "Schedule in Google Calendar" : `Create in ${p}`;
     $q('[data-gm="meetnew"]').hidden = p !== "Google Meet";
     $q('[data-gm="join"]').hidden = !v("gm-url");
-    $q("#gm-hint").textContent = p === "Zoom" ? "Zoom can't pre-fill an invite â€” the agenda is copied to your clipboard so you can paste it into the description."
+    $q("#gm-hint").textContent = p === "Zoom" ? "Zoom can't pre-fill an invite — the agenda is copied to your clipboard so you can paste it into the description."
       : p === "Google Meet" ? "In Google Calendar choose \u201CAdd Google Meet video conferencing\u201D (or use \u201CNew Google Meet link\u201D for an instant link), then paste the link above."
       : "Teams opens its scheduling form with the title, time, invitees and agenda filled in.";
   };
@@ -1938,7 +1938,7 @@ function govMeetModal(i) {
     const s = new Date(`${v("gm-date")}T${v("gm-time")}`);
     return { s, e: new Date(s.getTime() + (+v("gm-dur") || 60) * 60000) };
   };
-  const subject = () => `${r ? r[1] : "Compliance"} â€” ${DATA.cpa.name} / CPA Office`;
+  const subject = () => `${r ? r[1] : "Compliance"} — ${DATA.cpa.name} / CPA Office`;
   const when = (t) => t.s.toLocaleString("en-ZA", { dateStyle: "full", timeStyle: "short" });
   const logMeet = (what) => { if (r) { r[10] = v("gm-plat"); if (v("gm-date")) r[11] = `${v("gm-date")}T${v("gm-time")}`; r[12] = v("gm-url"); if (v("gm-att")) r[9] = r[9] || v("gm-att").split(",")[0].trim(); govLog(r, what); commit("gov_reports"); } };
   $q('[data-gm="create"]').onclick = async () => {
@@ -1947,7 +1947,7 @@ function govMeetModal(i) {
     let url;
     if (p === "Microsoft Teams") url = `https://teams.microsoft.com/l/meeting/new?subject=${enc(subject())}&attendees=${enc(att)}&startTime=${enc(isoOffset(t.s))}&endTime=${enc(isoOffset(t.e))}&content=${enc(v("gm-agenda"))}`;
     else if (p === "Google Meet") url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(subject())}&details=${enc(v("gm-agenda"))}&dates=${utcStamp(t.s)}/${utcStamp(t.e)}&add=${enc(att)}`;
-    else { await copyText(v("gm-agenda")); url = "https://zoom.us/meeting/schedule"; toast("Agenda copied â€” paste it into the Zoom description."); }
+    else { await copyText(v("gm-agenda")); url = "https://zoom.us/meeting/schedule"; toast("Agenda copied — paste it into the Zoom description."); }
     window.open(url, "_blank", "noopener");
   };
   $q('[data-gm="meetnew"]').onclick = () => window.open("https://meet.google.com/new", "_blank", "noopener");
@@ -1957,7 +1957,7 @@ function govMeetModal(i) {
     const body = ["Dear Registrar / CPA Office,", "", `We would like to meet to discuss${r ? ` the ${r[1]}${r[3] ? " (" + r[3] + ")" : ""}` : " our CPA's compliance"}.`, "",
       `Proposed: ${when(t)} (${v("gm-dur")} min)`, `Platform: ${v("gm-plat")}`, v("gm-url") ? `Join link: ${v("gm-url")}` : "Join link: to follow", "", "Agenda:", v("gm-agenda"), "",
       "Please let us know if the time suits, or propose another.", "", "Kind regards,", `${DATA.cpa.name}${DATA.cpa.reg ? " | " + DATA.cpa.reg : ""}`].join("\r\n");
-    openMailto(v("gm-att").split(",")[0].trim(), `Meeting request â€” ${subject()}`, body, v("gm-att").split(",").slice(1).join(",").trim());
+    openMailto(v("gm-att").split(",")[0].trim(), `Meeting request — ${subject()}`, body, v("gm-att").split(",").slice(1).join(",").trim());
     logMeet(`Meeting requested by e-mail (${v("gm-plat")}, ${when(t)})`);
   };
   $q('[data-gm="ics"]').onclick = () => {
@@ -1982,19 +1982,19 @@ function govDetailModal(i) {
   const { scrim } = govModal(r[1], `
     <p style="margin:0 0 8px;">${pill(esc(r[2]), "neutral")} ${statusPill(eff)} ${r[3] ? `<span class="mono">${esc(r[3])}</span>` : ""} ${r[4] ? `<span class="mono" style="margin-left:6px;">due ${esc(fmtDay(r[4]))}</span>` : ""}</p>
     ${t ? `<p class="hint" style="margin:0 0 12px;"><b>Basis:</b> ${esc(t.basis)}</p>` : ""}
-    ${rd ? `<div class="field"><label>Readiness â€” ${pct}%</label><div class="bar-track"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div>
+    ${rd ? `<div class="field"><label>Readiness — ${pct}%</label><div class="bar-track"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div>
       ${rd.gaps.length ? `<ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${rd.gaps.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>` : `<p class="hint" style="margin-top:6px;">Everything the register can check is in place.</p>`}
       ${rd.note ? `<p class="hint" style="margin-top:6px;">${esc(rd.note)}</p>` : ""}</div>` : ""}
     ${t ? `<div class="field"><label>What goes in the pack</label><ul style="margin:4px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${t.enclosures.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></div>` : ""}
-    ${r[12] ? `<div class="field"><label>Meeting</label><div class="hint">${esc(r[10] || "Meeting")}${r[11] ? " Â· " + esc(String(r[11]).replace("T", " ")) : ""} â€” <a href="${esc(r[12])}" target="_blank" rel="noopener">Join</a></div></div>` : ""}
+    ${r[12] ? `<div class="field"><label>Meeting</label><div class="hint">${esc(r[10] || "Meeting")}${r[11] ? " · " + esc(String(r[11]).replace("T", " ")) : ""} — <a href="${esc(r[12])}" target="_blank" rel="noopener">Join</a></div></div>` : ""}
     ${r[8] ? `<div class="field"><label>Department reference</label><div class="mono">${esc(r[8])}</div></div>` : ""}
     <div class="field"><label>Activity log (proof of what was done, and when)</label>
-      ${act.length ? `<ul style="margin:4px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${act.map((a) => `<li><span class="mono">${esc(new Date(a.at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" }))}</span> â€” ${esc(a.what)}</li>`).join("")}</ul>` : `<p class="hint">Nothing logged yet.</p>`}</div>`, undefined, 620);
+      ${act.length ? `<ul style="margin:4px 0 0 18px;font-size:12.5px;color:var(--ink-2);">${act.map((a) => `<li><span class="mono">${esc(new Date(a.at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" }))}</span> — ${esc(a.what)}</li>`).join("")}</ul>` : `<p class="hint">Nothing logged yet.</p>`}</div>`, undefined, 620);
   return scrim;
 }
 function govUpdate(i) {
   const r = DATA.governance.reports[i];
-  openModal("Update â€” " + r[1], [
+  openModal("Update — " + r[1], [
     { key: "status", label: "Status", type: "select", options: GOV_REPORT_STATUSES, value: r[5] },
     { key: "on", label: "Submitted on", type: "date", value: r[6] },
     { key: "via", label: "Submitted via", type: "select", options: ["", ...GOV_REPORT_VIA], value: r[7] },
@@ -2034,7 +2034,7 @@ function govGenerate() {
 function govReportsEditor() {
   return {
     title: "Government reports", arr: DATA.governance.reports, section: "gov_reports",
-    rowLabel: (r) => `${r[1] || "â€”"}${r[3] ? " â€” " + r[3] : ""}`,
+    rowLabel: (r) => `${r[1] || "—"}${r[3] ? " — " + r[3] : ""}`,
     blank: () => ["custom", "", "Statutory", "", "", "Not Started", "", "", "", "", "", "", "", [], ""],
     fields: (r) => [
       { key: "kind", label: "Report type", type: "select", options: [...GOV_REPORT_TYPES.map((t) => t.title), "Other (custom)"], value: (govType(r) || {}).title || "Other (custom)" },
@@ -2056,7 +2056,7 @@ function govReportsEditor() {
 function govContactsEditor() {
   return {
     title: "Department contacts", arr: (DATA.governance.contacts ||= []), section: "gov_contacts",
-    rowLabel: (r) => `${r[0] || "â€”"}${r[2] ? " â€” " + r[2] : ""}`,
+    rowLabel: (r) => `${r[0] || "—"}${r[2] ? " — " + r[2] : ""}`,
     blank: () => ["", "", "", "", ""],
     fields: (r) => [
       { key: "name", label: "Name / office", type: "text", value: r[0], required: true },
@@ -2080,29 +2080,29 @@ function renderGovReports(host) {
   host.innerHTML = `
     <div class="card" style="margin-bottom:16px;">
       <div class="card-head"><div><h3>Department desk</h3>
-        <span class="hint">${esc(GOV_DEPT)} â€” CPA Office (Registrar of Communal Property Associations). Under the CPA Act regulations your annual return goes to the Department within two months of the AGM. Guidance only, not legal advice â€” confirm prescribed forms with the CPA Office.</span></div>
+        <span class="hint">${esc(GOV_DEPT)} — CPA Office (Registrar of Communal Property Associations). Under the CPA Act regulations your annual return goes to the Department within two months of the AGM. Guidance only, not legal advice — confirm prescribed forms with the CPA Office.</span></div>
         <span style="display:flex;gap:6px;flex-wrap:wrap;">
           ${CAN_EDIT ? '<button class="btn" data-gr-mail type="button">Email the department</button><button class="btn" data-gr-meet type="button">Collaborate</button>' : ""}
           <button class="btn" data-gr-contacts type="button">Contacts (${contacts.length})</button>
         </span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
-        ${contacts.length ? contacts.map((c) => `<div class="pill neutral" style="padding:6px 10px;"><b>${esc(c[0])}</b>${c[1] ? " Â· " + esc(c[1]) : ""}${c[2] ? ` Â· <a href="mailto:${esc(c[2])}">${esc(c[2])}</a>` : ""}${c[3] ? " Â· " + esc(c[3]) : ""}</div>`).join("")
+        ${contacts.length ? contacts.map((c) => `<div class="pill neutral" style="padding:6px 10px;"><b>${esc(c[0])}</b>${c[1] ? " · " + esc(c[1]) : ""}${c[2] ? ` · <a href="mailto:${esc(c[2])}">${esc(c[2])}</a>` : ""}${c[3] ? " · " + esc(c[3]) : ""}</div>`).join("")
           : `<span class="hint">No department contact saved yet. Add the Registrar / provincial CPA office from <a href="${GOV_DEPT_SITE}" target="_blank" rel="noopener">dlrrd.gov.za</a> so the e-mail and meeting buttons know who to address.</span>`}
       </div>
     </div>
     <div id="gr-reg"></div>`;
   const reg = host.querySelector("#gr-reg");
   mountRegister(reg, {
-    title: "Government reports & returns", hint: "Every report the Department expects from this CPA â€” prepared, sent, discussed and acknowledged, with proof.",
+    title: "Government reports & returns", hint: "Every report the Department expects from this CPA — prepared, sent, discussed and acknowledged, with proof.",
     stats: () => [
-      statTile("Returns tracked", all.length, `${all.filter((r) => govType(r)?.annual).length} annual Â· ${all.filter((r) => !govType(r)?.annual).length} event / programme`, ""),
+      statTile("Returns tracked", all.length, `${all.filter((r) => govType(r)?.annual).length} annual · ${all.filter((r) => !govType(r)?.annual).length} event / programme`, ""),
       statTile("Filed", `${done} / ${all.length}`, "Submitted or acknowledged", all.length && done === all.length ? "good" : ""),
       statTile("Overdue", overdue, "Past the due date", overdue ? "critical" : "good"),
-      statTile("Next due", next ? fmtDay(next[4]) : "â€”", next ? `${next[1]} Â· in ${nextDays} day${nextDays === 1 ? "" : "s"}` : "Nothing scheduled", next && nextDays <= 30 ? "warning" : ""),
+      statTile("Next due", next ? fmtDay(next[4]) : "—", next ? `${next[1]} · in ${nextDays} day${nextDays === 1 ? "" : "s"}` : "Nothing scheduled", next && nextDays <= 30 ? "warning" : ""),
     ],
     columns: [{ label: "Report" }, { label: "Category" }, { label: "Due" }, { label: "Readiness" }, { label: "Status" }, { label: "Proof" }, { label: "Actions" }],
     rows: () => [...all].sort((a, b) => (GOV_DONE.includes(a[5]) - GOV_DONE.includes(b[5])) || String(a[4] || "9999").localeCompare(String(b[4] || "9999"))),
-    empty: "No reports tracked yet â€” use \u201CGenerate this year's returns\u201D.",
+    empty: "No reports tracked yet — use \u201CGenerate this year's returns\u201D.",
     extraTools: ['<button class="btn" data-gr-gen type="button">Generate this year\'s returns</button>', '<button class="btn" data-gr-annual type="button">Compile annual pack</button>'],
     cell: (r) => {
       const i = all.indexOf(r), eff = govEff(r), rd = govReadiness(r), pct = rd ? Math.round(rd.ratio * 100) : null;
@@ -2110,9 +2110,9 @@ function renderGovReports(host) {
       return [
         `<button type="button" class="linkbtn" data-gr-open="${i}" style="font-weight:600;text-align:left;">${esc(r[1])}</button>${r[3] ? `<div class="hint">${esc(r[3])}</div>` : ""}`,
         `<span class="pill neutral">${esc(r[2])}</span>`,
-        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(fmtDay(r[4]) || "â€”")}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(fmtDay(r[4]) || "—")}</span>`,
         GOV_DONE.includes(r[5]) ? '<span class="hint">Filed</span>' : rd
-          ? `<div class="bar-track" title="${esc(rd.gaps.join("; "))}"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div><span class="hint">${pct}%${rd.gaps[0] ? " Â· " + esc(rd.gaps[0]) : ""}</span>`
+          ? `<div class="bar-track" title="${esc(rd.gaps.join("; "))}"><div class="bar-fill ${healthTone(pct)}" style="width:${Math.max(3, pct)}%"></div></div><span class="hint">${pct}%${rd.gaps[0] ? " · " + esc(rd.gaps[0]) : ""}</span>`
           : '<span class="hint">Event-driven</span>',
         statusPill(eff),
         docChip("gov_report", r._id, "Proof of submission / acknowledgement"),
@@ -2131,7 +2131,7 @@ function renderGovReports(host) {
       h.querySelectorAll("[data-doc-chip]").forEach((b) => (b.onclick = () => {
         const sep = b.dataset.docChip.indexOf("::");
         const r = all.find((x) => String(x._id) === b.dataset.docChip.slice(sep + 2));
-        if (r) attachmentsModal("gov_report", r._id, `Proof â€” ${r[1]}${r[3] ? " " + r[3] : ""}`, {
+        if (r) attachmentsModal("gov_report", r._id, `Proof — ${r[1]}${r[3] ? " " + r[3] : ""}`, {
           accept: "application/pdf,.pdf,.doc,.docx,image/*", label: "Upload (PDF, Word or photo)",
           match: /\.(pdf|docx?|jpe?g|png|heic|webp)$|^(application\/(pdf|msword|vnd\.openxmlformats)|image\/)/i, matchMsg: "Please choose a PDF, Word file or image.",
         });
@@ -2170,8 +2170,8 @@ function renderActions() {
       <td class="mono" style="color:var(--ink-muted);white-space:nowrap;">${esc(ref)}</td>
       <td>${esc(cat)}</td>
       <td style="min-width:220px;">${esc(action)}</td>
-      <td>${esc(owner) || "â€”"}</td>
-      <td class="mono" style="white-space:nowrap;">${esc(due) || "â€”"}</td>
+      <td>${esc(owner) || "—"}</td>
+      <td class="mono" style="white-space:nowrap;">${esc(due) || "—"}</td>
       <td><select class="inline-select" data-ref="${esc(ref)}" aria-label="Status for ${esc(ref)}">${
         ACTION_STATUSES.map((s) => `<option${s === status ? " selected" : ""}>${s}</option>`).join("")}</select></td>
       <td><div class="row-actions">
@@ -2181,7 +2181,7 @@ function renderActions() {
         <button type="button" data-del="${esc(ref)}" title="Delete" aria-label="Delete action ${esc(ref)}">${TRASH}</button>
       </div></td>
     </tr>`;
-  }).join("") : emptyRow(7, actionsFilter === "All" ? "No actions yet â€” add the first one." : "No actions with this status.");
+  }).join("") : emptyRow(7, actionsFilter === "All" ? "No actions yet — add the first one." : "No actions with this status.");
 
   tbody.querySelectorAll("select[data-ref]").forEach((s) => {
     const before = s.value;
@@ -2199,7 +2199,7 @@ function renderActions() {
   });
   tbody.querySelectorAll("[data-clip]").forEach((b) => (b.onclick = () => {
     const a = DATA.actions.find((x) => x[0] === b.dataset.clip);
-    attachmentsModal("action", a._id, "Evidence â€” " + (a[0] || a[2].slice(0, 40)));
+    attachmentsModal("action", a._id, "Evidence — " + (a[0] || a[2].slice(0, 40)));
   }));
   tbody.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => editAction(b.dataset.edit)));
   tbody.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => deleteAction(b.dataset.del)));
@@ -2225,9 +2225,9 @@ function renderMasterFile() {
   const totalFiles = Object.values((DATA._docCounts || {}).masterfile || {}).reduce((s, n) => s + n, 0)
     + (((DATA._docCounts || {}).general || {})._ || 0);
   $("masterfile-stats").innerHTML = [
-    statTile("Categories", mf.length, "The CPA360â„¢ Master File structure", ""),
+    statTile("Categories", mf.length, "The CPA360™ Master File structure", ""),
     statTile("Overall Completeness", avg + "%", "Average across categories", avg >= 70 ? "good" : avg >= 40 ? "warning" : "critical"),
-    statTile("Categories Complete", complete + " / " + mf.length, "â‰¥ 90% complete", complete === mf.length ? "good" : ""),
+    statTile("Categories Complete", complete + " / " + mf.length, "≥ 90% complete", complete === mf.length ? "good" : ""),
     statTile("Documents Filed", totalFiles, "Across all categories", ""),
   ].join("");
   $("masterfile-grid").innerHTML = mf.length ? mf.map((row) => {
@@ -2240,21 +2240,21 @@ function renderMasterFile() {
       <div class="title">${esc(name)}</div>
       <div class="count" style="min-height:32px;">${esc(MF_BLURB[name] || "")}</div>
       <div class="progress"><span style="width:${Math.max(0, Math.min(100, +pct || 0))}%; background:var(--status-${tone});"></span></div>
-      <div class="hint" style="margin-top:4px;">${pct}% complete Â· ${nf} file${nf === 1 ? "" : "s"}</div>
+      <div class="hint" style="margin-top:4px;">${pct}% complete · ${nf} file${nf === 1 ? "" : "s"}</div>
       <button class="btn ${CAN_EDIT ? "" : "view-ok"}" type="button" data-mf-files="${esc(row._id || "")}" style="margin-top:8px;padding:4px 10px;font-size:11px;">
         Open files</button>
     </div>`;
-  }).join("") : `<p class="muted">No master-file categories â€” reload the page.</p>`;
+  }).join("") : `<p class="muted">No master-file categories — reload the page.</p>`;
   $("masterfile-grid").querySelectorAll("[data-mf-files]").forEach((b) => (b.onclick = () => {
     const r = mf.find((x) => String(x._id) === b.dataset.mfFiles);
-    if (r) attachmentsModal("masterfile", r._id, r[1] + " â€” Master File documents");
+    if (r) attachmentsModal("masterfile", r._id, r[1] + " — Master File documents");
   }));
   const gb = $("mf-general-btn");
-  if (gb) gb.textContent = "General documents" + ((((DATA._docCounts || {}).general || {})._ || 0) ? ` Â· ${((DATA._docCounts || {}).general || {})._}` : "");
+  if (gb) gb.textContent = "General documents" + ((((DATA._docCounts || {}).general || {})._ || 0) ? ` · ${((DATA._docCounts || {}).general || {})._}` : "");
 }
 
 /* ============ Gallery / Media ============
-   A media item is just a `documents` row (section "gallery", ref_id null) â€”
+   A media item is just a `documents` row (section "gallery", ref_id null) —
    the storage/RLS model is identical to every other attachment in the app.
    What's bespoke here: kind detection (image/video/audio), an auto-organize
    pass that groups everything into month folders by "date taken" (EXIF for
@@ -2274,11 +2274,11 @@ function mediaKind(mime, name) {
   for (const k of Object.keys(MEDIA_EXT)) if (MEDIA_EXT[k].includes(ext)) return k;
   return "other";
 }
-/* Best-effort EXIF "date taken" reader for JPEGs â€” reads just the first
+/* Best-effort EXIF "date taken" reader for JPEGs — reads just the first
    128KB (the EXIF block always sits at the very start of the file, long
    before pixel data), walks the JPEG marker chain to APP1, then the TIFF
-   IFD0 â†’ Exif SubIFD for tag 0x9003 (DateTimeOriginal). Any failure at any
-   step returns null and the caller falls back to the file's own date â€”
+   IFD0 → Exif SubIFD for tag 0x9003 (DateTimeOriginal). Any failure at any
+   step returns null and the caller falls back to the file's own date —
    this is a nice-to-have, never something upload correctness depends on. */
 async function readExifDate(file) {
   try {
@@ -2290,7 +2290,7 @@ async function readExifDate(file) {
       if (view.getUint8(offset) !== 0xff) return null;
       const marker = view.getUint8(offset + 1);
       if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) { offset += 2; continue; }
-      if (marker === 0xda) return null; // start of scan â€” image data follows, no more markers to scan
+      if (marker === 0xda) return null; // start of scan — image data follows, no more markers to scan
       if (offset + 4 > view.byteLength) return null;
       const segLen = view.getUint16(offset + 2);
       if (marker === 0xe1 && offset + 4 + 6 <= view.byteLength && view.getUint32(offset + 4) === 0x45786966) {
@@ -2331,7 +2331,7 @@ async function readExifDate(file) {
       }
       offset += 2 + segLen;
     }
-  } catch (e) { /* not a JPEG, truncated, or malformed â€” fall back below */ }
+  } catch (e) { /* not a JPEG, truncated, or malformed — fall back below */ }
   return null;
 }
 async function fileTakenOn(file, kind) {
@@ -2389,7 +2389,7 @@ function paintGallery() {
     <div class="card-head" style="margin:18px 0 12px;">
       <div><h3 style="font-size:13px;">Media</h3>
         <span class="hint">Auto-organized into month folders by the date each file was taken (read from the photo itself where
-          possible) â€” not the date it was uploaded. Click any tile to preview it in full, without downloading.</span></div>
+          possible) — not the date it was uploaded. Click any tile to preview it in full, without downloading.</span></div>
       <span style="display:flex;gap:6px;flex-wrap:wrap;">
         ${["all", "image", "video", "audio"].map((k) => `<button class="btn${GALLERY.filter === k ? " active" : ""}" data-gfilter="${k}" type="button">${k === "all" ? "All" : k[0].toUpperCase() + k.slice(1) + "s"}</button>`).join("")}
         ${CAN_EDIT ? `<label class="btn primary" style="cursor:pointer;display:inline-flex;">Upload media<input type="file" id="gallery-file" accept="image/*,video/*,audio/*" multiple hidden></label>` : ""}
@@ -2403,7 +2403,7 @@ function paintGallery() {
           <div class="gallery-group-head"><h4>${esc(g.label)}</h4><span class="hint">${g.items.length} file${g.items.length === 1 ? "" : "s"}</span></div>
           <div class="gallery-grid">${g.items.map((d) => galleryTileHtml(d, indexOf.get(d))).join("")}</div>
         </div>`;
-      }).join("") : stateHtml("empty", GALLERY.docs.length ? "No files match this filter." : "No media uploaded yet â€” add photos, video or audio with â€œUpload mediaâ€.")}
+      }).join("") : stateHtml("empty", GALLERY.docs.length ? "No files match this filter." : "No media uploaded yet — add photos, video or audio with “Upload media”.")}
     </div>`;
 
   host.querySelectorAll("[data-gfilter]").forEach((b) => (b.onclick = () => { GALLERY.filter = b.dataset.gfilter; paintGallery(); }));
@@ -2413,7 +2413,7 @@ function paintGallery() {
 }
 async function refreshGallery() {
   const host = $("gallery-body");
-  if (host && !GALLERY.docs.length) host.innerHTML = stateHtml("loading", "Loading galleryâ€¦");
+  if (host && !GALLERY.docs.length) host.innerHTML = stateHtml("loading", "Loading gallery…");
   try {
     const docs = await repo.listDocs(orgId, "gallery", null);
     const urlMap = await repo.docPreviewUrls(docs.map((d) => d.path)).catch(() => new Map());
@@ -2431,7 +2431,7 @@ async function uploadGalleryFiles(files, msgEl, input) {
   let ok = 0, failed = 0;
   for (const f of files) {
     if (f.size > max) { failed++; continue; }
-    if (msgEl) msgEl.textContent = `Uploading ${f.name}â€¦ (${ok + failed + 1}/${files.length})`;
+    if (msgEl) msgEl.textContent = `Uploading ${f.name}… (${ok + failed + 1}/${files.length})`;
     try {
       const kind = mediaKind(f.type, f.name);
       const takenOn = await fileTakenOn(f, kind);
@@ -2445,7 +2445,7 @@ async function uploadGalleryFiles(files, msgEl, input) {
   await refreshGallery();
   if (onChange) onChange();
 }
-/* Lightbox â€” browse full-size without opening a new tab or downloading;
+/* Lightbox — browse full-size without opening a new tab or downloading;
    Prev/Next and Esc/arrow keys move within the currently filtered set. */
 function openLightbox(list, index) {
   let i = index;
@@ -2475,7 +2475,7 @@ function openLightbox(list, index) {
         <button class="lightbox-nav next" data-act="next" type="button" aria-label="Next">&#8250;</button>` : ""}
         <div class="lightbox-media">${media}</div>
         <div class="lightbox-info">
-          <div><b>${esc(d.name)}</b><span class="hint">${esc(galleryMonthKey(d).label)} Â· ${fmtBytes(d.size)}</span></div>
+          <div><b>${esc(d.name)}</b><span class="hint">${esc(galleryMonthKey(d).label)} · ${fmtBytes(d.size)}</span></div>
           <span class="row-actions">
             <a class="btn" href="${esc(url)}" download="${esc(d.name)}" target="_blank" rel="noopener">Download</a>
             ${CAN_EDIT ? `<button class="btn danger" data-act="delete" type="button">Delete</button>` : ""}
@@ -2547,7 +2547,7 @@ function paintBeneStrip() {
     + (due.length && cur !== "birthdays" ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <span>Birthday today: <b>${esc(names)}</b></span><span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">${posterBtn}<button type="button" class="btn small" data-bday-go>Send wishes</button></span></div>`
       : posterN ? `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <span>${posterN} birthday${posterN > 1 ? "s" : ""} today â€” time for the <b>shoutout poster</b> on WhatsApp Status</span><span style="margin-left:auto;">${posterBtn}</span></div>` : "");
+        <span>${posterN} birthday${posterN > 1 ? "s" : ""} today — time for the <b>shoutout poster</b> on WhatsApp Status</span><span style="margin-left:auto;">${posterBtn}</span></div>` : "");
   const pendDn = DATA.deathNotices || [];
   if (pendDn.length && CAN_EDIT) strip.insertAdjacentHTML("beforeend", `<div class="illus-banner" role="note" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <span>Condolence notice waiting: <b>${esc(pendDn.map((n) => n.name).slice(0, 2).join(", "))}${pendDn.length > 2 ? ` and ${pendDn.length - 2} more` : ""}</b></span><button type="button" class="btn small" data-dn-go style="margin-left:auto;">Review &amp; send</button></div>`);
@@ -2569,8 +2569,8 @@ function renderBeneficiary() {
 }
 const BENE_STATUSES = ["Active", "Deceased", "Removed", "Transferred"];
 const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
-/* Every person in a household's family tree â€” the ODI, the Family
-   Representative, each descendant â€” is a real beneficiary; this is the
+/* Every person in a household's family tree — the ODI, the Family
+   Representative, each descendant — is a real beneficiary; this is the
    structured "which one are they" tag, set automatically when extracted
    from Household Records (see extractOneHousehold) or picked manually for
    a beneficiary added straight into the register. */
@@ -2587,21 +2587,21 @@ function beneStats() {
     statTile("Disputed / Rejected", (b.disputed || 0).toLocaleString(), fmtPct(b.disputed / t * 100) + " of active", b.disputed ? "critical" : "good"),
   ];
 }
-/* ============ Membership cards (Master Register â†’ Card) ============
-   A credit-card-sized (85.6 Ã— 54 mm) member card, designed on screen and printed from the
+/* ============ Membership cards (Master Register → Card) ============
+   A credit-card-sized (85.6 × 54 mm) member card, designed on screen and printed from the
    browser (single card, a selection, or all active members, 4 front+back pairs per A4 page).
    Uses the CPA's own Brand Box logo/colours. Shows only the masked ID (last 4), never the
-   date of birth. The QR encodes "CPA360|<reg>|<member no>|<check code>" â€” scan it with any
+   date of birth. The QR encodes "CPA360|<reg>|<member no>|<check code>" — scan it with any
    phone and search the member no. in the register. The check code is a short fingerprint of
    reg + member no. + name: if the name on the register changes, an old card's code no longer
    matches, which flags a stale or altered card. Member photos live in the documents store
-   (section "member-photo"), resized to â‰¤480px on upload. */
+   (section "member-photo"), resized to ≤480px on upload. */
 /* ODI link. A beneficiary belongs to a household in the ODI register (Household Records) through
    `household_ref` (register column 5 = Household ID, e.g. MCPA-012). The household row carries the ODI. */
 const hhList = () => DATA.beneficiaryCentre.households || [];
 const householdOf = (ref) => (ref ? hhList().find((h) => h[0] === ref) || null : null);
 const odiNameOf = (h) => (h ? String(h[2] || h[1] || "").trim() : "");
-const hhOptionLabel = (h) => `${h[0]} Â· ${odiNameOf(h) || "(no ODI name)"}`;
+const hhOptionLabel = (h) => `${h[0]} · ${odiNameOf(h) || "(no ODI name)"}`;
 function hhChoices(currentRef) {
   const labels = [...hhList()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true })).map(hhOptionLabel);
   let current = "";
@@ -2612,15 +2612,15 @@ function hhChoices(currentRef) {
   }
   return { options: ["", ...labels], current };
 }
-/* Lineage picker in the member form: the other people of the same household, labelled "Name Â· ref". */
+/* Lineage picker in the member form: the other people of the same household, labelled "Name · ref". */
 const parentMembers = (r) => (DATA.beneficiaryCentre.register || []).filter((x) => x !== r && r[5] && x[5] === r[5] && x[0] && x[8] !== "Removed");
-const parentLabel = (x) => `${x[1]} Â· ${x[0]}`;
+const parentLabel = (x) => `${x[1]} · ${x[0]}`;
 function parentOptions(r) {
   const ms = parentMembers(r), cur = ms.find((x) => x[0] === (r[14] || ""));
   return { options: ["", ...ms.map(parentLabel)], current: cur ? parentLabel(cur) : "" };
 }
 const refFromParentLabel = (label, r) => { const m = parentMembers(r).find((x) => parentLabel(x) === label); return m ? m[0] : ""; };
-const refFromHhLabel = (l) => String(l || "").split(" Â· ")[0].replace(/ \(not in the ODI register\)$/, "").trim();
+const refFromHhLabel = (l) => String(l || "").split(" · ")[0].replace(/ \(not in the ODI register\)$/, "").trim();
 function inferHouseholdRole(h, name) {
   const n = String(name || "").trim().toLowerCase();
   if (!h || !n) return "";
@@ -2705,34 +2705,34 @@ function cardState(r) {
 }
 function cardIssues(r) {
   const w = [];
-  if (!(r[0] || "").trim()) w.push("This member has no register / member number â€” add one so the card and QR code identify them.");
-  if (!(r[5] || "").trim()) w.push("No ODI / household linked â€” choose one below so the card shows the member's ODI.");
-  else if (!householdOf(r[5])) w.push(`Household â€œ${r[5]}â€ isn't in the ODI register (Beneficiaries â†’ Households), so no ODI name can be shown.`);
-  if (r[8] !== "Active") w.push(`Status is â€œ${r[8]}â€ â€” the card prints with a NOT ACTIVE watermark.`);
-  else if (r[9] !== "Verified") w.push(`Verification is â€œ${r[9] || "not set"}â€ â€” cards are normally issued to verified members.`);
+  if (!(r[0] || "").trim()) w.push("This member has no register / member number — add one so the card and QR code identify them.");
+  if (!(r[5] || "").trim()) w.push("No ODI / household linked — choose one below so the card shows the member's ODI.");
+  else if (!householdOf(r[5])) w.push(`Household “${r[5]}” isn't in the ODI register (Beneficiaries → Households), so no ODI name can be shown.`);
+  if (r[8] !== "Active") w.push(`Status is “${r[8]}” — the card prints with a NOT ACTIVE watermark.`);
+  else if (r[9] !== "Verified") w.push(`Verification is “${r[9] || "not set"}” — cards are normally issued to verified members.`);
   return w;
 }
-const cardMonth = (s) => (s ? new Date(String(s).slice(0, 10) + "T00:00:00").toLocaleDateString("en-ZA", { month: "short", year: "numeric" }) : "â€”");
+const cardMonth = (s) => (s ? new Date(String(s).slice(0, 10) + "T00:00:00").toLocaleDateString("en-ZA", { month: "short", year: "numeric" }) : "—");
 function cardVars() { return `--p:${esc(DATA.cpa.brandPrimary || "#1c3a68")};--s:${esc(DATA.cpa.brandSecondary || "#2f7d4f")};`; }
 function cardFrontHtml(r, o) {
   const st = cardState(r), name = (r[1] || "").trim();
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
   const logo = DATA.cpa.logoDataUrl ? `<img src="${DATA.cpa.logoDataUrl}" alt="">` : esc((DATA.cpa.name || "C")[0].toUpperCase());
   return `<div class="mc ${esc(o.style)}" style="${cardVars()}">
-    <div class="mc-head"><div class="mc-logo">${logo}</div><div class="mc-org"><b>${esc(DATA.cpa.name || "")}</b><span>Membership card${DATA.cpa.reg ? " Â· " + esc(DATA.cpa.reg) : ""}</span></div></div>
+    <div class="mc-head"><div class="mc-logo">${logo}</div><div class="mc-org"><b>${esc(DATA.cpa.name || "")}</b><span>Membership card${DATA.cpa.reg ? " · " + esc(DATA.cpa.reg) : ""}</span></div></div>
     <div class="mc-acc"></div>
     <div class="mc-body">
       <div class="mc-photo">${o.photoUrl ? `<img src="${esc(o.photoUrl)}" alt="">` : esc(initials)}</div>
-      <div class="mc-info"><div class="mc-name">${esc(name || "â€”")}</div>
+      <div class="mc-info"><div class="mc-name">${esc(name || "—")}</div>
         <div class="mc-grid">
-          <div><div class="mc-k">Member no.</div><div class="mc-v mono">${esc(r[0] || "â€”")}</div></div>
-          <div><div class="mc-k">Household</div><div class="mc-v mono">${esc(r[5] || "â€”")}</div></div>
+          <div><div class="mc-k">Member no.</div><div class="mc-v mono">${esc(r[0] || "—")}</div></div>
+          <div><div class="mc-k">Household</div><div class="mc-v mono">${esc(r[5] || "—")}</div></div>
           <div class="span2"><div class="mc-k">ODI</div><div class="mc-v">${esc(r[11] === "ODI" ? "Self (ODI)" : odiNameOf(householdOf(r[5])) || "Not linked")}</div></div>
           <div><div class="mc-k">Position</div><div class="mc-v">${esc(r[11] || "Member")}</div></div>
           <div><div class="mc-k">Member since</div><div class="mc-v">${esc(cardMonth(r[7]))}</div></div>
         </div></div>
     </div>
-    <div class="mc-foot"><span class="mono">${r[4] ? "ID " + esc(r[4]) + " Â· " : ""}Valid to ${esc(cardMonth(o.valid))}</span><span class="mc-chip ${st.chip[0]}">${esc(st.chip[1])}</span></div>
+    <div class="mc-foot"><span class="mono">${r[4] ? "ID " + esc(r[4]) + " · " : ""}Valid to ${esc(cardMonth(o.valid))}</span><span class="mc-chip ${st.chip[0]}">${esc(st.chip[1])}</span></div>
     ${st.wm ? `<div class="mc-wm"><span>${esc(st.wm)}</span></div>` : ""}
   </div>`;
 }
@@ -2834,15 +2834,15 @@ function drawSignatureModal({ title, who, onSave }) {
     const msg = $s("#sg-msg"), all = strokes.flat();
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     all.forEach((p) => { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
-    if (all.length < 6 || x1 - x0 < 24) { msg.textContent = "That looks too small to be a signature â€” please sign a little larger."; return; }
+    if (all.length < 6 || x1 - x0 < 24) { msg.textContent = "That looks too small to be a signature — please sign a little larger."; return; }
     const pad = 4, bw = x1 - x0 + pad * 2, bh = y1 - y0 + pad * 2, k = Math.min(3, 800 / bw);
     const out = document.createElement("canvas");
     out.width = Math.max(1, Math.round(bw * k)); out.height = Math.max(1, Math.round(bh * k));
     const oc = out.getContext("2d");
     strokes.forEach((s) => stroke(oc, s, k, x0 - pad, y0 - pad));
     const blob = await new Promise((res) => out.toBlob(res, "image/png"));
-    if (!blob) { msg.textContent = "Couldn't capture the signature â€” try again."; return; }
-    $s("#sg-save").disabled = true; msg.textContent = "Savingâ€¦";
+    if (!blob) { msg.textContent = "Couldn't capture the signature — try again."; return; }
+    $s("#sg-save").disabled = true; msg.textContent = "Saving…";
     try { await onSave(blob); close(); }
     catch (e) { msg.textContent = "Couldn't save: " + ((e && e.message) || e); $s("#sg-save").disabled = false; }
   };
@@ -2858,11 +2858,11 @@ async function resizeMemberPhoto(file, max = 480) {
 }
 async function printMemberCards(rows, o) {
   if (!rows.length) { toast("No members to print.", true); return; }
-  toast(`Preparing ${rows.length} card${rows.length > 1 ? "s" : ""}â€¦`);
+  toast(`Preparing ${rows.length} card${rows.length > 1 ? "s" : ""}…`);
   const photos = rows.length === 1 ? new Map(o.photoUrl ? [[String(rows[0]._id), o.photoUrl]] : []) : await cardPhotoMap();
   const sigs = rows.length === 1 ? new Map(o.sigUrl ? [[String(rows[0]._id), o.sigUrl]] : []) : await cardSigMap();
   const pairs = rows.map((r) => `<div class="pair">${cardFrontHtml(r, { ...o, photoUrl: photos.get(String(r._id)) || "" })}${cardBackHtml(r, { ...o, sigUrl: sigs.get(String(r._id)) || "" })}</div>`).join("");
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Membership cards â€” ${esc(DATA.cpa.name || "")}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Membership cards — ${esc(DATA.cpa.name || "")}</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
     <style>${CARD_CSS}
       @page{size:A4;margin:10mm}
@@ -2873,7 +2873,7 @@ async function printMemberCards(rows, o) {
       .pair{display:flex;gap:6mm;break-inside:avoid;page-break-inside:avoid;}
       @media print{.bar{display:none}.sheet{padding:0}}
     </style></head><body>
-    <div class="bar"><button onclick="window.print()">Print</button><span>${rows.length} card${rows.length > 1 ? "s" : ""} Â· front + back side by side Â· 4 per A4 page Â· tick â€œBackground graphicsâ€ if colours look washed out Â· cut along the card edges</span></div>
+    <div class="bar"><button onclick="window.print()">Print</button><span>${rows.length} card${rows.length > 1 ? "s" : ""} · front + back side by side · 4 per A4 page · tick “Background graphics” if colours look washed out · cut along the card edges</span></div>
     <div class="sheet">${pairs}</div></body></html>`;
   const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
   const w = window.open(url, "_blank");
@@ -2882,7 +2882,7 @@ async function printMemberCards(rows, o) {
   w.addEventListener("load", () => { setTimeout(() => { try { w.print(); } catch (e) {} }, 500); setTimeout(() => URL.revokeObjectURL(url), 60000); });
 }
 /* ---- card as an image (PNG) ----
-   The card's own HTML/CSS is drawn through an SVG <foreignObject> onto a canvas â€” no library.
+   The card's own HTML/CSS is drawn through an SVG <foreignObject> onto a canvas — no library.
    Fonts and the member photo are inlined as data: URLs first, otherwise the browser would
    either substitute fonts or refuse to export a canvas that touched a cross-origin picture. */
 let _cardFontCss = null;
@@ -2923,7 +2923,7 @@ async function cardPng(r, side, o, dpi = 300) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("export failed"))), "image/png"));
 }
 async function downloadCardImage(r, side, o) {
-  toast("Preparing imageâ€¦");
+  toast("Preparing image…");
   try {
     const blob = await cardPng(r, side, o);
     const url = URL.createObjectURL(blob);
@@ -2943,7 +2943,7 @@ const canIssueReceipt = (r) => r[9] === "Verified";
 const receiptNo = (r) => `RCT-${r[0] || "NOREF"}-${cardCode(r)}`;
 function receiptBody(r, withQr) {
   const h = householdOf(r[5]);
-  const odi = r[11] === "ODI" ? "Self (ODI)" : odiNameOf(h) || "â€”";
+  const odi = r[11] === "ODI" ? "Self (ODI)" : odiNameOf(h) || "—";
   const cpa = esc(DATA.cpa.name || "the association");
   let qr = "";
   if (withQr) { try { qr = qrSvg(cardPayload(r), { quiet: 1 }); } catch (e) {} }
@@ -2958,31 +2958,31 @@ function receiptBody(r, withQr) {
     <h2>Member</h2>
     <table>
       ${row("Full name", esc(r[1] || ""))}
-      ${row("Member no.", esc(r[0] || "â€”"))}
-      ${row("ID number (masked)", esc(r[4] || "â€”"))}
-      ${row("Household", esc(r[5] || "â€”"))}
+      ${row("Member no.", esc(r[0] || "—"))}
+      ${row("ID number (masked)", esc(r[4] || "—"))}
+      ${row("Household", esc(r[5] || "—"))}
       ${row("ODI", esc(odi))}
       ${row("Family position", esc(r[11] || "Member"))}
-      ${row("Added to the register / joined", esc(fmtDay(r[7]) || "â€”"))}
+      ${row("Added to the register / joined", esc(fmtDay(r[7]) || "—"))}
     </table>
     <h2>Verification</h2>
     <table>
       ${row("Verification status", "<b>Verified</b>")}
       ${row("Date verified", esc(fmtDay(r[12] || r[7])) || "Recorded as verified (date was not captured)")}
-      ${row("Status on the register", esc(r[8] || "â€”"))}
+      ${row("Status on the register", esc(r[8] || "—"))}
     </table>
     <table class="sig" style="margin-top:14pt;"><tr><th>Secretary &mdash; signature</th><th>Chairperson &mdash; signature</th><th>Date</th></tr><tr><td>${sigCell("secretary")}&nbsp;</td><td>${sigCell("chair")}&nbsp;</td><td>${esc(rdate)}</td></tr></table>
     <table style="border:0;margin-top:8pt;"><tr>${qr ? `<td style="border:0;width:70pt;padding-left:0;">${qr.replace("<svg ", '<svg width="64" height="64" ')}</td>` : ""}
       <td style="border:0;"><p class="note">Check code <b>${esc(cardCode(r))}</b>. This receipt is evidence of registration and verification only. It does not by itself confer ownership of, or a right to, any land or benefit, and
         is valid only while the member's verification on the register remains <i>Verified</i>.</p></td></tr></table>`;
 }
-const receiptDoc = (r, withQr) => permitDocShell("Registration & Verification Receipt", `${DATA.cpa.name || ""}${DATA.cpa.reg ? " Â· " + DATA.cpa.reg : ""}`, receiptBody(r, withQr),
-  "Issued by the association from its Master Beneficiary Register. Prepared with CPA360â„¢.");
+const receiptDoc = (r, withQr) => permitDocShell("Registration & Verification Receipt", `${DATA.cpa.name || ""}${DATA.cpa.reg ? " · " + DATA.cpa.reg : ""}`, receiptBody(r, withQr),
+  "Issued by the association from its Master Beneficiary Register. Prepared with CPA360™.");
 function openReceipt(r) {
-  if (!canIssueReceipt(r)) { toast("A receipt can only be issued once the member's verification is â€œVerifiedâ€.", true); return; }
-  const { scrim } = govModal("Receipt â€” " + (r[1] || ""), `
+  if (!canIssueReceipt(r)) { toast("A receipt can only be issued once the member's verification is “Verified”.", true); return; }
+  const { scrim } = govModal("Receipt — " + (r[1] || ""), `
     <p class="hint" style="margin:0 0 8px;">Receipt <b>${esc(receiptNo(r))}</b>. Print it, save it as a PDF, or download it as a Word document to hand to the member.</p>
-    ${r[8] !== "Active" ? `<p class="mc-note">&#9888; This member's status is â€œ${esc(r[8])}â€, not Active.</p>` : ""}
+    ${r[8] !== "Active" ? `<p class="mc-note">&#9888; This member's status is “${esc(r[8])}”, not Active.</p>` : ""}
     <iframe id="rc-frame" sandbox title="Receipt preview" style="width:100%;height:430px;border:1px solid var(--border);border-radius:8px;background:#fff;"></iframe>`,
     `<button class="btn" data-act="close" type="button">Close</button>
      <button class="btn" data-rc="wa" type="button">Send via WhatsApp</button>
@@ -3004,9 +3004,9 @@ const offerReceipt = (r) => setTimeout(() => { if (canIssueReceipt(r)) openRecei
 /* ---- send a member's documents by WhatsApp ----
    WhatsApp has no way to attach a file from a link (wa.me carries text only), so there are two
    honest routes, both with a person pressing Send:
-     Â· Share â€” on a phone/tablet the device's share sheet takes the image files straight into a
+     · Share — on a phone/tablet the device's share sheet takes the image files straight into a
        WhatsApp chat (navigator.share with files).
-     Â· Chat + download â€” opens the member's WhatsApp chat with a ready message and saves the files
+     · Chat + download — opens the member's WhatsApp chat with a ready message and saves the files
        so they can be attached with the paperclip (the desktop route).
    Documents: the membership card (front/back, as PNG) and the verification receipt (as PNG). */
 async function receiptPng(r) {
@@ -3044,14 +3044,14 @@ function sendDocsWhatsApp(r, opts) {
   const pf = cardPrefs(), canRc = canIssueReceipt(r), declined = r[13] === true;
   const first = (String(r[1] || "").trim().split(/\s+/)[0] || "").toLowerCase().replace(/(^|[-'])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) || "member";
   const num0 = waNumber(r[6]);
-  const { scrim } = govModal("Send documents on WhatsApp â€” " + (r[1] || ""), `
+  const { scrim } = govModal("Send documents on WhatsApp — " + (r[1] || ""), `
     <p class="hint" style="margin:0 0 8px;">WhatsApp can't attach a file from a link, so a person finishes the send: on a phone or tablet use <b>Share files</b> and pick the chat; on a computer use <b>Open chat &amp; save files</b>, then attach the saved pictures with the paperclip.</p>
     ${declined ? `<p class="mc-note">&#9888; This member has asked not to receive WhatsApp messages from the CPA. Only continue if they requested these documents.</p>` : ""}
     <div class="field"><label for="sw-num">WhatsApp number</label><input id="sw-num" type="tel" value="${esc(num0 ? prettyCell(num0) : (r[6] || ""))}" placeholder="082 123 4567">
       <div class="hint" id="sw-numhint"></div></div>
     <div class="field"><label>Documents to send</label>
-      <label class="cm-check"><input type="checkbox" id="sw-front"${opts.card === false ? "" : " checked"}> Membership card â€” front</label>
-      <label class="cm-check"><input type="checkbox" id="sw-back"${opts.card === false ? "" : " checked"}> Membership card â€” back</label>
+      <label class="cm-check"><input type="checkbox" id="sw-front"${opts.card === false ? "" : " checked"}> Membership card — front</label>
+      <label class="cm-check"><input type="checkbox" id="sw-back"${opts.card === false ? "" : " checked"}> Membership card — back</label>
       <label class="cm-check"><input type="checkbox" id="sw-rc"${canRc ? "" : " disabled"}${canRc && opts.receipt ? " checked" : ""}> Verification receipt${canRc ? "" : " <span class=\"hint\">(available once the member is Verified)</span>"}</label></div>
     <div class="field"><label for="sw-msg">Message</label><textarea id="sw-msg" rows="3"></textarea></div>
     <div id="sw-status" class="hint" role="status"></div>`,
@@ -3072,14 +3072,14 @@ function sendDocsWhatsApp(r, opts) {
     const ready = files.length > 0;
     $s("#sw-chat").disabled = !ready || !n;
     $s("#sw-share").disabled = !ready || !(navigator.canShare && navigator.canShare({ files }));
-    $s("#sw-share").title = $s("#sw-share").disabled && ready ? "Your browser can't share files directly â€” use â€œOpen chat & save filesâ€." : "";
+    $s("#sw-share").title = $s("#sw-share").disabled && ready ? "Your browser can't share files directly — use “Open chat & save files”." : "";
   };
   async function prepare() {
     const my = ++seq; files = []; sync();
     if (!dirty) $s("#sw-msg").value = defMsg();
     const want = { front: $s("#sw-front").checked, back: $s("#sw-back").checked, rc: $s("#sw-rc").checked && canRc };
     if (!want.front && !want.back && !want.rc) { $s("#sw-status").textContent = "Tick at least one document."; return; }
-    $s("#sw-status").textContent = "Preparing picturesâ€¦";
+    $s("#sw-status").textContent = "Preparing pictures…";
     try {
       const out = [], ref = govSafe(r[0] || r[1]);
       if (want.front || want.back) {
@@ -3096,8 +3096,8 @@ function sendDocsWhatsApp(r, opts) {
     sync();
   }
   const record = async (how) => {
-    try {   // keep Communication â†’ History complete: one entry per member documents were sent to
-      const m = await repo.createCommMessage(orgId, { title: `Documents sent to ${r[1] || "member"}`, body: `${labelList() || "documents"} â€” ${how}`, kind: "documents", channel: "whatsapp_manual", audience: { member: r[0] || "" }, recipientCount: 1 });
+    try {   // keep Communication → History complete: one entry per member documents were sent to
+      const m = await repo.createCommMessage(orgId, { title: `Documents sent to ${r[1] || "member"}`, body: `${labelList() || "documents"} — ${how}`, kind: "documents", channel: "whatsapp_manual", audience: { member: r[0] || "" }, recipientCount: 1 });
       await repo.logCommOpened(orgId, m.id, { beneficiary_id: r._id || null, name: r[1], phone: numNow() });
     } catch (e) { /* history is a convenience; the send itself already happened */ }
   };
@@ -3105,20 +3105,20 @@ function sendDocsWhatsApp(r, opts) {
   ["#sw-front", "#sw-back", "#sw-rc"].forEach((q) => ($s(q).onchange = prepare));
   $s("#sw-num").oninput = sync;
   $s("#sw-share").onclick = async () => {
-    try { await navigator.share({ files, text: $s("#sw-msg").value }); await record("shared from the device"); toast("Shared â€” choose the WhatsApp chat to send."); }
+    try { await navigator.share({ files, text: $s("#sw-msg").value }); await record("shared from the device"); toast("Shared — choose the WhatsApp chat to send."); }
     catch (e) { if (e && e.name !== "AbortError") $s("#sw-status").textContent = "Couldn't share: " + ((e && e.message) || e); }
   };
   $s("#sw-chat").onclick = async () => {
     window.open(`https://wa.me/${numNow()}?text=${encodeURIComponent($s("#sw-msg").value)}`, "_blank", "noopener");
     files.forEach((f) => saveBlobAs(f, f.name));
-    $s("#sw-status").textContent = "WhatsApp opened and the pictures were saved â€” attach them with the paperclip, then press Send.";
+    $s("#sw-status").textContent = "WhatsApp opened and the pictures were saved — attach them with the paperclip, then press Send.";
     await record("chat opened, pictures saved");
   };
   prepare();
 }
 
 /* ---- remote signing: the card holder signs on their own phone ----
-   Staff create a private, single-use, expiring link (sign-request Edge Function â†’ sign.html). It can
+   Staff create a private, single-use, expiring link (sign-request Edge Function → sign.html). It can
    be sent on WhatsApp (chat, or automatically through the Business number), copied, or shown as a
    QR code for a member who is standing next to you. The member confirms the last 4 digits of their
    ID, signs with a finger and the signature appears on the card by itself. */
@@ -3157,7 +3157,7 @@ function requestSignatureModal(r, onSigned) {
         const live = x.status === "pending" && new Date(x.expires_at) > new Date();
         const st = x.status === "pending" && !live ? "expired" : x.status;
         return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--border);">${statusPill(st)}
-          <span class="hint" style="flex:1;">${esc(fmtDay(x.created_at.slice(0, 10)))}${x.signed_at ? " Â· signed " + esc(new Date(x.signed_at).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })) : ""}</span>
+          <span class="hint" style="flex:1;">${esc(fmtDay(x.created_at.slice(0, 10)))}${x.signed_at ? " · signed " + esc(new Date(x.signed_at).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })) : ""}</span>
           ${live ? `<button type="button" class="btn small" data-rs-revoke="${esc(x.id)}">Cancel link</button>` : ""}</div>`;
       }).join("") : "";
       scrim.querySelectorAll("[data-rs-revoke]").forEach((b) => (b.onclick = async () => {
@@ -3169,11 +3169,11 @@ function requestSignatureModal(r, onSigned) {
         $s("#rs-link").hidden = true;
         toast(first + " signed their card."); if (onSigned) onSigned();
       }
-    } catch (e) { /* offline blip â€” the next poll will retry */ }
+    } catch (e) { /* offline blip — the next poll will retry */ }
   }
   refresh();
   $s("#rs-go").onclick = async () => {
-    const b = $s("#rs-go"); b.disabled = true; $s("#rs-msg").textContent = "Creating a private linkâ€¦";
+    const b = $s("#rs-go"); b.disabled = true; $s("#rs-msg").textContent = "Creating a private link…";
     try {
       const out = await repo.signRequest({ action: "create", org_id: orgId, beneficiary_id: r._id, ttl_hours: +$s("#rs-ttl").value });
       current = { id: out.id, url: signPageUrl(out.token), expires: out.expires_at }; signedSeen = false;
@@ -3197,10 +3197,10 @@ function requestSignatureModal(r, onSigned) {
   $s("#rs-api").onclick = async () => {
     const n = numNow();
     if (!n) { $s("#rs-msg").textContent = "Enter a valid South African cell number first."; return; }
-    const b = $s("#rs-api"); b.disabled = true; $s("#rs-msg").textContent = "Sending through your WhatsApp Business numberâ€¦";
+    const b = $s("#rs-api"); b.disabled = true; $s("#rs-msg").textContent = "Sending through your WhatsApp Business number…";
     try {
       const body = `Please sign your membership card on your phone: ${current.url} (works once, valid until ${until()}). Please don't share this link.`;
-      const m = await repo.createCommMessage(orgId, { title: `Signature request â€” ${r[1] || "member"}`, body, kind: "signature", channel: "whatsapp_api", audience: { member: r[0] || "" }, recipientCount: 1 });
+      const m = await repo.createCommMessage(orgId, { title: `Signature request — ${r[1] || "member"}`, body, kind: "signature", channel: "whatsapp_api", audience: { member: r[0] || "" }, recipientCount: 1 });
       const res = await repo.whatsappSend({ org_id: orgId, message_id: m.id, mode: "template", body, recipients: [{ beneficiary_id: r._id, name: r[1], phone: n }] });
       $s("#rs-msg").textContent = res.sent ? "Sent on WhatsApp. This window updates when they have signed." : "Not sent: " + (((res.results || [])[0] || {}).error || "unknown error");
     } catch (e) { $s("#rs-msg").textContent = "Not sent: " + ((e && e.message) || e); }
@@ -3211,7 +3211,7 @@ function requestSignatureModal(r, onSigned) {
 function editBeneficiaryRow(r, after) {
   const cfg = BENE_EDITORS.register();
   const was = r[9];
-  openModal("Edit member â€” " + (r[1] || "(no name)"), cfg.fields(r), (o) => {
+  openModal("Edit member — " + (r[1] || "(no name)"), cfg.fields(r), (o) => {
     cfg.write(r, o);
     if (after) after();
     renderCurrent();
@@ -3223,7 +3223,7 @@ function editBeneficiaryRow(r, after) {
 function printCardsDialog(rows, title) {
   const pf = cardPrefs();
   openModal(title, [
-    { key: "i", label: `${rows.length} card${rows.length === 1 ? "" : "s"}`, type: "info", value: "Each card prints front and back side by side â€” four per A4 page. Check the preview in the browser's print window, then print or save as PDF." },
+    { key: "i", label: `${rows.length} card${rows.length === 1 ? "" : "s"}`, type: "info", value: "Each card prints front and back side by side — four per A4 page. Check the preview in the browser's print window, then print or save as PDF." },
     { key: "style", label: "Card style", type: "select", options: CARD_STYLES.map((s) => s[1]), value: (CARD_STYLES.find((s) => s[0] === pf.style) || CARD_STYLES[0])[1] },
     { key: "valid", label: "Valid until", type: "date", value: pf.valid },
   ], (o) => {
@@ -3278,12 +3278,12 @@ function openMemberCard(startIdx, navIdx) {
     $q("#mc-warn").innerHTML = cardIssues(r).map((w) => `<p class="mc-note">&#9888; ${esc(w)}</p>`).join("");
     $q("#mc-pos").textContent = `${pos + 1} of ${navIdx.length}`;
     const hc = hhChoices(r[5]);
-    $q("#mc-odi").innerHTML = hc.options.map((o) => `<option value="${esc(o)}"${o === hc.current ? " selected" : ""}>${esc(o || "â€” not linked â€”")}</option>`).join("");
-    $q("#mc-role").innerHTML = HOUSEHOLD_ROLES.map((o) => `<option value="${esc(o)}"${o === (r[11] || "") ? " selected" : ""}>${esc(o || "â€” none â€”")}</option>`).join("");
+    $q("#mc-odi").innerHTML = hc.options.map((o) => `<option value="${esc(o)}"${o === hc.current ? " selected" : ""}>${esc(o || "— not linked —")}</option>`).join("");
+    $q("#mc-role").innerHTML = HOUSEHOLD_ROLES.map((o) => `<option value="${esc(o)}"${o === (r[11] || "") ? " selected" : ""}>${esc(o || "— none —")}</option>`).join("");
     $q("#mc-open-hh").hidden = !householdOf(r[5]);
     const rc = $q("#mc-receipt"), okR = canIssueReceipt(r);
     rc.disabled = !okR; rc.style.opacity = okR ? "" : ".5";
-    rc.title = okR ? "Issue a registration & verification receipt for this member" : "Available only once the member's verification is â€œVerifiedâ€";
+    rc.title = okR ? "Issue a registration & verification receipt for this member" : "Available only once the member's verification is “Verified”";
     $q('[data-mc="prev"]').disabled = pos === 0; $q('[data-mc="next"]').disabled = pos === navIdx.length - 1;
     scrim.querySelectorAll("[data-mc-style]").forEach((b) => b.classList.toggle("active", b.dataset.mcStyle === style));
     const rm = $q("#mc-rm-photo"), rms = $q("#mc-rm-sig");
@@ -3324,7 +3324,7 @@ function openMemberCard(startIdx, navIdx) {
     if (!f) return;
     const r = row(), msg = $q("#mc-msg");
     if (!r._id) { msg.textContent = "Save the member first."; return; }
-    msg.textContent = "Uploadingâ€¦";
+    msg.textContent = "Uploading…";
     try {
       const img = await resizeMemberPhoto(f);
       const doc = await repo.uploadDoc(orgId, "member-photo", r._id, img);
@@ -3353,12 +3353,12 @@ function openMemberCard(startIdx, navIdx) {
     if (!f) return;
     const r = row();
     if (!r._id) { sigMsg.textContent = "Save the member first."; return; }
-    sigMsg.textContent = "Uploadingâ€¦";
+    sigMsg.textContent = "Uploading…";
     try {
       const png = await processSignatureImage(f);
       await storeSig(r, await (await fetch(png)).blob());
       sigMsg.textContent = "Signature saved.";
-    } catch (e) { sigMsg.textContent = (e && e.message) || "Couldn't use that picture â€” try a PNG or JPG of the signature on plain paper."; }
+    } catch (e) { sigMsg.textContent = (e && e.message) || "Couldn't use that picture — try a PNG or JPG of the signature on plain paper."; }
   };
   const rms2 = $q("#mc-rm-sig");
   if (rms2) rms2.onclick = () => confirmModal("Remove this member's signature from the card?", async () => {
@@ -3391,10 +3391,10 @@ const MEMBER_DOC_TYPES = [
 const memberDocTotal = (id) => MEMBER_DOC_TYPES.reduce((s, t) => s + docCount(t.section, id), 0);
 const memberHasId = (r) => docCount("member-id", r._id) > 0;
 async function openMemberDocs(r) {
-  if (!r._id) { toast("This member isn't saved yet â€” wait a moment, then add documents.", true); return; }
-  const { scrim } = govModal("Documents â€” " + (r[1] || "member"), `
-    <p class="hint" style="margin:0 0 10px;">${esc(r[1] || "")}${r[0] ? " Â· " + esc(r[0]) : ""}. Certified ID copies and supporting papers are stored privately and are visible only to this CPA's members.</p>
-    <div id="md-list">${stateHtml("loading", "Loadingâ€¦")}</div>
+  if (!r._id) { toast("This member isn't saved yet — wait a moment, then add documents.", true); return; }
+  const { scrim } = govModal("Documents — " + (r[1] || "member"), `
+    <p class="hint" style="margin:0 0 10px;">${esc(r[1] || "")}${r[0] ? " · " + esc(r[0]) : ""}. Certified ID copies and supporting papers are stored privately and are visible only to this CPA's members.</p>
+    <div id="md-list">${stateHtml("loading", "Loading…")}</div>
     ${CAN_EDIT ? `<div class="mc-ctl" style="margin-top:12px;">
       <select id="md-type" class="mc-date">${MEMBER_DOC_TYPES.map((t) => `<option value="${t.section}">${esc(t.label)}</option>`).join("")}</select>
       <label class="btn primary small" style="cursor:pointer;">Upload file(s)<input type="file" id="md-file" multiple hidden accept="application/pdf,image/*,.doc,.docx"></label>
@@ -3408,7 +3408,7 @@ async function openMemberDocs(r) {
         <div style="margin-bottom:12px;">
           <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><b>${esc(t.label)}</b>
             ${docs.length ? pill(`${docs.length} on file`, "good") : t.required ? pill("Missing", "critical") : '<span class="hint">none</span>'}</div>
-          ${docs.map((d) => `<div class="le-row"><span title="${esc(d.name)}">${esc(d.name)} <span style="color:var(--ink-muted);">${esc(fmtBytes(d.size))}${d.uploaded_at ? " Â· " + esc(fmtDay(String(d.uploaded_at).slice(0, 10))) : ""}</span></span>
+          ${docs.map((d) => `<div class="le-row"><span title="${esc(d.name)}">${esc(d.name)} <span style="color:var(--ink-muted);">${esc(fmtBytes(d.size))}${d.uploaded_at ? " · " + esc(fmtDay(String(d.uploaded_at).slice(0, 10))) : ""}</span></span>
             <span style="display:flex;gap:4px;"><button type="button" class="btn small" data-md-view="${d.id}">View</button>
               <button type="button" class="btn small" data-md-dl="${d.id}">Download</button>
               ${CAN_EDIT ? `<button type="button" class="btn small" data-md-rm="${d.id}" style="color:var(--status-critical);">Delete</button>` : ""}</span></div>`).join("")}
@@ -3422,7 +3422,7 @@ async function openMemberDocs(r) {
       }));
       listEl.querySelectorAll("[data-md-rm]").forEach((b) => (b.onclick = () => {
         const d = find(b.dataset.mdRm), t = groups.find((g) => g.docs.includes(d)).t;
-        confirmModal(`Delete â€œ${d.name}â€?`, async () => {
+        confirmModal(`Delete “${d.name}”?`, async () => {
           try { await repo.deleteDoc(d); bumpDocCount(t.section, r._id, -1); refresh(); renderCurrent(); if (onChange) onChange(); }
           catch (e) { toast("Couldn't delete: " + (e.message || e), true); }
         });
@@ -3436,9 +3436,9 @@ async function openMemberDocs(r) {
     fi.value = "";
     let done = 0;
     for (const f of files) {
-      if (!/\.(pdf|jpe?g|png|heic|webp|gif|docx?)$/i.test(f.name) && !/^(image\/|application\/(pdf|msword|vnd\.openxmlformats))/.test(f.type)) { msg.textContent = `â€œ${f.name}â€ isn't a PDF, photo or Word file.`; continue; }
-      if (f.size > 25 * 1048576) { msg.textContent = `â€œ${f.name}â€ is over 25 MB.`; continue; }
-      msg.textContent = `Uploading ${done + 1} of ${files.length}â€¦`;
+      if (!/\.(pdf|jpe?g|png|heic|webp|gif|docx?)$/i.test(f.name) && !/^(image\/|application\/(pdf|msword|vnd\.openxmlformats))/.test(f.type)) { msg.textContent = `“${f.name}” isn't a PDF, photo or Word file.`; continue; }
+      if (f.size > 25 * 1048576) { msg.textContent = `“${f.name}” is over 25 MB.`; continue; }
+      msg.textContent = `Uploading ${done + 1} of ${files.length}…`;
       try { await repo.uploadDoc(orgId, sec, r._id, f); bumpDocCount(sec, r._id, 1); done++; }
       catch (e) { msg.textContent = "Failed: " + (e.message || e); }
     }
@@ -3449,13 +3449,13 @@ function beneActionsHtml(r, idx) {
   const nDocs = memberDocTotal(r._id), noId = !memberHasId(r);
   return `<span style="display:inline-flex;gap:2px;align-items:center;">
     ${CAN_EDIT ? `<span class="row-actions"><button type="button" data-bene-edit="${idx}" title="Edit member" aria-label="Edit ${esc(r[1])}">${PENCIL}</button></span>` : ""}
-    <button type="button" class="doc-chip${noId ? " missing" : ""}" data-bene-docs="${idx}" title="Documents â€” ${noId ? "no ID on file" : nDocs + " on file"}" aria-label="Documents for ${esc(r[1])}${noId ? ", ID missing" : ""}">${CLIP}${nDocs ? `<span>${nDocs}</span>` : ""}</button>
-    <button type="button" class="doc-chip" data-bene-card="${idx}" title="Membership card â€” view, edit &amp; print" aria-label="Membership card for ${esc(r[1])}">${IDCARD}</button>
+    <button type="button" class="doc-chip${noId ? " missing" : ""}" data-bene-docs="${idx}" title="Documents — ${noId ? "no ID on file" : nDocs + " on file"}" aria-label="Documents for ${esc(r[1])}${noId ? ", ID missing" : ""}">${CLIP}${nDocs ? `<span>${nDocs}</span>` : ""}</button>
+    <button type="button" class="doc-chip" data-bene-card="${idx}" title="Membership card — view, edit &amp; print" aria-label="Membership card for ${esc(r[1])}">${IDCARD}</button>
     ${canIssueReceipt(r) ? `<button type="button" class="doc-chip" data-bene-receipt="${idx}" title="Registration &amp; verification receipt" aria-label="Receipt for ${esc(r[1])}">${RECEIPT_ICON}</button>` : ""}</span>`;
 }
-/* ============ Birthdays (Beneficiaries â†’ Birthdays) ============
+/* ============ Birthdays (Beneficiaries → Birthdays) ============
    Reminds the team of member birthdays and opens a pre-written WhatsApp message to the member.
-   Principles: nothing is ever sent automatically (a person taps Send in WhatsApp â€” no API, no cost,
+   Principles: nothing is ever sent automatically (a person taps Send in WhatsApp — no API, no cost,
    no secrets); only Active, adult members who haven't opted out; a 29 Feb birthday is observed on
    28 Feb in non-leap years; one wish per member per year is recorded (bene_wishes) so the team
    doesn't double-send and the reminder clears; the message text is never stored. */
@@ -3473,7 +3473,7 @@ function birthInfo(r, today = new Date()) {
   return { date: dt, days: Math.round((dt - t0) / 86400000), turns };
 }
 const wishThisYear = (r) => (DATA.wishes || []).find((w) => w.beneficiary_id === r._id && w.year === new Date().getFullYear());
-/* Free-text "Contact" â†’ a WhatsApp-ready South African mobile number (27XXXXXXXXX), or "". */
+/* Free-text "Contact" → a WhatsApp-ready South African mobile number (27XXXXXXXXX), or "". */
 function waNumber(contact) {
   for (const part of String(contact || "").split(/[\/,;]|\bor\b|\band\b/i)) {
     let s = part.replace(/[^\d+]/g, "");
@@ -3485,7 +3485,7 @@ function waNumber(contact) {
   return "";
 }
 const prettyCell = (n) => (n ? `+${n.slice(0, 2)} ${n.slice(2, 4)} ${n.slice(4, 7)} ${n.slice(7)}` : "");
-/* South African ID â†’ birth date (YYMMDD at the start). Used only to fill an empty birth date when a
+/* South African ID → birth date (YYMMDD at the start). Used only to fill an empty birth date when a
    full 13-digit ID is typed or imported; the ID itself is still stored masked. Luhn-checked. */
 function dobFromSaId(raw) {
   const id = String(raw || "").replace(/\D/g, "");
@@ -3499,7 +3499,7 @@ function dobFromSaId(raw) {
   if (dt.getFullYear() !== y || dt.getMonth() !== mm - 1 || dt.getDate() !== dd) return "";
   return `${y}-${pad2(mm)}-${pad2(dd)}`;
 }
-const DEFAULT_WISH = "Happy birthday, {name}! Everyone at {cpa} wishes you good health and a wonderful year ahead. â€” The Committee";
+const DEFAULT_WISH = "Happy birthday, {name}! Everyone at {cpa} wishes you good health and a wonderful year ahead. — The Committee";
 const wishTemplate = () => { try { return localStorage.getItem("cpa360.bday.msg." + orgId) || DEFAULT_WISH; } catch (e) { return DEFAULT_WISH; } };
 function wishMessage(r, info) {
   const full = String(r[1] || "").trim().replace(/\s+/g, " ");
@@ -3513,7 +3513,7 @@ function birthdayDue(maxDays) {
     .filter((x) => x.info && x.info.days <= maxDays && x.info.turns >= 18 && !wishThisYear(x.r))
     .sort((a, b) => a.info.days - b.info.days || natCmp(a.r[1], b.r[1]));
 }
-/* Who goes on the Birthday shoutout poster for the day `days` ahead (0 = today): the Birthdays rules â€” active, not opted out â€”
+/* Who goes on the Birthday shoutout poster for the day `days` ahead (0 = today): the Birthdays rules — active, not opted out —
    plus: under-18s are never listed (only counted, so the dialog can say how many were left off). */
 function posterPeople(days) {
   const today = new Date(), out = { people: [], minors: 0, optedOut: 0, date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + days) };
@@ -3538,7 +3538,7 @@ function openShoutout() {
 }
 async function sendBirthdayWish(r, info) {
   const num = waNumber(r[6]);
-  if (!num) { toast("This member has no WhatsApp-able cell number â€” add one via Edit.", true); return; }
+  if (!num) { toast("This member has no WhatsApp-able cell number — add one via Edit.", true); return; }
   window.open(`https://wa.me/${num}?text=${encodeURIComponent(wishMessage(r, info))}`, "_blank", "noopener");
   try {
     const w = await repo.addBirthdayWish(orgId, r._id, new Date().getFullYear());
@@ -3548,7 +3548,7 @@ async function sendBirthdayWish(r, info) {
 }
 function editWishMessage() {
   openModal("Birthday wish message", [
-    { key: "i", label: "Placeholders", type: "info", value: "{name} = first name Â· {fullname} Â· {cpa} = your CPA's name Â· {age} = the age they turn. Keep it short and warm â€” it opens in WhatsApp for you to review and send." },
+    { key: "i", label: "Placeholders", type: "info", value: "{name} = first name · {fullname} · {cpa} = your CPA's name · {age} = the age they turn. Keep it short and warm — it opens in WhatsApp for you to review and send." },
     { key: "msg", label: "Message", type: "textarea", value: wishTemplate() },
   ], (o) => {
     try { localStorage.setItem("cpa360.bday.msg." + orgId, o.msg.trim() || DEFAULT_WISH); } catch (e) {}
@@ -3569,7 +3569,7 @@ function renderBeneBirthdays(host) {
   const wishedN = (DATA.wishes || []).filter((w) => w.year === yr).length;
   const dayLabel = (d) => (d === 0 ? pill("Today", "good") : d === 1 ? "Tomorrow" : `in ${d} days`);
   mountRegister(host, {
-    title: "Birthdays", hint: "Nothing is sent automatically â€” â€œSend birthday wishâ€ opens a pre-written WhatsApp message for you to review and send. Only active adult members who haven't opted out are shown a button.",
+    title: "Birthdays", hint: "Nothing is sent automatically — “Send birthday wish” opens a pre-written WhatsApp message for you to review and send. Only active adult members who haven't opted out are shown a button.",
     stats: () => [
       statTile("Birthdays today", rows.filter((r) => info.get(r).days === 0).length, dueToday ? `${dueToday} still to wish` : "All wished", dueToday ? "warning" : "good"),
       statTile("Next 7 days", rows.filter((r) => info.get(r).days <= 7).length, "Coming up", ""),
@@ -3578,8 +3578,8 @@ function renderBeneBirthdays(host) {
     ],
     columns: [{ label: "Birthday" }, { label: "Member" }, { label: "Turns", cls: "num" }, { label: "WhatsApp" }, { label: "Household / ODI" }, { label: "Wish" }],
     rows: () => rows,
-    empty: rows.length ? "No birthdays in this window." : "No birth dates on the register yet â€” add them under Edit member, import them, or type a full 13-digit ID number (the birth date fills in automatically).",
-    search: "Search name or refâ€¦",
+    empty: rows.length ? "No birthdays in this window." : "No birth dates on the register yet — add them under Edit member, import them, or type a full 13-digit ID number (the birth date fills in automatically).",
+    search: "Search name or ref…",
     toggles: [
       { key: "today", label: "Today", test: (r) => info.get(r).days === 0 },
       { key: "w7", label: "Next 7 days", test: (r) => info.get(r).days <= 7 },
@@ -3590,23 +3590,23 @@ function renderBeneBirthdays(host) {
       const i = info.get(r), num = waNumber(r[6]), w = wishThisYear(r), idx = DATA.beneficiaryCentre.register.indexOf(r);
       let wish;
       if (r[13] === true) wish = pill("Opted out", "neutral");
-      else if (i.turns < 18) wish = `<span class="hint">Under 18 â€” greet via parent / guardian</span>`;
+      else if (i.turns < 18) wish = `<span class="hint">Under 18 — greet via parent / guardian</span>`;
       else if (w) wish = pill("Wished " + fmtDay(String(w.at).slice(0, 10)), "good") + (CAN_EDIT ? ` <button type="button" class="linkbtn" data-bday-undo="${idx}">Undo</button>` : "");
       else if (!num) wish = `<span class="hint" style="color:var(--status-warning);">No cell number</span>` + (CAN_EDIT ? ` <button type="button" class="linkbtn" data-bday-edit="${idx}">Add</button>` : "");
       else if (CAN_EDIT) wish = `<button type="button" class="btn primary small" data-bday-send="${idx}">Send birthday wish</button>`;
-      else wish = '<span class="hint">â€”</span>';
+      else wish = '<span class="hint">—</span>';
       return [
         `<b>${esc(i.date.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" }))}</b><div class="hint">${dayLabel(i.days)}</div>`,
         `<span style="font-weight:600;">${esc(r[1])}</span><div class="hint mono">${esc(r[0])}</div>`,
         `<span class="mono">${i.turns}</span>`,
-        num ? `<span class="mono">${esc(prettyCell(num))}</span>` : '<span class="hint">â€”</span>',
-        r[5] ? `<span class="mono">${esc(r[5])}</span><div class="hint">${esc(brmOdi(r) ? "ODI: " + brmOdi(r) : "")}</div>` : '<span class="hint">â€”</span>',
+        num ? `<span class="mono">${esc(prettyCell(num))}</span>` : '<span class="hint">—</span>',
+        r[5] ? `<span class="mono">${esc(r[5])}</span><div class="hint">${esc(brmOdi(r) ? "ODI: " + brmOdi(r) : "")}</div>` : '<span class="hint">—</span>',
         wish,
       ];
     },
     manage: () => listEditor(BENE_EDITORS.register()),
     rerender: () => renderBeneBirthdays(host),
-    extraTools: CAN_EDIT ? [`<button class="btn primary" data-bday-poster type="button" title="One poster listing everyone whose birthday it is â€” ready for WhatsApp Status">Birthday shoutout</button>`, `<button class="btn" data-bday-reminder type="button" title="Get a reminder every morning â€” in the platform, your phone calendar, email or WhatsApp">Daily reminder</button>`, `<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
+    extraTools: CAN_EDIT ? [`<button class="btn primary" data-bday-poster type="button" title="One poster listing everyone whose birthday it is — ready for WhatsApp Status">Birthday shoutout</button>`, `<button class="btn" data-bday-reminder type="button" title="Get a reminder every morning — in the platform, your phone calendar, email or WhatsApp">Daily reminder</button>`, `<button class="btn" data-bday-msg type="button">Edit wish message</button>`] : [],
     afterRender: (h) => {
       const reg = DATA.beneficiaryCentre.register;
       h.querySelectorAll("[data-bday-send]").forEach((b) => (b.onclick = () => { const r = reg[+b.dataset.bdaySend]; sendBirthdayWish(r, info.get(r)); }));
@@ -3626,13 +3626,13 @@ function renderBeneBirthdays(host) {
   });
 }
 
-/* ============ Beneficiary Master Register â€” official export ============
+/* ============ Beneficiary Master Register — official export ============
    A formal, paginated document for submission to the Registrar of Communal Property Associations
    (Dept. of Land Reform and Rural Development) or for the AGM/funders: letterhead, document number +
    check code, summary, the register (headers repeat on every page, "Page x of y"), then a
    certification page with the Chairperson's and Secretary's signatures and a stamp box.
-   Formats: PDF (browser print), Word, CSV. ID numbers are printed exactly as held â€” masked (last 4
-   digits) â€” the platform never stores full ID numbers. No prescribed Departmental template is
+   Formats: PDF (browser print), Word, CSV. ID numbers are printed exactly as held — masked (last 4
+   digits) — the platform never stores full ID numbers. No prescribed Departmental template is
    assumed: the layout follows what the CPA Act asks a membership list to show. */
 const BRM_TITLE = "Beneficiary Master Register";
 const natCmp = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
@@ -3681,7 +3681,7 @@ function brmHtml(rows, o, mode) {
     ${word ? "@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt 30pt 36pt 30pt;} div.Section1{page:Section1;}"
       : `@page{size:A4 landscape;margin:15mm 12mm 17mm;
           @top-left{content:"${cssStr(BRM_TITLE)}";font:8pt Calibri,Arial,sans-serif;color:#666;}
-          @top-right{content:"${cssStr(cpa)}${reg ? " Â· " + cssStr(reg) : ""}";font:8pt Calibri,Arial,sans-serif;color:#666;}
+          @top-right{content:"${cssStr(cpa)}${reg ? " · " + cssStr(reg) : ""}";font:8pt Calibri,Arial,sans-serif;color:#666;}
           @bottom-left{content:"Document no. ${cssStr(no)}";font:8pt Calibri,Arial,sans-serif;color:#666;}
           @bottom-right{content:"Page " counter(page) " of " counter(pages);font:8pt Calibri,Arial,sans-serif;color:#666;}}`}
     body{font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#1a1a1a;font-size:10pt;margin:0;}
@@ -3712,14 +3712,14 @@ function brmHtml(rows, o, mode) {
   const head = cols.map((c) => `<th>${esc(c[0])}</th>`).join("");
   const body = rows.map((r, i) => `<tr>${cols.map((c) => `<td>${esc(c[1](r, i))}</td>`).join("")}</tr>`).join("");
   const sigCellHtml = (which, label, nm) => `<td>${sigOn ? sigImg(which, 46) : "<div style=\"height:46px\"></div>"}<div class="sigline"><b>${esc(label)}</b><br>${esc(nm || "")}<br>Date: ${sigOn ? esc(fmtDay(isoDay(new Date()))) : "________________"}</div></td>`;
-  return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(BRM_TITLE)} â€” ${esc(cpa)}</title>
+  return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(BRM_TITLE)} — ${esc(cpa)}</title>
   <style>${css}</style></head><body>
-  ${word ? "" : `<div class="bar"><button onclick="window.print()">Print / Save as PDF</button><span>${rows.length} record${rows.length === 1 ? "" : "s"} Â· A4 landscape Â· choose â€œSave as PDFâ€ as the printer Â· header and footer are built in â€” turn off the browser's own Headers and footers</span></div>`}
+  ${word ? "" : `<div class="bar"><button onclick="window.print()">Print / Save as PDF</button><span>${rows.length} record${rows.length === 1 ? "" : "s"} · A4 landscape · choose “Save as PDF” as the printer · header and footer are built in — turn off the browser's own Headers and footers</span></div>`}
   <div class="${word ? "Section1" : ""}">
   <div class="hdr"><table><tr><td style="width:70pt;">${logo}</td><td>
-    <div class="org">${esc(cpa)}${reg ? " Â· Registration no. " + esc(reg) : ""}</div>
+    <div class="org">${esc(cpa)}${reg ? " · Registration no. " + esc(reg) : ""}</div>
     <h1>${esc(BRM_TITLE)}</h1>
-    <div class="sub">Communal Property Associations Act, 1996 (Act 28 of 1996) â€” as at ${esc(asAtLong)}${o.period ? " Â· " + esc(o.period) : ""}</div></td>
+    <div class="sub">Communal Property Associations Act, 1996 (Act 28 of 1996) — as at ${esc(asAtLong)}${o.period ? " · " + esc(o.period) : ""}</div></td>
     <td style="text-align:right;width:190pt;" class="meta">Document no.<br><b>${esc(no)}</b><br>Prepared for: the Registrar of Communal Property Associations,<br>Department of Land Reform and Rural Development${DATA.cpa.region ? `<br>${esc(DATA.cpa.region)}` : ""}</td></tr></table></div>
   <h2>Summary of the register</h2>
   <table class="sum"><tr>
@@ -3729,28 +3729,28 @@ function brmHtml(rows, o, mode) {
   <h2>Register of members</h2>
   <table class="reg"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}">No members match the chosen scope.</td></tr>`}</tbody></table>
   <div class="cert">
-    <div class="hdr"><div class="org">${esc(cpa)}${reg ? " Â· " + esc(reg) : ""}</div><h1 style="font-size:17pt;">Certification of the ${esc(BRM_TITLE)}</h1></div>
-    <p>We, the undersigned office bearers of <b>${esc(cpa)}</b>${reg ? ` (registration no. ${esc(reg)})` : ""}, certify that this ${esc(BRM_TITLE)} (document no. <b>${esc(no)}</b>) has been extracted from the association's membership records, reflects <b>${s.total}</b> member${s.total === 1 ? "" : "s"} as at <b>${esc(asAtLong)}</b> â€” of whom <b>${s.verified}</b> ${s.verified === 1 ? "has" : "have"} been verified by the association â€” and is a true and accurate record to the best of our knowledge. It is submitted in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), to the Registrar of Communal Property Associations.</p>
+    <div class="hdr"><div class="org">${esc(cpa)}${reg ? " · " + esc(reg) : ""}</div><h1 style="font-size:17pt;">Certification of the ${esc(BRM_TITLE)}</h1></div>
+    <p>We, the undersigned office bearers of <b>${esc(cpa)}</b>${reg ? ` (registration no. ${esc(reg)})` : ""}, certify that this ${esc(BRM_TITLE)} (document no. <b>${esc(no)}</b>) has been extracted from the association's membership records, reflects <b>${s.total}</b> member${s.total === 1 ? "" : "s"} as at <b>${esc(asAtLong)}</b> — of whom <b>${s.verified}</b> ${s.verified === 1 ? "has" : "have"} been verified by the association — and is a true and accurate record to the best of our knowledge. It is submitted in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), to the Registrar of Communal Property Associations.</p>
     <p>Identity numbers are shown masked (last four digits), as held on the association's register. The full register, with supporting identity documents, is available from the association's records on request.</p>
     <table class="sig"><tr>${sigCellHtml("chair", "Chairperson", chairName())}${sigCellHtml("secretary", "Secretary", secName())}</tr></table>
     <table style="width:100%;margin-top:14pt;"><tr><td style="border:0;vertical-align:top;"><div class="stamp">Official stamp<br>of the Association</div></td>
       <td style="border:0;vertical-align:top;padding-left:20pt;"><table class="box"><tr><td style="width:40%;"><b>Date of the AGM at which the register was presented</b></td><td>&nbsp;</td></tr>
-        <tr><td><b>For official use â€” Department reference no.</b></td><td>&nbsp;</td></tr><tr><td><b>Date received / received by</b></td><td>&nbsp;</td></tr></table></td></tr></table>
-    <p class="fine">Document no. ${esc(no)} Â· check code ${esc(check)} Â· ${s.total} record${s.total === 1 ? "" : "s"} Â· generated ${esc(new Date().toLocaleString("en-ZA", { dateStyle: "long", timeStyle: "short" }))} from ${esc(cpa)}'s CPA360â„¢ records. The check code changes if any member's name, ID, household, status or verification in this register changes, so a printed copy can be compared with the live register.</p>
+        <tr><td><b>For official use — Department reference no.</b></td><td>&nbsp;</td></tr><tr><td><b>Date received / received by</b></td><td>&nbsp;</td></tr></table></td></tr></table>
+    <p class="fine">Document no. ${esc(no)} · check code ${esc(check)} · ${s.total} record${s.total === 1 ? "" : "s"} · generated ${esc(new Date().toLocaleString("en-ZA", { dateStyle: "long", timeStyle: "short" }))} from ${esc(cpa)}'s CPA360™ records. The check code changes if any member's name, ID, household, status or verification in this register changes, so a printed copy can be compared with the live register.</p>
   </div></div></body></html>`;
 }
 function brmCsv(rows, o) {
   const cols = brmColumns(o);
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  return "ï»¿" + [cols.map((c) => q(c[0])).join(","), ...rows.map((r, i) => cols.map((c) => q(c[1](r, i))).join(","))].join("\r\n");
+  return "﻿" + [cols.map((c) => q(c[0])).join(","), ...rows.map((r, i) => cols.map((c) => q(c[1](r, i))).join(","))].join("\r\n");
 }
 function brmExport(o) {
   const reg = DATA.beneficiaryCentre.register || [];
   const rows = brmRows(reg, o);
   if (!rows.length) { toast("No members match those choices.", true); return; }
   const base = `${BRM_TITLE.replace(/ /g, "-")}-${govSafe(DATA.cpa.name)}-${o.asAt}`;
-  if (o.format === "csv") { downloadFile(base + ".csv", brmCsv(rows, o), "text/csv"); toast(`CSV exported â€” ${rows.length} members.`); return; }
-  if (o.format === "word") { downloadFile(base + ".doc", brmHtml(rows, o, "word"), "application/msword"); toast(`Word document exported â€” ${rows.length} members.`); return; }
+  if (o.format === "csv") { downloadFile(base + ".csv", brmCsv(rows, o), "text/csv"); toast(`CSV exported — ${rows.length} members.`); return; }
+  if (o.format === "word") { downloadFile(base + ".doc", brmHtml(rows, o, "word"), "application/msword"); toast(`Word document exported — ${rows.length} members.`); return; }
   const url = URL.createObjectURL(new Blob([brmHtml(rows, o, "print")], { type: "text/html" }));
   const w = window.open(url, "_blank");
   if (!w) { toast("Please allow pop-ups to open the print view.", true); URL.revokeObjectURL(url); return; }
@@ -3769,10 +3769,10 @@ function brmDialog(selected) {
     { key: "extra", label: "Extra columns", type: "select", options: ["None", "Date of birth", "Contact number", "Date of birth and contact number"], value: "None" },
     { key: "asAt", label: "Register as at", type: "date", value: isoDay(new Date()) },
     { key: "period", label: "Reporting period / financial year (optional)", type: "text", value: "" },
-    { key: "sign", label: "Chairperson & Secretary signatures", type: "select", options: hasSig ? ["Apply the signatures from Brand Box", "Leave blank â€” I will sign by hand"] : ["Leave blank â€” I will sign by hand"], value: hasSig ? "Apply the signatures from Brand Box" : "Leave blank â€” I will sign by hand" },
+    { key: "sign", label: "Chairperson & Secretary signatures", type: "select", options: hasSig ? ["Apply the signatures from Brand Box", "Leave blank — I will sign by hand"] : ["Leave blank — I will sign by hand"], value: hasSig ? "Apply the signatures from Brand Box" : "Leave blank — I will sign by hand" },
     { key: "format", label: "Format", type: "select", options: ["PDF (print view)", "Word (.doc)", "CSV (Excel)"], value: "PDF (print view)" },
   ];
-  openModal("Export â€” " + BRM_TITLE, fields, (out) => {
+  openModal("Export — " + BRM_TITLE, fields, (out) => {
     brmExport({
       scope: (scopes.find((s) => s[1] === out.scope) || scopes[0])[0], verifiedOnly: out.ver === "Verified members only",
       sort: out.sort === "By name" ? "name" : "ref", dob: /birth/.test(out.extra), contact: /ontact/.test(out.extra),
@@ -3787,24 +3787,24 @@ function renderBeneRegister(host) {
   const selRows = reg.filter((r) => sel.has(String(r._id)));
   mountRegister(host, {
     title: "Master Beneficiary Register", importKey: "beneficiaries", stats: beneStats,
-    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score. Pencil = edit Â· paperclip = ID and supporting documents (red dot = no ID on file"
-      + (reg.length ? `: ${reg.filter((r) => !memberHasId(r)).length} of ${reg.length}` : "") + ") Â· card icon = membership card.",
+    hint: "One row per registered member. Status and verification drive the Beneficiaries domain of your score. Pencil = edit · paperclip = ID and supporting documents (red dot = no ID on file"
+      + (reg.length ? `: ${reg.filter((r) => !memberHasId(r)).length} of ${reg.length}` : "") + ") · card icon = membership card.",
     columns: [{ label: "Ref." }, { label: "Full name" }, { label: "Family position" }, { label: "Gender" }, { label: "DOB" }, { label: "Household" },
       { label: "Contact" }, { label: "Joined" }, { label: "Status" }, { label: "Verification" }, { label: "Actions" }],
     rows: () => reg,
-    empty: "No beneficiaries captured yet â€” Import a spreadsheet or add them.",
+    empty: "No beneficiaries captured yet — Import a spreadsheet or add them.",
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
-      `<span style="font-weight:600;">${esc(r[1])}</span>`, r[11] ? `<span class="pill neutral">${esc(r[11])}</span>` : "â€”",
+      `<span style="font-weight:600;">${esc(r[1])}</span>`, r[11] ? `<span class="pill neutral">${esc(r[11])}</span>` : "—",
       esc(r[2]), `<span class="mono">${esc(r[3])}</span>`,
-      !r[5] ? `<span class="hint">â€” not linked</span>`
+      !r[5] ? `<span class="hint">— not linked</span>`
         : `<button type="button" class="linkbtn mono" data-bene-hh="${esc(r[5])}" title="Open this household in the ODI register">${esc(r[5])}</button>`
-          + (householdOf(r[5]) ? `<div class="hint">ODI: ${esc(odiNameOf(householdOf(r[5])) || "â€”")}</div>` : `<div class="hint" style="color:var(--status-warning);">not in ODI register</div>`),
+          + (householdOf(r[5]) ? `<div class="hint">ODI: ${esc(odiNameOf(householdOf(r[5])) || "—")}</div>` : `<div class="hint" style="color:var(--status-warning);">not in ODI register</div>`),
       esc(r[6]), `<span class="mono">${esc(r[7])}</span>`,
       statusPill(r[8]), statusPill(r[9]), beneActionsHtml(r, reg.indexOf(r))],
     manage: () => listEditor(BENE_EDITORS.register()),
     addNew: { label: "Add beneficiary", editor: () => BENE_EDITORS.register(), after: (row) => { bulkState("bene-register").q = row[1] || ""; offerReceipt(row); } },
     bulkKey: "bene-register", filterCol: 8, filterLabel: "Status", section: "beneficiaries",
-    search: "Search name, ref, ID, household, contactâ€¦",
+    search: "Search name, ref, ID, household, contact…",
     toggles: [
       { key: "noid", label: "No ID on file", test: (r) => !memberHasId(r) },
       { key: "nodob", label: "No date of birth", test: (r) => !parseIso(r[3]) },
@@ -3812,8 +3812,8 @@ function renderBeneRegister(host) {
     ],
     rerender: () => renderBeneRegister(host),
     extraTools: [
-      ...(CAN_EDIT ? [`<button class="btn primary" data-bene-idscan type="button" title="Upload an ID copy â€” the details are read for you and the rest is completed by hand">Add from ID copy</button>`] : []),
-      `<button class="btn" data-bene-export type="button" title="Official Beneficiary Master Register â€” PDF, Word or CSV">Export register</button>`,
+      ...(CAN_EDIT ? [`<button class="btn primary" data-bene-idscan type="button" title="Upload an ID copy — the details are read for you and the rest is completed by hand">Add from ID copy</button>`] : []),
+      `<button class="btn" data-bene-export type="button" title="Official Beneficiary Master Register — PDF, Word or CSV">Export register</button>`,
       `<button class="btn" data-bene-print-sel type="button"${selRows.length ? "" : " disabled"}>Print cards${selRows.length ? ` (${selRows.length})` : ""}</button>`,
       `<button class="btn" data-bene-print-all type="button">Print all active</button>`,
     ],
@@ -3866,7 +3866,7 @@ function renderBeneVerification(host) {
       </div>
       <div class="card">
         <div class="card-head"><h3>Breakdown</h3>
-          <button class="btn view-ok" id="bene-evidence-btn" type="button">Evidence library${evidence ? ` Â· ${evidence}` : ""}</button></div>
+          <button class="btn view-ok" id="bene-evidence-btn" type="button">Evidence library${evidence ? ` · ${evidence}` : ""}</button></div>
         <table><tbody>${byStatus.map((x) => `<tr><td>${statusPill(x.s)}</td>
           <td class="num mono" style="font-weight:600;">${x.n}</td>
           <td style="color:var(--ink-muted);">${fmtPct(x.n / t * 100)}</td></tr>`).join("")}</tbody></table>
@@ -3882,14 +3882,14 @@ function renderBeneVerification(host) {
   host.querySelector("#bene-evidence-btn").onclick = () => attachmentsModal("beneficiary", null, "Beneficiary verification evidence");
 }
 /* Each household is a family tree rooted at its ODI: the ODI, the Family
-   Representative and up to 7 descendants â€” is a real beneficiary. Each
+   Representative and up to 7 descendants — is a real beneficiary. Each
    becomes its own row in the Master Beneficiary Register, tagged with its
-   Family position (see HOUSEHOLD_ROLES) so 1stâ€¦7th Descendant is a
+   Family position (see HOUSEHOLD_ROLES) so 1st…7th Descendant is a
    proper field, not a number you have to infer. Keyed by <household
    ref>-<slot>, so running it again after editing a household updates the
    same beneficiary rather than duplicating; status/verification already set
    on an existing extracted beneficiary is left alone. Mutates
-   DATA.beneficiaryCentre.register directly â€” caller commits. */
+   DATA.beneficiaryCentre.register directly — caller commits. */
 function extractOneHousehold(h, reg) {
   const hhRef = h[0];
   const slots = [
@@ -3929,12 +3929,12 @@ function extractHouseholdsAsBeneficiaries() {
   const reg = DATA.beneficiaryCentre.register;
   let created = 0, updated = 0;
   chosen.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; });
-  if (!created && !updated) { toast("Nothing to extract â€” the selected household(s) have no names filled in yet.", true); return; }
+  if (!created && !updated) { toast("Nothing to extract — the selected household(s) have no names filled in yet.", true); return; }
   commit("beneficiaries");
   toast(`Extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""}.`);
 }
 const TREE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M12 7v5M6 17v-3a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/></svg>';
-/* Family tree upload / scan / review â†’ family-tree.js (needs a saved household so files have somewhere to live). */
+/* Family tree upload / scan / review → family-tree.js (needs a saved household so files have somewhere to live). */
 function openFamilyTreeFor(h) {
   if (!h) return;
   if (!h._id) { toast("Save the household first.", true); return; }
@@ -3945,7 +3945,7 @@ function openFamilyTreeFor(h) {
     h: { esc, toast, pill, statTile, govModal, confirmModal, maskId, dobFromSaId, bumpDocCount, fmtDay },
   });
 }
-/* Intake tab â†’ intake.js: documents members send through the CPA's private submission link (WhatsApp-friendly), reviewed here */
+/* Intake tab → intake.js: documents members send through the CPA's private submission link (WhatsApp-friendly), reviewed here */
 function renderBeneIntake(host) {
   renderIntake(host, {
     orgId, canEdit: CAN_EDIT, cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
@@ -3961,7 +3961,7 @@ function renderBeneIntake(host) {
     h: { esc, toast, govModal, confirmModal, bumpDocCount },
   });
 }
-/* Family Trees tab â†’ family-trees.js (automatic trees + charts per household, PNG/PDF downloads) */
+/* Family Trees tab → family-trees.js (automatic trees + charts per household, PNG/PDF downloads) */
 function renderBeneFamilyTrees(host) {
   renderFamilyTrees(host, {
     cpa: () => DATA.cpa, households: () => DATA.beneficiaryCentre.households, register: () => DATA.beneficiaryCentre.register,
@@ -3976,23 +3976,23 @@ function renderBeneHouseholds(host) {
   const selN = DATA.beneficiaryCentre.households.filter((h) => bulk.selected.has(String(h._id))).length;
   mountRegister(host, {
     title: "Household Records", importKey: "households",
-    hint: "Households are a summary/rollup of the family â€” a household is not itself a beneficiary. Member names and "
+    hint: "Households are a summary/rollup of the family — a household is not itself a beneficiary. Member names and "
       + "IDs live in the Master Beneficiary Register (filter it by Household ref. to see who's in a household); "
-      + "â€œMembersâ€ below is a live count from there, not typed in by hand. Importing a spreadsheet here also "
+      + "“Members” below is a live count from there, not typed in by hand. Importing a spreadsheet here also "
       + "creates each ODI, Family Representative and descendant as a beneficiary automatically. After manual edits, "
-      + "select households below and use â€œExtractâ€ to re-sync the Master Register.",
+      + "select households below and use “Extract” to re-sync the Master Register.",
     columns: [{ label: "Household ID" }, { label: "ODI" }, { label: "Household Head" },
       { label: "Members", cls: "num" }, { label: "Family tree" }, { label: "Verification" }, { label: "Dispute" }, { label: "Resident?" }, { label: "Status" }],
     rows: () => DATA.beneficiaryCentre.households,
     empty: "No households recorded.",
     cell: (r) => {
-      // ID numbers are masked-entry fields (see the Add/Edit form) and â€” same as the
-      // Master Beneficiary Register â€” never surfaced in the list view, only there.
+      // ID numbers are masked-entry fields (see the Add/Edit form) and — same as the
+      // Master Beneficiary Register — never surfaced in the list view, only there.
       const members = reg.filter((x) => x[5] === r[0] && x[8] !== "Removed").length;
       return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`,
         `<span style="font-weight:600;">${esc(r[2])}</span>`,
         esc(r[1]), members ? `<button type="button" class="linkbtn mono" data-hh-members="${esc(r[0])}" title="Show these members in the Master Register">${members}</button>` : `<span class="mono">0</span>`,
-        `<button type="button" class="doc-chip${docCount("household-tree", r._id) ? "" : " missing"}" data-hh-tree="${esc(r[0])}" title="Family tree â€” upload, scan &amp; add members (${docCount("household-tree", r._id)} on file)" aria-label="Family tree for household ${esc(r[0])}">${TREE_ICON}${docCount("household-tree", r._id) ? `<span>${docCount("household-tree", r._id)}</span>` : ""}</button>`,
+        `<button type="button" class="doc-chip${docCount("household-tree", r._id) ? "" : " missing"}" data-hh-tree="${esc(r[0])}" title="Family tree — upload, scan &amp; add members (${docCount("household-tree", r._id)} on file)" aria-label="Family tree for household ${esc(r[0])}">${TREE_ICON}${docCount("household-tree", r._id) ? `<span>${docCount("household-tree", r._id)}</span>` : ""}</button>`,
         statusPill(r[17] || "Pending"),
         r[22] ? pill(r[23] ? `Disputed (${esc(r[23])})` : "Disputed", "critical") : pill("None", "neutral"),
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
@@ -4000,9 +4000,9 @@ function renderBeneHouseholds(host) {
     manage: () => listEditor(BENE_EDITORS.households()),
     addNew: { label: "Add household", editor: () => BENE_EDITORS.households(), after: (row) => { bulkState("bene-households").q = row[0] || ""; } },
     bulkKey: "bene-households", filterCol: 12, filterLabel: "Status", section: "households",
-    search: "Search ODI, representative, descendants, refâ€¦",
+    search: "Search ODI, representative, descendants, ref…",
     rerender: () => renderBeneHouseholds(host),
-    extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} â†’ Beneficiaries</button>`,
+    extraTools: [`<button class="btn" data-reg-extract type="button"${selN ? "" : " disabled"}>Extract${selN ? ` (${selN})` : ""} → Beneficiaries</button>`,
       ...(CAN_EDIT ? [`<button class="btn primary" data-hh-import type="button" title="Upload new family trees / a household register as PDF, Excel, CSV or a photo and match its columns">Import family trees (PDF / sheet)</button>`] : [])],
     afterRender: (h) => {
       const b = h.querySelector("[data-reg-extract]");
@@ -4039,7 +4039,7 @@ function renderBeneSuccession(host) {
     manage: () => listEditor(BENE_EDITORS.succession()),
     addNew: { label: "Add succession case", editor: () => BENE_EDITORS.succession() },
     bulkKey: "bene-succession", filterCol: 6, filterLabel: "Status", section: "succession_cases",
-    search: "Search deceased, successor, refâ€¦",
+    search: "Search deceased, successor, ref…",
     rerender: () => renderBeneSuccession(host),
   });
 }
@@ -4062,7 +4062,7 @@ function renderBeneDeceased(host) {
     </div>
     <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Deceased Members</h3>
       <span class="hint">Set a member's status to "Deceased" in the Master Register; open a case in Succession.</span></div>
-      <span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off" placeholder="Search name, ref, householdâ€¦" value="${esc(ss.q || "")}" aria-label="Search Deceased Members">${q ? `<span class="hint reg-search-n">${shown.length} of ${dead.length}</span>` : ""}</span></div>
+      <span class="reg-search-wrap"><input type="search" class="reg-search" data-reg-search autocomplete="off" placeholder="Search name, ref, household…" value="${esc(ss.q || "")}" aria-label="Search Deceased Members">${q ? `<span class="hint reg-search-n">${shown.length} of ${dead.length}</span>` : ""}</span></div>
     <div class="table-wrap"><table>
       <thead><tr><th>Ref.</th><th>Full name</th><th>Household</th><th>Joined</th><th>Succession case</th></tr></thead>
       <tbody>${shown.length ? shown.map((r) => `<tr>
@@ -4071,7 +4071,7 @@ function renderBeneDeceased(host) {
         <td class="mono">${esc(r[5])}</td>
         <td class="mono">${esc(r[7])}</td>
         <td>${sMap[r[0]] ? statusPill(sMap[r[0]]) : `<span class="pill critical">None</span>`}</td>
-      </tr>`).join("") : emptyRow(5, q ? `No match for â€œ${ss.q.trim()}â€ â€” try fewer or shorter words.` : "No members marked deceased.")}</tbody>
+      </tr>`).join("") : emptyRow(5, q ? `No match for “${ss.q.trim()}” — try fewer or shorter words.` : "No members marked deceased.")}</tbody>
     </table></div>`;
   const si = host.querySelector("[data-reg-search]");
   si.oninput = () => {
@@ -4108,7 +4108,7 @@ function renderBeneDisputes(host) {
     manage: () => listEditor(BENE_EDITORS.disputes()),
     addNew: { label: "Add case", editor: () => BENE_EDITORS.disputes() },
     bulkKey: "bene-disputes", filterCol: 5, filterLabel: "Status", section: "beneficiary_disputes",
-    search: "Search parties, description, refâ€¦",
+    search: "Search parties, description, ref…",
     rerender: () => renderBeneDisputes(host),
   });
 }
@@ -4182,7 +4182,7 @@ function renderAdminCorr(host) {
   const overdue = c.filter((r) => r[8] === "Overdue" || (r[6] && new Date(r[6]) < now && r[8] !== "Closed")).length;
   mountRegister(host, {
     title: "Correspondence Register", importKey: "admin_correspondence",
-    hint: "Incoming and outgoing letters, notices and emails â€” and whether they've been dealt with.",
+    hint: "Incoming and outgoing letters, notices and emails — and whether they've been dealt with.",
     stats: () => [
       statTile("Items", c.length, "This period", ""),
       statTile("Open", c.filter((r) => r[8] === "Open").length, "Awaiting action", ""),
@@ -4205,12 +4205,12 @@ function renderAdminCorr(host) {
 function renderAdminDoa(host) {
   mountRegister(host, {
     title: "Delegation of Authority Matrix", importKey: "admin_doa",
-    hint: "Who may approve what, and up to what value â€” the CPA's authorisation framework.",
+    hint: "Who may approve what, and up to what value — the CPA's authorisation framework.",
     columns: [{ label: "Function / decision" }, { label: "Category" }, { label: "Threshold" }, { label: "Approver" }, { label: "Secondary" }, { label: "Reference" }],
     rows: () => DATA.admin.doa,
     empty: "No delegation lines recorded.",
     cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
-      esc(r[2]), esc(r[3]), esc(r[4]) || "â€”", `<span class="mono" style="color:var(--ink-muted);">${esc(r[5])}</span>`],
+      esc(r[2]), esc(r[3]), esc(r[4]) || "—", `<span class="mono" style="color:var(--ink-muted);">${esc(r[5])}</span>`],
     manage: () => listEditor(ADMIN_EDITORS.doa()),
   });
 }
@@ -4221,7 +4221,7 @@ function renderAdminPolicies(host) {
   const due = p.filter((r) => r[4] && new Date(r[4]) < now).length;
   mountRegister(host, {
     title: "Policies & SOPs", importKey: "admin_policies",
-    hint: "The institutional policy framework â€” versions, adoption and review dates.",
+    hint: "The institutional policy framework — versions, adoption and review dates.",
     stats: () => [
       statTile("Policies", p.length, "On the register", ""),
       statTile("Adopted", p.filter((r) => r[6] === "Adopted").length, "In force", "good"),
@@ -4234,14 +4234,14 @@ function renderAdminPolicies(host) {
     cell: (r) => {
       const late = r[4] && new Date(r[4]) < now;
       return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
-        `<span class="mono">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3]) || "â€”"}</span>`,
-        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[4]) || "â€”"}</span>`, esc(r[5]), statusPill(r[6])];
+        `<span class="mono">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3]) || "—"}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[4]) || "—"}</span>`, esc(r[5]), statusPill(r[6])];
     },
     manage: () => listEditor(ADMIN_EDITORS.policies()),
     extraTools: [`<button class="btn" data-policy-pdf type="button">Upload PDF</button>`],
     afterRender: (h) => {
       const b = h.querySelector("[data-policy-pdf]");
-      if (b) b.onclick = () => attachmentsModal("admin_policies", null, "Policies & SOPs â€” PDF documents", {
+      if (b) b.onclick = () => attachmentsModal("admin_policies", null, "Policies & SOPs — PDF documents", {
         accept: "application/pdf,.pdf", label: "Upload a PDF",
         match: /\.pdf$|^application\/pdf$/i, matchMsg: "Please choose a PDF file.",
       });
@@ -4253,7 +4253,7 @@ const RECORD_STATUSES = ["Current", "Archived", "Disposed"];
 function renderAdminRecords(host) {
   mountRegister(host, {
     title: "Institutional Records Index", importKey: "admin_records",
-    hint: "Every record series â€” where it lives, who keeps it, and how long it's retained.",
+    hint: "Every record series — where it lives, who keeps it, and how long it's retained.",
     columns: [{ label: "Record series" }, { label: "Contents" }, { label: "Medium" }, { label: "Location" }, { label: "Custodian" }, { label: "Retention" }, { label: "Status" }],
     rows: () => DATA.admin.records,
     empty: "No record series recorded.",
@@ -4288,8 +4288,8 @@ function renderHrOverview(host) {
     <div class="grid grid-4">
       ${statTile("Active staff", active.length, `${s.filter((r) => r[7] === "On leave").length} on leave`, "")}
       ${statTile("Positions", pos.length, `${vac} vacant`, vac ? "warning" : "good")}
-      ${statTile("Latest payroll (net)", latest ? fmtR(latest[4]) : "â€”", latest ? `${esc(latest[0])} Â· ${esc(latest[7])}` : "No runs recorded", latest && latest[7] === "Paid" ? "good" : "warning")}
-      ${statTile("Permanent share", active.length ? fmtPct(active.filter((r) => r[3] === "Permanent").length / active.length * 100) : "â€”", "of the active workforce", "")}
+      ${statTile("Latest payroll (net)", latest ? fmtR(latest[4]) : "—", latest ? `${esc(latest[0])} · ${esc(latest[7])}` : "No runs recorded", latest && latest[7] === "Paid" ? "good" : "warning")}
+      ${statTile("Permanent share", active.length ? fmtPct(active.filter((r) => r[3] === "Permanent").length / active.length * 100) : "—", "of the active workforce", "")}
     </div>
     <div class="grid grid-2" style="margin-top:16px;">
       <div class="card">
@@ -4303,7 +4303,7 @@ function renderHrOverview(host) {
         <dl class="kv">
           <dt>Employment contracts</dt><dd>Filed per staff member in HR Records</dd>
           <dt>HR policy</dt><dd>${esc((DATA.admin.policies.find((r) => r[1] === "HR") || [null, null, null, null, null, null, "not yet drafted"])[6])}</dd>
-          <dt>Master File â€” HR</dt><dd>${(DATA.masterFile.find((m) => m[1] === "HR") || [null, null, null, 0])[3]}% complete</dd>
+          <dt>Master File — HR</dt><dd>${(DATA.masterFile.find((m) => m[1] === "HR") || [null, null, null, 0])[3]}% complete</dd>
         </dl>
       </div>
     </div>`;
@@ -4314,7 +4314,7 @@ function renderHrStaff(host) {
   const s = DATA.hr.staff;
   mountRegister(host, {
     title: "Staff Register", importKey: "hr_staff",
-    hint: "Everyone the CPA employs or contracts â€” role, employment basis and status.",
+    hint: "Everyone the CPA employs or contracts — role, employment basis and status.",
     stats: () => [
       statTile("On the register", s.length, "All records", ""),
       statTile("Active", s.filter((r) => r[7] === "Active").length, "Currently working", "good"),
@@ -4335,7 +4335,7 @@ function renderHrPositions(host) {
   const hc = p.reduce((s, r) => s + (r[5] === "Filled" ? (+r[4] || 0) : 0), 0);
   mountRegister(host, {
     title: "Positions & Organogram", importKey: "hr_positions",
-    hint: "The establishment â€” every position, who it reports to, and whether it's filled.",
+    hint: "The establishment — every position, who it reports to, and whether it's filled.",
     stats: () => [
       statTile("Positions", p.length, "In the establishment", ""),
       statTile("Filled", p.filter((r) => r[5] === "Filled").length, `${hc} budgeted heads`, "good"),
@@ -4345,7 +4345,7 @@ function renderHrPositions(host) {
     columns: [{ label: "Position" }, { label: "Department" }, { label: "Reports to" }, { label: "Incumbent" }, { label: "Heads", cls: "num" }, { label: "Status" }],
     rows: () => p,
     empty: "No positions recorded.",
-    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), esc(r[2]), esc(r[3]) || "â€”",
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), esc(r[2]), esc(r[3]) || "—",
       `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])],
     manage: () => listEditor(HR_EDITORS.positions()),
   });
@@ -4356,7 +4356,7 @@ function renderHrPayroll(host) {
   const ytd = p.filter((r) => r[7] === "Paid").reduce((s, r) => s + (+r[4] || 0), 0);
   mountRegister(host, {
     title: "Payroll Summaries", importKey: "hr_payroll",
-    hint: "Monthly payroll totals and the statutory references â€” not individual pay slips.",
+    hint: "Monthly payroll totals and the statutory references — not individual pay slips.",
     stats: () => [
       statTile("Runs recorded", p.length, "This year", ""),
       statTile("Net paid (YTD)", fmtR(ytd), p.filter((r) => r[7] === "Paid").length + " runs settled", "good"),
@@ -4452,7 +4452,7 @@ function renderAssetLeases(host) {
     rows: () => leases,
     empty: "No leases recorded.",
     cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), `<span style="color:var(--ink-2);">${esc(r[2])}</span>`,
-      `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`, `<span class="mono">${esc(r[4])} â€“ ${esc(r[5])}</span>`,
+      `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`, `<span class="mono">${esc(r[4])} – ${esc(r[5])}</span>`,
       `<span class="mono">${(+r[6] || 0).toLocaleString()}</span>`, statusPill(r[7])],
     manage: editLeases,
   });
@@ -4480,7 +4480,7 @@ function renderAssetPermits(host) {
   const issued = timber.filter((r) => r[10] === "Issued").length;
   mountRegister(host, {
     title: "Permits & Licences", importKey: "permits",
-    hint: "Water use, grazing, environmental and other regulatory authorisations â€” plus the full Timber permit application-to-issuance workflow.",
+    hint: "Water use, grazing, environmental and other regulatory authorisations — plus the full Timber permit application-to-issuance workflow.",
     stats: timber.length ? () => [
       statTile("Timber permits", timber.length, "Total on record", ""),
       statTile("Awaiting verification", pending, "Applications to review", pending ? "warning" : "good"),
@@ -4491,9 +4491,9 @@ function renderAssetPermits(host) {
     rows: () => p,
     empty: "No permits recorded.",
     cell: (r) => [
-      `<span style="font-weight:600;">${esc(r[0] || r[11] || "â€”")}</span>`,
+      `<span style="font-weight:600;">${esc(r[0] || r[11] || "—")}</span>`,
       esc(r[3] || "Other"),
-      esc(r[4] || "â€”"),
+      esc(r[4] || "—"),
       `<span class="mono">${esc(r[1])}</span>`,
       `<span class="pill">${esc(r[10] || "Not Started")}</span>`,
       statusPill(r[2]),
@@ -4520,7 +4520,7 @@ function renderAssetInfra(host) {
   const poor = inf.filter((r) => ["Poor", "Non-functional"].includes(r[5])).length;
   mountRegister(host, {
     title: "Infrastructure", importKey: "infrastructure",
-    hint: "Fixed improvements on the land â€” water, roads, buildings, fencing, energy.",
+    hint: "Fixed improvements on the land — water, roads, buildings, fencing, energy.",
     stats: () => [
       statTile("Assets", inf.length, "Fixed improvements", ""),
       statTile("Replacement value", fmtR(inf.reduce((s, r) => s + (+r[4] || 0), 0)), "Total on record", ""),
@@ -4643,7 +4643,7 @@ function renderFinBudget(host) {
     </div>
     <div class="split split-finance" style="margin-top:14px;">
       <div class="card">
-        <div class="card-head"><h3>Cash Balance â€” Trailing 12 Months</h3>${CAN_EDIT ? `<button class="btn" id="fin-edit-figures" type="button">Edit figures</button>` : ""}</div>
+        <div class="card-head"><h3>Cash Balance — Trailing 12 Months</h3>${CAN_EDIT ? `<button class="btn" id="fin-edit-figures" type="button">Edit figures</button>` : ""}</div>
         <div id="finance-line" class="chart-wrap"></div>
       </div>
       <div class="card">
@@ -4661,7 +4661,7 @@ function renderFinBudget(host) {
       return { label: name, value: actual, max: budget || 1,
         cls: budget && actual / budget > 1 ? "critical" : budget && actual / budget < 0.4 ? "warning" : "" };
     }),
-    { fmtVal: (it) => (it.max ? fmtPct(it.value / it.max * 100) : "â€”") }
+    { fmtVal: (it) => (it.max ? fmtPct(it.value / it.max * 100) : "—") }
   ) : `<p class="muted">No budget categories recorded.</p>`;
   const ef = host.querySelector("#fin-edit-figures"); if (ef) ef.onclick = editFinanceFigures;
   const mc = host.querySelector("#fin-manage-cats"); if (mc) mc.onclick = editCategories;
@@ -4689,26 +4689,26 @@ function renderFinTransactions(host) {
     cell: (r) => [`<span class="mono">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]),
       `<span class="pill ${r[3] === "Income" ? "good" : "neutral"}">${esc(r[3])}</span>`,
       `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, esc(r[5]), `<span class="mono">${esc(r[6])}</span>`,
-      r[7] ? '<span class="pill good">âœ“</span>' : '<span class="pill warning">â€”</span>'],
+      r[7] ? '<span class="pill good">✓</span>' : '<span class="pill warning">—</span>'],
     manage: () => listEditor(FIN_EDITORS.transactions()),
   });
 }
-/* Municipal rates, Eskom, water and other recurring bills â€” distinct from the
+/* Municipal rates, Eskom, water and other recurring bills — distinct from the
    Transactions ledger (money that's already moved): a bill is an outstanding
    obligation, tracked with the scanned/PDF bill attached until it's paid
-   down. Outstanding is always amount âˆ’ amount_paid, never typed by hand, so
+   down. Outstanding is always amount − amount_paid, never typed by hand, so
    it can't drift out of sync with what's actually been paid. */
 const BILL_TYPES = ["Municipality (Rates & Taxes)", "Eskom (Electricity)", "Water", "Sewerage", "Refuse", "Telecoms", "Insurance", "Other"];
 const BILL_STATUSES = ["Outstanding", "Partially Paid", "Paid", "Disputed"];
 function billOutstanding(r) { return Math.max(0, (+r[6] || 0) - (+r[7] || 0)); }
 /* Two independently-tracked evidence slots per bill, same pattern as the
    Resolutions register's "signed resolution" / "attendance register" chips:
-   the bill itself, and â€” once it's been paid â€” the proof of payment. */
+   the bill itself, and — once it's been paid — the proof of payment. */
 function billDocCellHtml(refId) {
   const doc = docCount("bill", refId);
   const pop = docCount("bill-pop", refId);
   const chip = (kind, n, label) => `<button type="button" class="doc-chip${n ? "" : " missing"}"
-      data-bill-${kind}="${esc(refId)}" title="${label}${n ? ` â€” ${n} file${n > 1 ? "s" : ""} attached` : " â€” missing"}"
+      data-bill-${kind}="${esc(refId)}" title="${label}${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
       aria-label="${label}${n ? "" : ", missing"}">${CLIP}${n ? `<span>${n}</span>` : ""}</button>`;
   return `<div class="row-actions doc-chips">
     ${chip("doc", doc, "Bill document")}
@@ -4724,8 +4724,8 @@ function renderFinBills(host) {
   const missingPop = rows.filter((r) => (+r[7] || 0) > 0 && docCount("bill-pop", r._id) === 0).length;
   mountRegister(host, {
     title: "Bills", importKey: "fin_bills",
-    hint: "Municipality, Eskom, water and other recurring bills â€” attach the scanned/PDF bill and, once it's paid, the "
-      + "proof of payment, and track what's still owed. â€œOutstandingâ€ is worked out from Amount âˆ’ Paid to date, so it "
+    hint: "Municipality, Eskom, water and other recurring bills — attach the scanned/PDF bill and, once it's paid, the "
+      + "proof of payment, and track what's still owed. “Outstanding” is worked out from Amount − Paid to date, so it "
       + "always matches what you've actually paid.",
     stats: () => [
       statTile("Bills on file", rows.length, "", ""),
@@ -4737,13 +4737,13 @@ function renderFinBills(host) {
     columns: [{ label: "Bill" }, { label: "Provider" }, { label: "Account no." }, { label: "Bill date" }, { label: "Due" },
       { label: "Amount", cls: "num" }, { label: "Outstanding", cls: "num" }, { label: "Status" }, { label: "Added" }, { label: "Documents" }],
     rows: () => rows,
-    empty: "No bills recorded â€” upload a municipality, Eskom or water bill to get started.",
+    empty: "No bills recorded — upload a municipality, Eskom or water bill to get started.",
     cell: (r) => {
       const out = billOutstanding(r);
       const late = out > 0 && r[5] && new Date(r[5]) < now;
-      return [`<span class="pill neutral">${esc(r[1])}</span>`, `<span style="font-weight:600;">${esc(r[2]) || "â€”"}</span>`,
-        `<span class="mono" style="color:var(--ink-muted);">${esc(r[3])}</span>`, `<span class="mono">${esc(r[4]) || "â€”"}</span>`,
-        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[5]) || "â€”"}</span>`,
+      return [`<span class="pill neutral">${esc(r[1])}</span>`, `<span style="font-weight:600;">${esc(r[2]) || "—"}</span>`,
+        `<span class="mono" style="color:var(--ink-muted);">${esc(r[3])}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[5]) || "—"}</span>`,
         `<span class="mono">${fmtR(+r[6] || 0)}</span>`,
         `<span class="mono" style="${out ? "font-weight:700;" : ""}">${fmtR(out)}</span>`,
         statusPill(late ? "Overdue" : r[8]), `<span class="hint">${esc((r[10] || "").slice(0, 10))}</span>`, billDocCellHtml(r._id)];
@@ -4752,14 +4752,14 @@ function renderFinBills(host) {
     afterRender: (h) => {
       h.querySelectorAll("[data-bill-doc]").forEach((b) => (b.onclick = () => {
         const r = rows.find((x) => String(x._id) === b.dataset.billDoc);
-        attachmentsModal("bill", r._id, "Bill â€” " + (r[2] || r[1]), {
+        attachmentsModal("bill", r._id, "Bill — " + (r[2] || r[1]), {
           accept: "application/pdf,.pdf,image/*", label: "Upload the bill (PDF or photo)",
           match: /\.(pdf|jpe?g|png|heic|webp)$|^(application\/pdf|image\/)/i, matchMsg: "Please choose a PDF or an image.",
         });
       }));
       h.querySelectorAll("[data-bill-pop]").forEach((b) => (b.onclick = () => {
         const r = rows.find((x) => String(x._id) === b.dataset.billPop);
-        attachmentsModal("bill-pop", r._id, "Proof of payment â€” " + (r[2] || r[1]), {
+        attachmentsModal("bill-pop", r._id, "Proof of payment — " + (r[2] || r[1]), {
           accept: "application/pdf,.pdf,image/*", label: "Upload proof of payment (PDF or photo)",
           match: /\.(pdf|jpe?g|png|heic|webp)$|^(application\/pdf|image\/)/i, matchMsg: "Please choose a PDF or an image.",
         });
@@ -4767,13 +4767,13 @@ function renderFinBills(host) {
     },
   });
 }
-/* Shared single-attachment doc chip for the six registers below â€” same visual
+/* Shared single-attachment doc chip for the six registers below — same visual
    as billDocCellHtml's chips, generalized since each of these needs exactly
    one evidence slot (unlike Bills' bill+POP pair). */
 function docChip(section, refId, label) {
   const n = docCount(section, refId);
   return `<button type="button" class="doc-chip${n ? "" : " missing"}"
-    data-doc-chip="${esc(section)}::${esc(refId)}" title="${esc(label)}${n ? ` â€” ${n} file${n > 1 ? "s" : ""} attached` : " â€” missing"}"
+    data-doc-chip="${esc(section)}::${esc(refId)}" title="${esc(label)}${n ? ` — ${n} file${n > 1 ? "s" : ""} attached` : " — missing"}"
     aria-label="${esc(label)}${n ? "" : ", missing"}">${CLIP}${n ? `<span>${n}</span>` : ""}</button>`;
 }
 function wireDocChips(host, rows, labelFor) {
@@ -4788,7 +4788,7 @@ function wireDocChips(host, rows, labelFor) {
   }));
 }
 
-/* Quotations â€” competitive-sourcing evidence per requisition (item 3.3 of a
+/* Quotations — competitive-sourcing evidence per requisition (item 3.3 of a
    typical FINCOM agenda). Multiple quotes share one requisition_ref; one is
    marked "selected". */
 function renderFinQuotes(host) {
@@ -4800,7 +4800,7 @@ function renderFinQuotes(host) {
   const noSelection = reqRefs.filter((k) => !byReq[k].some((r) => r[5])).length;
   mountRegister(host, {
     title: "Quotations", importKey: "fin_quotes",
-    hint: "Competitive sourcing evidence â€” record every quote obtained for a requisition (aim for at least 3) and mark the one selected. Attach the quote document itself.",
+    hint: "Competitive sourcing evidence — record every quote obtained for a requisition (aim for at least 3) and mark the one selected. Attach the quote document itself.",
     stats: () => [
       statTile("Quotes on file", rows.length, "", ""),
       statTile("Requisitions quoted", reqRefs.length, "Distinct requisition refs", ""),
@@ -4811,15 +4811,15 @@ function renderFinQuotes(host) {
       { label: "Quote date" }, { label: "Selected" }, { label: "Document" }],
     rows: () => rows,
     empty: "No quotes recorded.",
-    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "â€”"}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
-      esc(r[2]), `<span class="mono">${fmtR(+r[3] || 0)}</span>`, `<span class="mono">${esc(r[4]) || "â€”"}</span>`,
-      r[5] ? pill("Selected", "good") : pill("â€”", "neutral"), docChip("quote", r._id, "Quote document")],
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "—"}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+      esc(r[2]), `<span class="mono">${fmtR(+r[3] || 0)}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`,
+      r[5] ? pill("Selected", "good") : pill("—", "neutral"), docChip("quote", r._id, "Quote document")],
     manage: () => listEditor(FIN_EDITORS.quotes()),
-    afterRender: (h) => wireDocChips(h, rows, (r) => "Quote â€” " + (r[2] || r[1])),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Quote — " + (r[2] || r[1])),
   });
 }
 
-/* Contracts register â€” signed agreements with suppliers/professionals
+/* Contracts register — signed agreements with suppliers/professionals
    (item 3.4). Distinct from Suppliers, which tracks the entity, not the
    individual agreement's terms/expiry. */
 const CONTRACT_STATUSES = ["Active", "Expiring Soon", "Expired", "Terminated"];
@@ -4831,7 +4831,7 @@ function renderFinContracts(host) {
   const expiredButActive = rows.filter((r) => r[5] && r[8] === "Active" && daysTo(r[5]) < 0).length;
   mountRegister(host, {
     title: "Contracts Register", importKey: "fin_contracts",
-    hint: "Signed agreements with suppliers, professionals and service providers â€” with the actual contract attached, so renewal and expiry never get missed.",
+    hint: "Signed agreements with suppliers, professionals and service providers — with the actual contract attached, so renewal and expiry never get missed.",
     stats: () => [
       statTile("Contracts on file", rows.length, "", ""),
       statTile("Active", rows.filter((r) => r[8] === "Active").length, "", "good"),
@@ -4844,17 +4844,17 @@ function renderFinContracts(host) {
     empty: "No contracts recorded.",
     cell: (r) => {
       const late = r[5] && r[8] === "Active" && daysTo(r[5]) < 0;
-      return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "â€”"}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
-        esc(r[3]) || "â€”", `<span class="mono">${esc(r[4]) || "â€”"}</span>`,
-        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[5]) || "â€”"}</span>`,
+      return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "—"}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+        esc(r[3]) || "—", `<span class="mono">${esc(r[4]) || "—"}</span>`,
+        `<span class="mono" style="${late ? "color:var(--status-critical);font-weight:700;" : ""}">${esc(r[5]) || "—"}</span>`,
         `<span class="mono">${fmtR(+r[6] || 0)}</span>`, statusPill(r[8]), docChip("contract", r._id, "Signed contract")];
     },
     manage: () => listEditor(FIN_EDITORS.contracts()),
-    afterRender: (h) => wireDocChips(h, rows, (r) => "Contract â€” " + r[1]),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Contract — " + r[1]),
   });
 }
 
-/* Goods/services received (GRN) â€” independent confirmation before payment
+/* Goods/services received (GRN) — independent confirmation before payment
    (item 3.6): the classic segregation-of-duties control between the person
    who orders and the person who pays. */
 const GRN_STATUSES = ["Received", "Partially Received", "Discrepancy", "Rejected"];
@@ -4879,17 +4879,17 @@ function renderFinGrn(host) {
       { label: "Condition" }, { label: "Status" }, { label: "Document" }],
     rows: () => rows,
     empty: "No goods/services receipts recorded.",
-    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "â€”"}</span>`, `<span class="mono">${esc(r[1]) || "â€”"}</span>`,
-      `<span style="font-weight:600;">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3]) || "â€”"}</span>`, esc(r[4]) || "â€”",
+    cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0]) || "—"}</span>`, `<span class="mono">${esc(r[1]) || "—"}</span>`,
+      `<span style="font-weight:600;">${esc(r[2])}</span>`, `<span class="mono">${esc(r[3]) || "—"}</span>`, esc(r[4]) || "—",
       pill(r[5], r[5] === "Good" ? "good" : ["Poor", "Non-functional"].includes(r[5]) ? "critical" : "warning"),
       statusPill(r[7]), docChip("grn", r._id, "Delivery note / GRN")],
     manage: () => listEditor(FIN_EDITORS.grn()),
-    afterRender: (h) => wireDocChips(h, rows, (r) => "GRN â€” " + r[2]),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "GRN — " + r[2]),
   });
 }
 
-/* Annual Financial Statements â€” one row per financial year (item 4): draft â†’
-   audited â†’ adopted by members â†’ filed with DALRRD/CIPC. Also read by the
+/* Annual Financial Statements — one row per financial year (item 4): draft →
+   audited → adopted by members → filed with DALRRD/CIPC. Also read by the
    Institutional Score's "Annual financial statements / audit" criterion in
    preference to the old admin_records name-matching heuristic. */
 const AFS_STATUSES = ["Draft", "Under Audit", "Audited", "Adopted", "Filed"];
@@ -4900,10 +4900,10 @@ function renderFinAfs(host) {
   const withDoc = rows.filter((r) => docCount("afs", r._id) > 0).length;
   mountRegister(host, {
     title: "Annual Financial Statements", importKey: "fin_afs",
-    hint: "One row per financial year â€” draft, under audit, adopted by members, then filed. Attach the actual AFS document; this feeds the Institutional Score directly.",
+    hint: "One row per financial year — draft, under audit, adopted by members, then filed. Attach the actual AFS document; this feeds the Institutional Score directly.",
     stats: () => [
       statTile("Years on file", rows.length, "", ""),
-      statTile("Latest year", latest ? latest[0] : "â€”", latest ? latest[1] : "", ""),
+      statTile("Latest year", latest ? latest[0] : "—", latest ? latest[1] : "", ""),
       statTile("Adopted but not yet filed", notFiled, "", notFiled ? "warning" : "good"),
       statTile("Documents attached", `${withDoc} / ${rows.length}`, "", ""),
     ],
@@ -4911,18 +4911,18 @@ function renderFinAfs(host) {
       { label: "Filed DALRRD" }, { label: "Filed CIPC" }, { label: "Document" }],
     rows: () => rows,
     empty: "No financial years recorded.",
-    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, statusPill(r[1]), esc(r[2]) || "â€”",
-      `<span class="mono">${esc(r[3]) || "â€”"}</span>`, `<span class="mono">${esc(r[4]) || "â€”"}</span>`, `<span class="mono">${esc(r[5]) || "â€”"}</span>`,
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, statusPill(r[1]), esc(r[2]) || "—",
+      `<span class="mono">${esc(r[3]) || "—"}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`, `<span class="mono">${esc(r[5]) || "—"}</span>`,
       docChip("afs", r._id, "AFS document")],
     manage: () => listEditor(FIN_EDITORS.afs()),
-    afterRender: (h) => wireDocChips(h, rows, (r) => "Annual Financial Statements â€” " + r[0]),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Annual Financial Statements — " + r[0]),
   });
 }
 
-/* Members' remuneration â€” payments/benefits to EXCO/committee members
+/* Members' remuneration — payments/benefits to EXCO/committee members
    (item 4.6), a known high-scrutiny area for CPAs. Links to the approving
-   resolution by ref. rather than duplicating a document slot â€” the actual
-   resolution document already lives in Governance â†’ Resolutions. */
+   resolution by ref. rather than duplicating a document slot — the actual
+   resolution document already lives in Governance → Resolutions. */
 const MEMBER_PAY_TYPES = ["Sitting Allowance", "Stipend", "Travel/Subsistence", "Other Benefit"];
 function renderFinMemberPay(host) {
   const rows = DATA.finProc.memberPay || [];
@@ -4931,7 +4931,7 @@ function renderFinMemberPay(host) {
   const notDisclosed = rows.filter((r) => !r[6]).length;
   mountRegister(host, {
     title: "Members' Remuneration", importKey: "fin_member_pay",
-    hint: "Payments and benefits to EXCO/committee members â€” a high-scrutiny area. Link each to the resolution that approved it and confirm it was disclosed at the AGM.",
+    hint: "Payments and benefits to EXCO/committee members — a high-scrutiny area. Link each to the resolution that approved it and confirm it was disclosed at the AGM.",
     stats: () => [
       statTile("Total paid to members", fmtR(total), "All periods on file", ""),
       statTile("Payments", rows.length, "", ""),
@@ -4942,15 +4942,15 @@ function renderFinMemberPay(host) {
       { label: "Period" }, { label: "Resolution ref." }, { label: "Disclosed AGM" }],
     rows: () => rows,
     empty: "No member payments recorded.",
-    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]) || "â€”", `<span class="pill neutral">${esc(r[2])}</span>`,
-      `<span class="mono">${fmtR(+r[3] || 0)}</span>`, `<span class="mono">${esc(r[4]) || "â€”"}</span>`,
+    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]) || "—", `<span class="pill neutral">${esc(r[2])}</span>`,
+      `<span class="mono">${fmtR(+r[3] || 0)}</span>`, `<span class="mono">${esc(r[4]) || "—"}</span>`,
       (r[5] || "").trim() ? `<span class="mono">${esc(r[5])}</span>` : pill("Missing", "critical"),
       r[6] ? pill("Yes", "good") : pill("No", "warning")],
     manage: () => listEditor(FIN_EDITORS.memberPay()),
   });
 }
 
-/* Monthly bank reconciliations â€” a formal, signed-off statement (item 5.5),
+/* Monthly bank reconciliations — a formal, signed-off statement (item 5.5),
    distinct from the per-transaction "reconciled" checkbox on Transactions. */
 const BANKRECON_STATUSES = ["Draft", "Reviewed", "Signed Off"];
 function bankReconDiff(r) { return (+r[1] || 0) - (+r[2] || 0); }
@@ -4961,10 +4961,10 @@ function renderFinBankRecon(host) {
   const missingDoc = rows.filter((r) => docCount("bankrecon", r._id) === 0).length;
   mountRegister(host, {
     title: "Bank Reconciliations", importKey: "fin_bank_recon",
-    hint: "A formal, signed-off reconciliation for every month â€” attach the statement itself. This is the first thing an auditor asks for.",
+    hint: "A formal, signed-off reconciliation for every month — attach the statement itself. This is the first thing an auditor asks for.",
     stats: () => [
       statTile("Months on file", rows.length, "", ""),
-      statTile("Unresolved differences", unresolved, "Bank â‰  books by more than R1", unresolved ? "critical" : "good"),
+      statTile("Unresolved differences", unresolved, "Bank ≠ books by more than R1", unresolved ? "critical" : "good"),
       statTile("Not yet signed off", notSignedOff, "", notSignedOff ? "warning" : "good"),
       statTile("Missing the statement", missingDoc, "No file attached", missingDoc ? "warning" : "good"),
     ],
@@ -4976,14 +4976,14 @@ function renderFinBankRecon(host) {
       const diff = bankReconDiff(r);
       return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="mono">${fmtR(+r[1] || 0)}</span>`, `<span class="mono">${fmtR(+r[2] || 0)}</span>`,
         `<span class="mono" style="${Math.abs(diff) > 1 ? "color:var(--status-critical);font-weight:700;" : ""}">${fmtR(diff)}</span>`,
-        esc(r[3]) || "â€”", esc(r[4]) || "â€”", statusPill(r[5]), docChip("bankrecon", r._id, "Reconciliation statement")];
+        esc(r[3]) || "—", esc(r[4]) || "—", statusPill(r[5]), docChip("bankrecon", r._id, "Reconciliation statement")];
     },
     manage: () => listEditor(FIN_EDITORS.bankRecon()),
-    afterRender: (h) => wireDocChips(h, rows, (r) => "Bank Reconciliation â€” " + r[0]),
+    afterRender: (h) => wireDocChips(h, rows, (r) => "Bank Reconciliation — " + r[0]),
   });
 }
 
-/* Month-end close checklist (item 5.7/5.8) â€” ties journals, accruals, bank
+/* Month-end close checklist (item 5.7/5.8) — ties journals, accruals, bank
    reconciliation and reporting together into one auditable per-month record. */
 function closeCompletionPct(r) { const items = [r[1], r[2], r[3], r[4]]; return Math.round(items.filter(Boolean).length / items.length * 100); }
 function renderFinClose(host) {
@@ -4993,11 +4993,11 @@ function renderFinClose(host) {
   const latest = rows[0];
   mountRegister(host, {
     title: "Month-End Close Checklist", importKey: "fin_close",
-    hint: "Journals posted, accruals raised, bank reconciled, reports issued â€” one row per month, ticked off and signed.",
+    hint: "Journals posted, accruals raised, bank reconciled, reports issued — one row per month, ticked off and signed.",
     stats: () => [
       statTile("Months tracked", rows.length, "", ""),
       statTile("Fully closed", fullyClosed, "All four steps done", ""),
-      statTile("Latest month", latest ? `${closeCompletionPct(latest)}%` : "â€”", latest ? latest[0] : "", latest && closeCompletionPct(latest) < 100 ? "warning" : "good"),
+      statTile("Latest month", latest ? `${closeCompletionPct(latest)}%` : "—", latest ? latest[0] : "", latest && closeCompletionPct(latest) < 100 ? "warning" : "good"),
       statTile("Not signed off", notSignedOff, "", notSignedOff ? "warning" : "good"),
     ],
     columns: [{ label: "Period" }, { label: "Journals" }, { label: "Accruals" }, { label: "Bank rec" }, { label: "Reports" },
@@ -5009,7 +5009,7 @@ function renderFinClose(host) {
       const yn = (v) => (v ? pill("Done", "good") : pill("Pending", "warning"));
       return [`<span style="font-weight:600;">${esc(r[0])}</span>`, yn(r[1]), yn(r[2]), yn(r[3]), yn(r[4]),
         `<span class="mono" style="${pct === 100 ? "color:var(--status-good);" : "font-weight:700;"}">${pct}%</span>`,
-        esc(r[5]) || "â€”", `<span class="mono">${esc(r[6]) || "â€”"}</span>`];
+        esc(r[5]) || "—", `<span class="mono">${esc(r[6]) || "—"}</span>`];
     },
     manage: () => listEditor(FIN_EDITORS.close()),
   });
@@ -5020,7 +5020,7 @@ function renderFinRequisitions(host) {
   const pending = q.filter((r) => r[7] === "Submitted").length;
   mountRegister(host, {
     title: "Purchase Requisitions", importKey: "proc_requisitions",
-    hint: "Requests to spend â€” approved before a purchase order is raised.",
+    hint: "Requests to spend — approved before a purchase order is raised.",
     stats: () => [
       statTile("Requisitions", q.length, "This cycle", ""),
       statTile("Awaiting approval", pending, "Submitted, not decided", pending ? "warning" : "good"),
@@ -5032,7 +5032,7 @@ function renderFinRequisitions(host) {
     empty: "No requisitions recorded.",
     cell: (r) => [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`,
       `<span style="font-weight:600;">${esc(r[2])}</span>`, esc(r[3]), `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`,
-      esc(r[5]), esc(r[6]) || "â€”", statusPill(r[7])],
+      esc(r[5]), esc(r[6]) || "—", statusPill(r[7])],
     manage: () => listEditor(FIN_EDITORS.requisitions()),
   });
 }
@@ -5087,7 +5087,7 @@ function renderFinPayments(host) {
   const paid = p.filter((r) => r[7] === "Paid").reduce((s, r) => s + (+r[3] || 0), 0);
   mountRegister(host, {
     title: "Payments", importKey: "fin_payments",
-    hint: "Money leaving the account â€” ideally each references a purchase order.",
+    hint: "Money leaving the account — ideally each references a purchase order.",
     stats: () => [
       statTile("Payments", p.length, "This cycle", ""),
       statTile("Paid", fmtR(paid), p.filter((r) => r[7] === "Paid").length + " settled", "good"),
@@ -5099,7 +5099,7 @@ function renderFinPayments(host) {
     empty: "No payments recorded.",
     cell: (r) => [`<span class="mono">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`, esc(r[2]),
       `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`, esc(r[4]),
-      r[5] ? `<span class="mono">${esc(r[5])}</span>` : "â€”", `<span class="mono">${esc(r[6])}</span>`, statusPill(r[7])],
+      r[5] ? `<span class="mono">${esc(r[5])}</span>` : "—", `<span class="mono">${esc(r[6])}</span>`, statusPill(r[7])],
     manage: () => listEditor(FIN_EDITORS.payments()),
   });
 }
@@ -5134,7 +5134,7 @@ function renderFinBVA(host) {
           <td><div class="bar-track"><div class="bar-fill ${tone}" style="width:${Math.max(3, Math.min(100, pct))}%"></div></div>
             <span class="hint">${pct}%</span></td>
         </tr>`;
-      }).join("") : emptyRow(6, "No budget categories â€” add them on the Budget tab.")}</tbody>
+      }).join("") : emptyRow(6, "No budget categories — add them on the Budget tab.")}</tbody>
     </table></div>`;
 }
 function renderFinCompliance(host) {
@@ -5157,8 +5157,8 @@ function renderFinCompliance(host) {
     <div class="grid grid-4">
       ${statTile("Procurement compliance", overall + "%", "Average across checks", overall >= 80 ? "good" : overall >= 50 ? "warning" : "critical")}
       ${statTile("Suppliers OK", pct(checks[0][1], checks[0][2]) + "%", "Valid tax clearance", "")}
-      ${statTile("PO â†’ requisition trace", pct(checks[1][1], checks[1][2]) + "%", "Authorised spend", "")}
-      ${statTile("Payment â†’ PO trace", pct(checks[3][1], checks[3][2]) + "%", "Excludes statutory", "")}
+      ${statTile("PO → requisition trace", pct(checks[1][1], checks[1][2]) + "%", "Authorised spend", "")}
+      ${statTile("Payment → PO trace", pct(checks[3][1], checks[3][2]) + "%", "Excludes statutory", "")}
     </div>
     <div class="card-head" style="margin:18px 0 10px;"><div><h3 style="font-size:13px;">Procurement control checklist</h3>
       <span class="hint">Computed from the suppliers, requisitions, PO and payment registers.</span></div></div>
@@ -5240,10 +5240,10 @@ function renderProjScorecards(host) {
         <div class="card-head"><h3>${esc(r[0])}</h3>${statusPill(r[5])}</div>
         <dl class="kv">
           <dt>Stage</dt><dd>${esc(r[1])}</dd>
-          <dt>Budget</dt><dd>${fmtR(r[2])} Â· ${spendPct}% spent</dd>
+          <dt>Budget</dt><dd>${fmtR(r[2])} · ${spendPct}% spent</dd>
           <dt>Expected impact</dt><dd>${esc(r[10] || "Medium")}</dd>
           <dt>Business case</dt><dd>${esc(r[6] || "None")}</dd>
-          <dt>Funder</dt><dd>${esc(r[7]) || "â€”"}</dd>
+          <dt>Funder</dt><dd>${esc(r[7]) || "—"}</dd>
         </dl>
         <div style="margin-top:8px;"><span class="hint">Delivery ${pct}%</span>
           <div class="bar-track"><div class="bar-fill ${tone}" style="width:${Math.max(3, pct)}%"></div></div></div>
@@ -5256,7 +5256,7 @@ function renderProjCases(host) {
   const p = DATA.projects;
   const done = p.filter((r) => ["Complete", "Approved", "Funded"].includes(r[6])).length;
   mountRegister(host, {
-    title: "Business Cases", hint: "Business-case status per project â€” set it on the Pipeline tab. Attach documents on the Master File (Projects).",
+    title: "Business Cases", hint: "Business-case status per project — set it on the Pipeline tab. Attach documents on the Master File (Projects).",
     stats: () => [
       statTile("Projects", p.length, "In the pipeline", ""),
       statTile("Case complete+", done, "Complete / Approved / Funded", done ? "good" : "warning"),
@@ -5267,10 +5267,10 @@ function renderProjCases(host) {
     rows: () => p,
     empty: "No projects yet.",
     cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, esc(r[1]), statusPill(r[6] || "None"),
-      `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, esc(r[7]) || "â€”", esc(r[10] || "Medium")],
+      `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, esc(r[7]) || "—", esc(r[10] || "Medium")],
     manage: () => listEditor({
       title: "Projects", arr: DATA.projects, section: "projects",
-      rowLabel: (r) => `${r[0]} â€” ${r[6] || "None"}`,
+      rowLabel: (r) => `${r[0]} — ${r[6] || "None"}`,
       blank: () => ["", "Concept", 0, 0, 0, "Not Started", "None", "", 0, 0, "Medium"],
       fields: (r) => [
         { key: "name", label: "Project", type: "text", value: r[0], required: true },
@@ -5292,7 +5292,7 @@ function renderProjFunding(host) {
       ["Budget defined", (+r[2] || 0) > 0],
       ["Funder engaged", !!r[7]],
       ["Co-funding secured", (+r[8] || 0) > 0],
-      ["Readiness â‰¥ 60%", (+r[9] || 0) >= 60],
+      ["Readiness ≥ 60%", (+r[9] || 0) >= 60],
     ];
     const met = checks.filter((c) => c[1]).length;
     return { name: r[0], funder: r[7], readiness: +r[9] || 0, met, of: checks.length, checks };
@@ -5310,13 +5310,13 @@ function renderProjFunding(host) {
       <span class="hint">Computed from the project's business case, budget, funder and co-funding fields.</span></div>
       ${packUnlocked
         ? `<button class="btn primary" id="investor-pack-btn" type="button">Investor Readiness Pack (Word)</button>`
-        : `<button class="btn" type="button" disabled title="Unlocks at Stage 7 â€” Scale, once GAD Foundation confirms this CPA has reached it.">ðŸ”’ Investor Readiness Pack</button>`}
+        : `<button class="btn" type="button" disabled title="Unlocks at Stage 7 — Scale, once GAD Foundation confirms this CPA has reached it.">🔒 Investor Readiness Pack</button>`}
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Project</th><th>Funder</th><th class="num">Checks met</th><th style="min-width:180px;">Readiness</th></tr></thead>
       <tbody>${rows.length ? rows.map((r) => {
         const v = Math.round(r.met / r.of * 100);
-        return `<tr><td style="font-weight:600;">${esc(r.name)}</td><td>${esc(r.funder) || "â€”"}</td>
+        return `<tr><td style="font-weight:600;">${esc(r.name)}</td><td>${esc(r.funder) || "—"}</td>
           <td class="num mono">${r.met} / ${r.of}</td>
           <td><div class="bar-track"><div class="bar-fill ${healthTone(v)}" style="width:${Math.max(3, v)}%"></div></div>
           <span class="hint">${r.checks.filter((c) => !c[1]).map((c) => c[0]).join(", ") || "all met"}</span></td></tr>`;
@@ -5325,12 +5325,12 @@ function renderProjFunding(host) {
   const ipb = host.querySelector("#investor-pack-btn");
   if (ipb) ipb.onclick = downloadInvestorPack;
 }
-/* Investor Readiness Pack â€” a curated, funder-facing summary. Gated to Stage 7
+/* Investor Readiness Pack — a curated, funder-facing summary. Gated to Stage 7
    (Scale) per the Journey's own definition of that stage ("a bankable business
    plan, investment-grade governance and finance, a funding pipeline"); the
    button in renderProjFunding() only renders when stageUnlocked(7). */
 function downloadInvestorPack() {
-  if (!stageUnlocked(7)) { toast("This unlocks at Stage 7 â€” Scale.", true); return; }
+  if (!stageUnlocked(7)) { toast("This unlocks at Stage 7 — Scale.", true); return; }
   const total = scoreTotal();
   const band = maturityBand(total);
   const exco = (DATA.committee || []).filter((r) => r[3] === "EXCO" || !r[3]);
@@ -5343,11 +5343,11 @@ function downloadInvestorPack() {
     <h2>Institutional Snapshot</h2>
     <table>
       <tr><td style="width:36%;font-weight:600;">CPA</td><td>${esc(DATA.cpa.name)}</td></tr>
-      <tr><td style="font-weight:600;">Registration</td><td>${esc(DATA.cpa.reg || "â€”")}</td></tr>
-      <tr><td style="font-weight:600;">Region</td><td>${esc(DATA.cpa.region || "â€”")}</td></tr>
-      <tr><td style="font-weight:600;">Land extent</td><td>${esc(DATA.cpa.landExtent || "â€”")} ha across ${esc(DATA.cpa.portions || "â€”")} portion(s)</td></tr>
-      <tr><td style="font-weight:600;">CPA360&trade; Institutional Score</td><td><b>${total} / 100</b> â€” ${esc(band.name)}</td></tr>
-      <tr><td style="font-weight:600;">CPA360&trade; Journey stage</td><td>Stage 7 â€” Scale (GAD Foundation-confirmed)</td></tr>
+      <tr><td style="font-weight:600;">Registration</td><td>${esc(DATA.cpa.reg || "—")}</td></tr>
+      <tr><td style="font-weight:600;">Region</td><td>${esc(DATA.cpa.region || "—")}</td></tr>
+      <tr><td style="font-weight:600;">Land extent</td><td>${esc(DATA.cpa.landExtent || "—")} ha across ${esc(DATA.cpa.portions || "—")} portion(s)</td></tr>
+      <tr><td style="font-weight:600;">CPA360&trade; Institutional Score</td><td><b>${total} / 100</b> — ${esc(band.name)}</td></tr>
+      <tr><td style="font-weight:600;">CPA360&trade; Journey stage</td><td>Stage 7 — Scale (GAD Foundation-confirmed)</td></tr>
     </table>
     <h2>Governance</h2>
     <table><tr><td style="width:36%;font-weight:600;">EXCO / office bearers</td><td>${exco.length} on record</td></tr>
@@ -5365,12 +5365,12 @@ function downloadInvestorPack() {
     <h2>Funding Pipeline</h2>
     <table>
       <tr><th>Project</th><th>Stage</th><th>Budget</th><th>Funder</th><th>Readiness</th></tr>
-      ${pipeline.length ? pipeline.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1] || "")}</td><td>${fmtR(r[2] || 0)}</td><td>${esc(r[7] || "â€”")}</td><td>${esc(r[9] || 0)}%</td></tr>`).join("")
+      ${pipeline.length ? pipeline.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1] || "")}</td><td>${fmtR(r[2] || 0)}</td><td>${esc(r[7] || "—")}</td><td>${esc(r[9] || 0)}%</td></tr>`).join("")
         : `<tr><td colspan="5">No projects on record.</td></tr>`}
     </table>
     <p class="warn">This pack summarises institutional data recorded on CPA360&trade; as at ${new Date().toLocaleDateString("en-ZA", { day: "2-digit", month: "long", year: "numeric" })}.
       It is evidence of institutional readiness, not a guarantee of funding, financial return, or credit approval.</p>`;
-  const html = permitDocShell("Investor Readiness Pack", DATA.cpa.name || "", body, "Prepared with CPA360â„¢ from the association's own records. Evidence of institutional readiness only; not a guarantee of funding or returns.");
+  const html = permitDocShell("Investor Readiness Pack", DATA.cpa.name || "", body, "Prepared with CPA360™ from the association's own records. Evidence of institutional readiness only; not a guarantee of funding or returns.");
   downloadFile(`Investor-Readiness-Pack-${(DATA.cpa.name || "CPA").replace(/[^\w\- ]+/g, "_")}.doc`, html, "application/msword");
 }
 const MARKET_STATUSES = ["Exploring", "Negotiating", "Active", "Lapsed"];
@@ -5422,7 +5422,7 @@ function renderProjRevenue(host) {
   const bySource = REVENUE_SOURCES.map((s) => ({ s, n: rv.filter((r) => r[1] === s && r[4] === "Active").reduce((a, r) => a + (+r[2] || 0), 0) })).filter((x) => x.n > 0);
   mountRegister(host, {
     title: "Revenue Streams", importKey: "revenue_streams",
-    hint: "How the CPA earns â€” leases, enterprise sales, grants and services.",
+    hint: "How the CPA earns — leases, enterprise sales, grants and services.",
     stats: () => [
       statTile("Recurring revenue", fmtR(recurring), "Active & recurring, per year", "good"),
       statTile("Streams", rv.filter((r) => r[4] === "Active").length + " active", rv.length + " total on record", ""),
@@ -5476,11 +5476,11 @@ function renderImpact() {
   const hTotal = i.hectaresTotal || 1;
   const yr = new Date().getFullYear();
   /* "Dwelling on the Land" is aggregated live from the Household Records
-     register's per-household "resident" flag, not a manually-typed figure â€”
+     register's per-household "resident" flag, not a manually-typed figure —
      see the Households tab in the Beneficiary Centre. */
   const residentHH = DATA.beneficiaryCentre.households.filter((h) => h[13]).length;
   $("impact-stats").innerHTML = [
-    statTile(`Jobs Created (FTE) â€” ${yr}`, i.jobsThisYear, i.jobsCumulative + " cumulative since Gate 2", "good"),
+    statTile(`Jobs Created (FTE) — ${yr}`, i.jobsThisYear, i.jobsCumulative + " cumulative since Gate 2", "good"),
     statTile("Households Benefiting", i.householdsBenefit, fmtPct(i.householdsBenefit / (i.householdsTotal || 1) * 100) + " of represented households", ""),
     statTile("Households Dwelling on the Land", residentHH, fmtPct(residentHH / (i.householdsTotal || 1) * 100) + " of represented households live on the farm/in the community", ""),
     statTile("Enterprise Revenue", fmtR(i.revenue), "Annual, CPA-run enterprises", ""),
@@ -5539,7 +5539,7 @@ function renderExec() {
       <div class="ex-card">
         <div class="k">This cycle</div>
         <div class="v">${closed}<span> closed</span></div>
-        <div class="s">${openN} action${openN === 1 ? "" : "s"} still open Â· ${evidence} evidence file${evidence === 1 ? "" : "s"}</div>
+        <div class="s">${openN} action${openN === 1 ? "" : "s"} still open · ${evidence} evidence file${evidence === 1 ? "" : "s"}</div>
       </div>
       <div class="ex-card">
         <div class="k">Needs attention</div>
@@ -5548,7 +5548,7 @@ function renderExec() {
       </div>
     </div>`;
 
-  // priority actions â€” the centrepiece
+  // priority actions — the centrepiece
   const pri = DATA.actions
     .filter((a) => a[5] !== "Completed")
     .map((a) => ({ a, days: a[4] ? (new Date(a[4]) - now) / 86400000 : 9e9 }))
@@ -5559,12 +5559,12 @@ function renderExec() {
     const p = PRIORITY(days, a[5]);
     return `<tr>
       <td data-label="Action" style="min-width:200px;font-weight:600;">${esc(a[2])}</td>
-      <td data-label="Owner">${esc(a[3]) || "â€”"}</td>
-      <td data-label="Due" class="mono ${over ? "pa-over" : ""}" style="white-space:nowrap;">${esc(a[4] || "â€”")}</td>
+      <td data-label="Owner">${esc(a[3]) || "—"}</td>
+      <td data-label="Due" class="mono ${over ? "pa-over" : ""}" style="white-space:nowrap;">${esc(a[4] || "—")}</td>
       <td data-label="Priority"><span class="pa-pri ${p}">${p}</span></td>
       <td data-label="Status">${statusPill(a[5])}</td>
     </tr>`;
-  }).join("") : emptyRow(5, "No open actions â€” every item is closed.");
+  }).join("") : emptyRow(5, "No open actions — every item is closed.");
 
   // performance by domain
   $("exec-domains").innerHTML = DATA.score.domains.map((d) => {
@@ -5583,7 +5583,7 @@ function renderExec() {
         <button class="btn view-ok" data-goto="${x.goto}" type="button" style="padding:3px 9px;font-size:10.5px;">Open</button></li>`).join("")
     : `<li class="muted">Nothing needs attention right now.</li>`;
 
-  // upcoming deadlines â€” merge action due-dates + governance calendar
+  // upcoming deadlines — merge action due-dates + governance calendar
   const dl = [
     ...DATA.actions.filter((a) => a[5] !== "Completed" && a[4] && new Date(a[4]) >= now)
       .map((a) => ({ date: a[4], label: a[2], who: a[3] || a[1] || "Action" })),
@@ -5605,7 +5605,7 @@ function renderExec() {
   (f.categories || []).forEach(([n, b, ac]) => { if (b && ac / b > 1.1) fa.push(["warning", `"${n}" is ${fmtPct((ac / b - 1) * 100)} over its annual budget.`]); });
   $("exec-finance").innerHTML = fa.length ? fa.slice(0, 5).map(([tone, m]) =>
     `<li>${pill(tone === "critical" ? "Alert" : "Watch", tone)}<span class="ea-desc">${esc(m)}</span></li>`).join("")
-    : `<li class="muted">No financial alerts â€” budget and cash within tolerance.</li>`;
+    : `<li class="muted">No financial alerts — budget and cash within tolerance.</li>`;
 
   // project status
   const p = DATA.projects;
@@ -5676,13 +5676,13 @@ async function renderExecDocs() {
   } catch (e) { el.innerHTML = `<li class="muted">Couldn't load documents.</li>`; }
 }
 
-/* ============ CPA360 Journey â€” stage readiness & gating ============
-   Advancing a stage used to be a free-text dropdown any member could set â€”
+/* ============ CPA360 Journey — stage readiness & gating ============
+   Advancing a stage used to be a free-text dropdown any member could set —
    fine while the stage was purely descriptive, unsafe once it also unlocks
    features (a CPA could just declare itself "Stage 7"). Now the client only
    ever *proposes*: it evaluates STAGE_READY[nextStage] against the CPA's own
    live data and, when met, calls flag_stage_review() (server-side, checked
-   against the CPA's actual current gate â€” see migration 0037). Only a GAD
+   against the CPA's actual current gate — see migration 0037). Only a GAD
    Foundation reviewer approving that flag (decide_stage_review(), the
    Stage Reviews screen) moves `gates`/`orgs.current_gate`. */
 function pctDomain(name) {
@@ -5708,14 +5708,14 @@ const STAGE_READY = {
     const admin = pctDomain("Administration"), fin = pctDomain("Finance");
     const overdue = (DATA.actions || []).filter((a) => a[5] === "Overdue").length;
     return { ready: admin >= 0.65 && fin >= 0.65 && overdue <= 2,
-      detail: `Administration ${Math.round(admin * 100)}% (need 65%); Finance ${Math.round(fin * 100)}% (need 65%); overdue actions: ${overdue} (need â‰¤ 2).` };
+      detail: `Administration ${Math.round(admin * 100)}% (need 65%); Finance ${Math.round(fin * 100)}% (need 65%); overdue actions: ${overdue} (need ≤ 2).` };
   },
   5: () => {
     const admin = pctDomain("Administration");
     const afsOk = (DATA.finProc?.afs || []).some((r) => ["Audited", "Adopted", "Filed"].includes(r[1]));
     const total = scoreTotal();
     return { ready: admin >= 0.8 && afsOk && total >= 71,
-      detail: `Administration ${Math.round(admin * 100)}% (need 80%); an adopted/audited/filed AFS on record: ${afsOk ? "yes" : "no"}; total score ${total} (need â‰¥ 71).` };
+      detail: `Administration ${Math.round(admin * 100)}% (need 80%); an adopted/audited/filed AFS on record: ${afsOk ? "yes" : "no"}; total score ${total} (need ≥ 71).` };
   },
   6: () => {
     const prod = pctDomain("Productivity");
@@ -5748,7 +5748,7 @@ function renderJourney() {
     const g = DATA.gates.find((x) => x.n === s.n) || { state: "upcoming", name: s.key };
     const cls = g.state === "done" ? "done" : g.state === "current" ? "current" : "";
     return `<div class="journey-step ${cls}">
-      <div class="js-rail"><div class="js-dot">${g.state === "done" ? "âœ“" : s.n}</div></div>
+      <div class="js-rail"><div class="js-dot">${g.state === "done" ? "✓" : s.n}</div></div>
       <div class="js-body">
         <div class="js-head"><h3>${esc((g.name || s.key).toUpperCase())}</h3>
           ${g.state === "current" ? '<span class="pill brand">Current stage</span>' : g.state === "done" ? '<span class="pill good">Complete</span>' : ""}</div>
@@ -5760,9 +5760,9 @@ function renderJourney() {
   const pending = pendingStageReview();
   const lastHeld = !pending && [...(DATA.stageReviews || [])].reverse().find((r) => r.status === "held");
   $("journey-note").innerHTML =
-    `This CPA is at <strong>Stage ${curN} â€” ${esc(cur.key)}</strong>, confirmed by GAD Foundation. ` +
-    (curN < 7 ? `Next: <strong>${esc(JOURNEY[curN].key)}</strong>.` : `The final stage â€” focus on sustaining investment readiness.`) +
-    (pending ? `<br><span class="pill brand" style="margin-top:6px;display:inline-block;">Flagged for review â€” Stage ${pending.to_stage} (${esc(JOURNEY.find((s) => s.n === pending.to_stage)?.key || "")})</span> A GAD Foundation reviewer will confirm before anything unlocks.` :
+    `This CPA is at <strong>Stage ${curN} — ${esc(cur.key)}</strong>, confirmed by GAD Foundation. ` +
+    (curN < 7 ? `Next: <strong>${esc(JOURNEY[curN].key)}</strong>.` : `The final stage — focus on sustaining investment readiness.`) +
+    (pending ? `<br><span class="pill brand" style="margin-top:6px;display:inline-block;">Flagged for review — Stage ${pending.to_stage} (${esc(JOURNEY.find((s) => s.n === pending.to_stage)?.key || "")})</span> A GAD Foundation reviewer will confirm before anything unlocks.` :
      lastHeld ? `<br><span class="pill" style="margin-top:6px;display:inline-block;">Last review (Stage ${lastHeld.to_stage}) was held${lastHeld.decision_note ? ": " + esc(lastHeld.decision_note) : ""}.</span>` : "");
 }
 function checkStageReadiness() {
@@ -5776,24 +5776,24 @@ function checkStageReadiness() {
   const pending = pendingStageReview();
   const { ready, detail } = STAGE_READY[toStage] ? STAGE_READY[toStage]() : { ready: false, detail: "No readiness rule defined." };
   const fields = [
-    { key: "i1", label: `Readiness for Stage ${toStage} â€” ${next.key}`, type: "info", value: detail },
+    { key: "i1", label: `Readiness for Stage ${toStage} — ${next.key}`, type: "info", value: detail },
   ];
   if (pending) {
     fields.push({ key: "i2", label: "Status", type: "info", value: `Already flagged for GAD Foundation review on ${new Date(pending.flagged_at).toLocaleDateString("en-ZA")}.` });
   } else if (ready && CAN_EDIT) {
-    fields.push({ key: "i2", label: "Status", type: "info", value: "Criteria met â€” flagging this CPA for GAD Foundation review now." });
+    fields.push({ key: "i2", label: "Status", type: "info", value: "Criteria met — flagging this CPA for GAD Foundation review now." });
   } else if (ready) {
-    fields.push({ key: "i2", label: "Status", type: "info", value: "Criteria met â€” ask an editor on this CPA to flag it for GAD Foundation review." });
+    fields.push({ key: "i2", label: "Status", type: "info", value: "Criteria met — ask an editor on this CPA to flag it for GAD Foundation review." });
   } else {
-    fields.push({ key: "i2", label: "Status", type: "info", value: "Not yet ready â€” keep building the registers above and this will flag automatically." });
+    fields.push({ key: "i2", label: "Status", type: "info", value: "Not yet ready — keep building the registers above and this will flag automatically." });
   }
-  openModal(`Check readiness â€” Stage ${toStage}`, fields, () => {
+  openModal(`Check readiness — Stage ${toStage}`, fields, () => {
     if (ready && !pending && CAN_EDIT) {
       maybeFlagStageReadiness()
         .then(() => {
           DATA.stageReviews = DATA.stageReviews || [];
           DATA.stageReviews.push({ from_stage: cur, to_stage: toStage, status: "pending", flagged_detail: { detail }, flagged_at: new Date().toISOString() });
-          toast(`Flagged for GAD Foundation review â€” Stage ${toStage}.`);
+          toast(`Flagged for GAD Foundation review — Stage ${toStage}.`);
           renderCurrent();
         })
         .catch((e) => toast("Couldn't flag for review: " + (e?.message || e), true));
@@ -5801,15 +5801,15 @@ function checkStageReadiness() {
   }, "OK");
 }
 
-/* ============ Institutional Performance â€” auto-scored criteria ============
+/* ============ Institutional Performance — auto-scored criteria ============
    Each of the 40 default criteria has a rule here that reads the CPA's own
    register data and returns { ratio (0-1), detail (human-readable rationale) }.
    syncAutoScore() applies these to DATA.score.criteria (skipping any a CPA
-   has deliberately locked to a manual value â€” see editDomain()), rolls the
+   has deliberately locked to a manual value — see editDomain()), rolls the
    result up into each "detailed" domain's total, and reports whether
    anything changed so the caller knows whether to persist it. This is what
    makes the 100-point score a live reflection of the registers, not a
-   hand-typed number: add a document, verify a household, close a dispute â€”
+   hand-typed number: add a document, verify a household, close a dispute —
    the relevant criterion re-scans on the next commit(). */
 const AUTO_SCORE_RULES = {
   Governance: {
@@ -5836,7 +5836,7 @@ const AUTO_SCORE_RULES = {
       const last = agms[0];
       const days = (Date.now() - new Date(last[1]).getTime()) / 86400000;
       if (days > 400) return { ratio: 0, detail: `Last AGM/SGM was ${Math.round(days)} days ago (${last[1]})` };
-      return { ratio: last[3] === "Quorate" ? 1 : 0.5, detail: `Last AGM/SGM ${last[1]} â€” quorum: ${last[3] || "not recorded"}` };
+      return { ratio: last[3] === "Quorate" ? 1 : 0.5, detail: `Last AGM/SGM ${last[1]} — quorum: ${last[3] || "not recorded"}` };
     },
     "Conflict-of-interest register maintained": (D) => {
       const coi = D.governance.coi || [];
@@ -5848,7 +5848,7 @@ const AUTO_SCORE_RULES = {
   Beneficiaries: {
     "Master beneficiary register complete": (D) => {
       // Weighted blend, not an all-or-nothing AND: real recovered paper registers
-      // often have IDs for most members but never captured DOB at all â€” that
+      // often have IDs for most members but never captured DOB at all — that
       // shouldn't zero out a register that's otherwise substantially complete.
       const reg = D.beneficiaryCentre.register || [];
       if (!reg.length) return { ratio: 0, detail: "Register is empty" };
@@ -5919,8 +5919,8 @@ const AUTO_SCORE_RULES = {
       return { ratio: r / t.length, detail: `${r}/${t.length} transaction(s) reconciled to the bank` };
     },
     "Annual financial statements / audit": (D) => {
-      // Prefer the dedicated AFS register (Finance â†’ Annual Financial Statements)
-      // once it has data â€” a graduated read of real lifecycle progress, not just
+      // Prefer the dedicated AFS register (Finance → Annual Financial Statements)
+      // once it has data — a graduated read of real lifecycle progress, not just
       // a yes/no guess from a Master File record-series name.
       const afs = D.finProc.afs || [];
       if (afs.length) {
@@ -5929,7 +5929,7 @@ const AUTO_SCORE_RULES = {
         return { ratio: byStatus[latest[1]] ?? 0, detail: `FY ${latest[0]} status: ${latest[1]}` };
       }
       const rec = (D.admin.records || []).find((r) => /financial statement|audit/i.test(r[0] || ""));
-      if (!rec) return { ratio: 0, detail: "No financial year recorded â€” add one under Finance â†’ Annual Financial Statements" };
+      if (!rec) return { ratio: 0, detail: "No financial year recorded — add one under Finance → Annual Financial Statements" };
       return { ratio: rec[6] === "Current" ? 1 : 0.5, detail: `"${rec[0]}" record series status: ${rec[6]}` };
     },
     "Banking controls & signatories": (D) => {
@@ -6043,7 +6043,7 @@ const AUTO_SCORE_RULES = {
       if (gr.length) {
         const filed = gr.filter((r) => GOV_DONE.includes(r[5])).length;
         const late = gr.filter((r) => govEff(r) === "Overdue").length;
-        return { ratio: filed / gr.length, detail: `${filed}/${gr.length} Department return(s) filed${late ? `, ${late} overdue` : ""} (Governance â†’ Gov. Reports)` };
+        return { ratio: filed / gr.length, detail: `${filed}/${gr.length} Department return(s) filed${late ? `, ${late} overdue` : ""} (Governance → Gov. Reports)` };
       }
       const c = (D.governance.calendar || []).filter((r) => /dalrrd/i.test(r[0] || "") || r[1] === "Reporting");
       if (!c.length) return { ratio: 0, detail: "No DALRRD/reporting items tracked on the governance calendar" };
@@ -6120,7 +6120,7 @@ function renderScore() {
   $("score-gauge").innerHTML = scoreGauge(total, 100);
   $("score-band-pill").textContent = band.name + " maturity band";
   const sd = $("score-doc-btn");
-  if (sd) sd.textContent = "Assessment doc" + (docCount("score", null) ? ` Â· ${docCount("score", null)}` : "");
+  if (sd) sd.textContent = "Assessment doc" + (docCount("score", null) ? ` · ${docCount("score", null)}` : "");
 
   $("score-domains").innerHTML = DATA.score.domains.map((d) => {
     const sc = domainScore(d);
@@ -6155,12 +6155,12 @@ function renderScore() {
   }).join("");
 }
 /* Criteria with a rule in AUTO_SCORE_RULES are, by default, computed live
-   from the CPA's own registers (see syncAutoScore) â€” shown here read-only
+   from the CPA's own registers (see syncAutoScore) — shown here read-only
    with the auto-scan's rationale. A CPA that disagrees can switch a
    criterion to "Manual override"; that takes one extra save to unlock the
    number field (this modal has no live re-render), which the mode-select's
    own label makes explicit rather than surprising. Criteria with no rule
-   (a renamed or custom criterion) work exactly as before â€” plain manual entry. */
+   (a renamed or custom criterion) work exactly as before — plain manual entry. */
 function editDomain(name) {
   const d = DATA.score.domains.find((x) => x.name === name);
   if (!d) return;
@@ -6174,20 +6174,20 @@ function editDomain(name) {
     const rule = rules[c.name];
     if (rule && !c.locked) {
       fields.push({ key: "mode" + i, label: `${c.name} (of ${c.weight})`, type: "select",
-        options: ["Auto from data (recommended)", "Manual override â€” save once to unlock"],
+        options: ["Auto from data (recommended)", "Manual override — save once to unlock"],
         value: "Auto from data (recommended)" });
-      fields.push({ key: "info" + i, label: "  â†³ auto-scan result", type: "info",
-        value: `${(+c.achieved || 0)}/${c.weight} â€” ${c.note || "no data yet"}` });
+      fields.push({ key: "info" + i, label: "  ↳ auto-scan result", type: "info",
+        value: `${(+c.achieved || 0)}/${c.weight} — ${c.note || "no data yet"}` });
     } else if (rule && c.locked) {
       fields.push({ key: "mode" + i, label: `${c.name} (of ${c.weight})`, type: "select",
         options: ["Manual override", "Auto from data (recommended)"], value: "Manual override" });
-      fields.push({ key: "c" + i, label: "  â†³ manually-set value", type: "number", value: +c.achieved || 0 });
+      fields.push({ key: "c" + i, label: "  ↳ manually-set value", type: "number", value: +c.achieved || 0 });
     } else {
       fields.push({ key: "c" + i, label: `${c.name} (of ${c.weight})`, type: "number", value: +c.achieved || 0 });
     }
   });
-  fields.push({ key: "single", label: `Overall domain score (of ${d.weight}) â€” used for "Single score"`, type: "number", value: +d.achieved || 0 });
-  openModal(`Score â€” ${name}`, fields, (out) => {
+  fields.push({ key: "single", label: `Overall domain score (of ${d.weight}) — used for "Single score"`, type: "number", value: +d.achieved || 0 });
+  openModal(`Score — ${name}`, fields, (out) => {
     d.detailed = out.detailed === "Detailed rubric";
     crits.forEach((c, i) => {
       const rule = rules[c.name];
@@ -6234,7 +6234,7 @@ function renderProdEnterprise(host, etype) {
   const label = { Crop: "Crop", Orchard: "Orchard", Timber: "Timber", Livestock: "Livestock" }[etype];
   mountRegister(host, {
     title: label + " Enterprises", importKey: "prod_enterprises",
-    hint: `${label} production units â€” area, scale and who runs each.`,
+    hint: `${label} production units — area, scale and who runs each.`,
     stats: () => [
       statTile(label + " units", rows.length, "On record", ""),
       statTile("Active", rows.filter((r) => r[6] === "Active").length, "Currently producing", "good"),
@@ -6255,21 +6255,21 @@ function renderProdWater(host) {
   const nearLimit = w.filter((r) => (+r[2] || 0) > 0 && (+r[3] || 0) / (+r[2] || 1) >= 0.9 && (+r[3] || 0) <= (+r[2] || 0)).length;
   mountRegister(host, {
     title: "Water Sources", importKey: "prod_water",
-    hint: "Boreholes, river abstraction and storage â€” licensed allocation vs actual use.",
+    hint: "Boreholes, river abstraction and storage — licensed allocation vs actual use.",
     stats: () => [
       statTile("Sources", w.length, "On record", ""),
-      statTile("Licensed allocation", w.reduce((s, r) => s + (+r[2] || 0), 0).toLocaleString() + " mÂ³", "Total per year", ""),
-      statTile("Recorded use", w.reduce((s, r) => s + (+r[3] || 0), 0).toLocaleString() + " mÂ³", "Against allocation", ""),
+      statTile("Licensed allocation", w.reduce((s, r) => s + (+r[2] || 0), 0).toLocaleString() + " m³", "Total per year", ""),
+      statTile("Recorded use", w.reduce((s, r) => s + (+r[3] || 0), 0).toLocaleString() + " m³", "Against allocation", ""),
       statTile("Over / near limit", (over + nearLimit), over ? "Over-abstraction risk" : "Monitor in summer", over ? "critical" : nearLimit ? "warning" : "good"),
     ],
-    columns: [{ label: "Source" }, { label: "Type" }, { label: "Allocation (mÂ³/yr)", cls: "num" }, { label: "Used (mÂ³)", cls: "num" }, { label: "Used %", cls: "num" }, { label: "Licence ref." }, { label: "Status" }],
+    columns: [{ label: "Source" }, { label: "Type" }, { label: "Allocation (m³/yr)", cls: "num" }, { label: "Used (m³)", cls: "num" }, { label: "Used %", cls: "num" }, { label: "Licence ref." }, { label: "Status" }],
     rows: () => w,
     empty: "No water sources recorded.",
     cell: (r) => {
       const pct = (+r[2] || 0) ? Math.round((+r[3] || 0) / (+r[2] || 1) * 100) : 0;
       return [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="pill neutral">${esc(r[1])}</span>`,
         `<span class="mono">${(+r[2] || 0).toLocaleString()}</span>`, `<span class="mono">${(+r[3] || 0).toLocaleString()}</span>`,
-        `<span class="mono" style="${pct > 100 ? "color:var(--status-critical);font-weight:700;" : pct >= 90 ? "color:var(--status-warning);" : ""}">${(+r[2] || 0) ? pct + "%" : "â€”"}</span>`,
+        `<span class="mono" style="${pct > 100 ? "color:var(--status-critical);font-weight:700;" : pct >= 90 ? "color:var(--status-warning);" : ""}">${(+r[2] || 0) ? pct + "%" : "—"}</span>`,
         `<span class="mono">${esc(r[4])}</span>`, statusPill(r[5])];
     },
     manage: () => listEditor(PROD_EDITORS.water()),
@@ -6292,14 +6292,14 @@ function renderProdRecords(host, rtype) {
       statTile("Entries", rows.length, `${label} records`, ""),
       statTile(rtype === "Sales" ? "Revenue" : rtype === "Harvest" ? "Records" : "Cost", rtype === "Harvest" ? rows.length : fmtR(total), "This period set", rtype === "Sales" ? "good" : ""),
       statTile("Enterprises covered", new Set(rows.map((r) => r[1]).filter(Boolean)).size, "Distinct", ""),
-      statTile("Latest period", rows.length ? esc(rows[rows.length - 1][2] || "â€”") : "â€”", "Most recent entry", ""),
+      statTile("Latest period", rows.length ? esc(rows[rows.length - 1][2] || "—") : "—", "Most recent entry", ""),
     ],
     columns: [{ label: "Enterprise" }, { label: "Period" }, { label: "Description" }, { label: "Quantity", cls: "num" }, { label: "Unit" }, { label: rtype === "Sales" ? "Revenue" : "Amount", cls: "num" }],
     rows: () => rows,
     empty: `No ${label.toLowerCase()} records recorded.`,
     cell: (r) => [`<span style="font-weight:600;">${esc(r[1])}</span>`, `<span class="mono">${esc(r[2])}</span>`,
       `<span style="color:var(--ink-2);">${esc(r[3])}</span>`, `<span class="mono">${(+r[4] || 0).toLocaleString()}</span>`, esc(r[5]),
-      `<span class="mono">${(+r[6] || 0) ? (+r[6]).toLocaleString() : "â€”"}</span>`],
+      `<span class="mono">${(+r[6] || 0) ? (+r[6]).toLocaleString() : "—"}</span>`],
     manage: () => listEditor(PROD_EDITORS.records(rtype)),
   });
 }
@@ -6332,13 +6332,13 @@ function renderProdCOP(host) {
         <td class="num mono">${r.cost.toLocaleString()}</td>
         <td class="num mono">${r.sales.toLocaleString()}</td>
         <td class="num mono" style="${r.margin < 0 ? "color:var(--status-critical);font-weight:700;" : "color:var(--status-good);"}">${r.margin.toLocaleString()}</td>
-      </tr>`).join("") : emptyRow(6, "No production records yet â€” capture Inputs, Labour and Sales.")}</tbody>
+      </tr>`).join("") : emptyRow(6, "No production records yet — capture Inputs, Labour and Sales.")}</tbody>
     </table></div>`;
 }
 function comingSoon(title, items, foot) {
   return `<div class="card coming-soon">
-    <h3>${esc(title)} â€” being built</h3>
-    <p class="hint">This register is part of the CPA360â„¢ build sequence. It will capture:</p>
+    <h3>${esc(title)} — being built</h3>
+    <p class="hint">This register is part of the CPA360™ build sequence. It will capture:</p>
     <ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
     ${foot ? `<p class="hint" style="margin-top:10px;">${esc(foot)}</p>` : ""}
   </div>`;
@@ -6363,7 +6363,7 @@ const commCtx = () => ({
 function renderCommunicationView() { renderCommunication(commCtx()); }
 
 /* Condolence notices: marking a member Deceased (by any route) queues ONE notice for the CPA to
-   review and send â€” nothing goes out without a person confirming. See communication.js. */
+   review and send — nothing goes out without a person confirming. See communication.js. */
 async function resolveDeathNotice(id, status, messageId) {
   await repo.resolveDeathNotice(id, status, messageId);
   DATA.deathNotices = (DATA.deathNotices || []).filter((n) => n.id !== id);
@@ -6383,10 +6383,10 @@ async function queueDeathNotices(newlyDeceased) {
   DATA.deathNotices = (DATA.deathNotices || []).concat(made);
   renderCurrent(); if (onChange) onChange();
   if (made.length === 1) setTimeout(() => openDeathNotice(commCtx(), made[0]), 250);
-  else toast(`${made.length} members marked Deceased â€” condolence notices are waiting in Communication.`);
+  else toast(`${made.length} members marked Deceased — condolence notices are waiting in Communication.`);
 }
 
-/* CSV import specs â€” map spreadsheet columns onto each collection's row shape */
+/* CSV import specs — map spreadsheet columns onto each collection's row shape */
 const IMPORT = {
   actions: {
     title: "actions", section: "actions", arr: () => DATA.actions,
@@ -6473,7 +6473,7 @@ const IMPORT = {
       "", "", "", "Pending", "", "", "", "", false, "",
       v.d5 || "", maskId(v.d5id), v.d6 || "", maskId(v.d6id), v.d7 || "", maskId(v.d7id),
     ],
-    // Every household imported here has its own family tree â€” extract the ODI, Family
+    // Every household imported here has its own family tree — extract the ODI, Family
     // Representative and each descendant straight into the Master Register too, so one
     // upload correctly produces both the household record AND the individual beneficiaries.
     afterImport: (builtRows) => {
@@ -6612,8 +6612,8 @@ const IMPORT = {
   },
   prod_water: {
     title: "water sources", section: "prod_water", arr: () => DATA.productivity.water,
-    targets: [{ k: "name", label: "Source", required: true }, { k: "source", label: "Type" }, { k: "alloc", label: "Allocation (mÂ³/yr)" },
-      { k: "usage", label: "Used (mÂ³)" }, { k: "lic", label: "Licence ref" }, { k: "status", label: "Status" }],
+    targets: [{ k: "name", label: "Source", required: true }, { k: "source", label: "Type" }, { k: "alloc", label: "Allocation (m³/yr)" },
+      { k: "usage", label: "Used (m³)" }, { k: "lic", label: "Licence ref" }, { k: "status", label: "Status" }],
     make: (v) => [v.name, WATER_SOURCES.includes(v.source) ? v.source : "Borehole", parseFloat((v.alloc || "").replace(/[^\d.-]/g, "")) || 0,
       parseFloat((v.usage || "").replace(/[^\d.-]/g, "")) || 0, v.lic || "", v.status || "Active", ""],
   },
@@ -6751,7 +6751,7 @@ const IMPORT = {
 const GOV_EDITORS = {
   committees: () => ({
     title: "Standing committees", arr: DATA.governance.committees, section: "gov_committees",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[5]}`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[5]}`,
     blank: () => ["", "", "", 0, "Monthly", "Active"],
     fields: (r) => [
       { key: "name", label: "Committee name", type: "text", value: r[0], required: true },
@@ -6765,7 +6765,7 @@ const GOV_EDITORS = {
   }),
   resolutions: () => ({
     title: "Resolutions", arr: DATA.governance.resolutions, section: "gov_resolutions",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${(r[3] || "").slice(0, 50)}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${(r[3] || "").slice(0, 50)}`,
     blank: () => ["", new Date().toISOString().slice(0, 10), "", "", "", "", "Open"],
     fields: (r) => [
       { key: "ref", label: "Reference", type: "text", value: r[0] },
@@ -6780,7 +6780,7 @@ const GOV_EDITORS = {
   }),
   meetings: () => ({
     title: "Meetings", arr: DATA.governance.meetings, section: "gov_meetings",
-    rowLabel: (r) => `${r[0]} â€” ${r[1] || "?"}`,
+    rowLabel: (r) => `${r[0]} — ${r[1] || "?"}`,
     blank: () => ["EXCO", new Date().toISOString().slice(0, 10), "", "Quorate", 0, "Pending", ""],
     fields: (r) => [
       { key: "kind", label: "Type", type: "select", options: ["EXCO", "Committee", "AGM", "SGM", "Special"], value: r[0] },
@@ -6795,7 +6795,7 @@ const GOV_EDITORS = {
   }),
   coi: () => ({
     title: "Conflict-of-interest declarations", arr: DATA.governance.coi, section: "gov_coi",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[5]}`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[5]}`,
     blank: () => ["", "", "", "", new Date().toISOString().slice(0, 10), "Declared"],
     fields: (r) => [
       { key: "member", label: "Member", type: "text", value: r[0], required: true },
@@ -6809,7 +6809,7 @@ const GOV_EDITORS = {
   }),
   calendar: () => ({
     title: "Governance calendar", arr: DATA.governance.calendar, section: "gov_calendar",
-    rowLabel: (r) => `${r[0] || "â€”"} â€” ${r[2] || "no date"}`,
+    rowLabel: (r) => `${r[0] || "—"} — ${r[2] || "no date"}`,
     blank: () => ["", "Statutory", "", "Annual", "", "Upcoming"],
     fields: (r) => [
       { key: "item", label: "Item", type: "text", value: r[0], required: true },
@@ -6827,26 +6827,26 @@ const GOV_EDITORS = {
 const BENE_EDITORS = {
   register: () => ({
     title: "Master Beneficiary Register", arr: DATA.beneficiaryCentre.register, section: "beneficiaries",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${r[1]} Â· ${r[9]}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[9]}`,
     blank: () => ["", "", "Female", "", "", "", "", new Date().toISOString().slice(0, 10), "Active", "Pending", "", ""],
     fields: (r) => [
       { key: "ref", label: "Register / member no.", type: "text", value: r[0] },
       { key: "name", label: "Full name", type: "text", value: r[1], required: true },
       { key: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other", "Unspecified"], value: r[2] || "Female" },
       { key: "dob", label: "Date of birth (drives birthday reminders)", type: "date", value: r[3] },
-      { key: "idm", label: "ID (auto-masked â€” only the last 4 digits are kept; a full 13-digit ID also fills an empty birth date)", type: "text", value: r[4] },
-      { key: "hh", label: "ODI / household â€” linked to the ODI register (Beneficiaries â†’ Households)", type: "select", ...(() => { const c = hhChoices(r[5]); return { options: c.options, value: c.current }; })() },
+      { key: "idm", label: "ID (auto-masked — only the last 4 digits are kept; a full 13-digit ID also fills an empty birth date)", type: "text", value: r[4] },
+      { key: "hh", label: "ODI / household — linked to the ODI register (Beneficiaries → Households)", type: "select", ...(() => { const c = hhChoices(r[5]); return { options: c.options, value: c.current }; })() },
       { key: "role", label: "Family position (filled automatically if the name matches the household)", type: "select", options: HOUSEHOLD_ROLES, value: r[11] || "" },
       { key: "contact", label: "Contact", type: "text", value: r[6] },
       { key: "joined", label: "Joined on", type: "date", value: r[7] },
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
-      { key: "parent", label: "Parent in the family tree (lineage) â€” leave blank to place under the ODI", type: "select", options: parentOptions(r).options, value: parentOptions(r).current },
+      { key: "parent", label: "Parent in the family tree (lineage) — leave blank to place under the ODI", type: "select", options: parentOptions(r).options, value: parentOptions(r).current },
       { key: "notes", label: "Notes", type: "textarea", value: r[10] },
       { key: "wishes", label: "WhatsApp messages from the CPA (birthday wishes and announcements)", type: "select", options: ["Allowed", "Do not message (member declined)"], value: r[13] === true ? "Do not message (member declined)" : "Allowed" },
     ],
     write: (r, o) => {
-      r[14] = refFromHhLabel(o.hh) === (r[5] || "") ? refFromParentLabel(o.parent, r) : "";   // lineage â€” resolved against the household as it was opened; moving household resets it
+      r[14] = refFromHhLabel(o.hh) === (r[5] || "") ? refFromParentLabel(o.parent, r) : "";   // lineage — resolved against the household as it was opened; moving household resets it
       r[0] = o.ref; r[1] = o.name; r[2] = o.gender; r[3] = o.dob || dobFromSaId(o.idm); r[4] = maskId(o.idm); r[5] = refFromHhLabel(o.hh);
       r[13] = /^Do not/.test(o.wishes || "");
       r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes;
@@ -6855,31 +6855,31 @@ const BENE_EDITORS = {
   }),
   households: () => ({
     title: "Household records", arr: DATA.beneficiaryCentre.households, section: "households",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${r[2] || r[1] || "Household"}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || r[1] || "Household"}`,
     blank: () => [nextHouseholdRef(), "", "", "", "", "", "", "", "", "", "", "", "Active", true,
       "", "", "", "Pending", "", "", "", "", false, "",
       "", "", "", "", "", ""],
     fields: (r) => [
       { key: "famrep", label: "Household Head Name", type: "text", value: r[1] },
-      { key: "headId", label: "Household Head ID Number (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[14] },
+      { key: "headId", label: "Household Head ID Number (auto-masked — only the last 4 digits are kept)", type: "text", value: r[14] },
       { key: "headPhone", label: "Household Head Phone", type: "text", value: r[15] },
       { key: "headAddress", label: "Household Head Address", type: "textarea", value: r[16] },
       { key: "odi", label: "ODI", type: "text", value: r[2], required: true },
-      { key: "odiId", label: "ID no. of ODI (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[3] },
+      { key: "odiId", label: "ID no. of ODI (auto-masked — only the last 4 digits are kept)", type: "text", value: r[3] },
       { key: "d1", label: "1st Descendant", type: "text", value: r[4] },
-      { key: "d1id", label: "ID: 1st Descendant (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[5] },
+      { key: "d1id", label: "ID: 1st Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[5] },
       { key: "d2", label: "2nd Descendant", type: "text", value: r[6] },
-      { key: "d2id", label: "ID 2nd Descendant (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[7] },
+      { key: "d2id", label: "ID 2nd Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[7] },
       { key: "d3", label: "3rd Descendants", type: "text", value: r[8] },
-      { key: "d3id", label: "ID 3rd Descendant (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[9] },
+      { key: "d3id", label: "ID 3rd Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[9] },
       { key: "d4", label: "4th Descendants", type: "text", value: r[10] },
-      { key: "d4id", label: "ID 4th Descendants (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[11] },
+      { key: "d4id", label: "ID 4th Descendants (auto-masked — only the last 4 digits are kept)", type: "text", value: r[11] },
       { key: "d5", label: "5th Descendant", type: "text", value: r[24] },
-      { key: "d5id", label: "ID: 5th Descendant (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[25] },
+      { key: "d5id", label: "ID: 5th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[25] },
       { key: "d6", label: "6th Descendant", type: "text", value: r[26] },
-      { key: "d6id", label: "ID: 6th Descendant (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[27] },
+      { key: "d6id", label: "ID: 6th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[27] },
       { key: "d7", label: "7th Descendant", type: "text", value: r[28] },
-      { key: "d7id", label: "ID: 7th Descendant (auto-masked â€” only the last 4 digits are kept)", type: "text", value: r[29] },
+      { key: "d7id", label: "ID: 7th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[29] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
       { key: "verification", label: "Verification Status", type: "select", options: VERIF_STATUSES, value: r[17] || "Pending" },
@@ -6903,7 +6903,7 @@ const BENE_EDITORS = {
   }),
   succession: () => ({
     title: "Succession cases", arr: DATA.beneficiaryCentre.succession, section: "succession_cases",
-    rowLabel: (r) => `${r[1]} â†’ ${r[3] || "?"} (${r[6]})`,
+    rowLabel: (r) => `${r[1]} → ${r[3] || "?"} (${r[6]})`,
     blank: () => ["", "", "", "", "", new Date().toISOString().slice(0, 10), "Lodged", ""],
     fields: (r) => [
       { key: "dref", label: "Deceased member ref.", type: "text", value: r[0] },
@@ -6919,7 +6919,7 @@ const BENE_EDITORS = {
   }),
   disputes: () => ({
     title: "Duplicate / conflict cases", arr: DATA.beneficiaryCentre.disputes, section: "beneficiary_disputes",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${r[1]} Â· ${r[5]}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[5]}`,
     blank: () => ["", "Duplicate", "", "", new Date().toISOString().slice(0, 10), "Open", ""],
     fields: (r) => [
       { key: "ref", label: "Case ref.", type: "text", value: r[0] },
@@ -6938,7 +6938,7 @@ const BENE_EDITORS = {
 const FIN_EDITORS = {
   transactions: () => ({
     title: "Transactions", arr: DATA.finProc.transactions, section: "fin_transactions",
-    rowLabel: (r) => `${r[0] || "?"} â€” ${r[1]} Â· ${fmtR(r[4])}`,
+    rowLabel: (r) => `${r[0] || "?"} — ${r[1]} · ${fmtR(r[4])}`,
     blank: () => [new Date().toISOString().slice(0, 10), "", "", "Expense", 0, "EFT", "", false],
     fields: (r) => [
       { key: "date", label: "Date", type: "date", value: r[0] },
@@ -6954,7 +6954,7 @@ const FIN_EDITORS = {
   }),
   bills: () => ({
     title: "Bills", arr: DATA.finProc.bills, section: "fin_bills",
-    rowLabel: (r) => `${esc(r[1])} â€” ${r[2] || "?"} (${fmtR(billOutstanding(r))} outstanding)`,
+    rowLabel: (r) => `${esc(r[1])} — ${r[2] || "?"} (${fmtR(billOutstanding(r))} outstanding)`,
     blank: () => ["", BILL_TYPES[0], "", "", new Date().toISOString().slice(0, 10), "", 0, 0, "Outstanding", ""],
     fields: (r) => [
       { key: "ref", label: "Bill / invoice ref. (optional)", type: "text", value: r[0] },
@@ -6975,7 +6975,7 @@ const FIN_EDITORS = {
   }),
   quotes: () => ({
     title: "Quotes", arr: DATA.finProc.quotes, section: "fin_quotes",
-    rowLabel: (r) => `${r[2] || "?"} â€” ${fmtR(r[3])} (${r[0] || "no req ref"})`,
+    rowLabel: (r) => `${r[2] || "?"} — ${fmtR(r[3])} (${r[0] || "no req ref"})`,
     blank: () => ["", "", "", 0, new Date().toISOString().slice(0, 10), false, ""],
     fields: (r) => [
       { key: "reqRef", label: "Requisition ref.", type: "text", value: r[0] },
@@ -6990,7 +6990,7 @@ const FIN_EDITORS = {
   }),
   contracts: () => ({
     title: "Contracts", arr: DATA.finProc.contracts, section: "fin_contracts",
-    rowLabel: (r) => `${r[1]} â€” ${r[3] || "Contract"} (${r[8]})`,
+    rowLabel: (r) => `${r[1]} — ${r[3] || "Contract"} (${r[8]})`,
     blank: () => ["", "", "", "", "", "", 0, "", "Active", ""],
     fields: (r) => [
       { key: "ref", label: "Contract ref. (optional)", type: "text", value: r[0] },
@@ -7011,7 +7011,7 @@ const FIN_EDITORS = {
   }),
   grn: () => ({
     title: "Goods/services received", arr: DATA.finProc.grn, section: "fin_grn",
-    rowLabel: (r) => `${r[2]} â€” ${r[1] || "no PO ref"}`,
+    rowLabel: (r) => `${r[2]} — ${r[1] || "no PO ref"}`,
     blank: () => ["", "", "", new Date().toISOString().slice(0, 10), "", "Good", "", "Received", ""],
     fields: (r) => [
       { key: "ref", label: "GRN ref. (optional)", type: "text", value: r[0] },
@@ -7031,7 +7031,7 @@ const FIN_EDITORS = {
   }),
   afs: () => ({
     title: "Annual financial statements", arr: DATA.finProc.afs, section: "fin_afs",
-    rowLabel: (r) => `FY ${r[0]} â€” ${r[1]}`,
+    rowLabel: (r) => `FY ${r[0]} — ${r[1]}`,
     blank: () => [String(new Date().getFullYear()), "Draft", "", "", "", "", ""],
     fields: (r) => [
       { key: "year", label: "Financial year (e.g. 2025/26)", type: "text", value: r[0], required: true },
@@ -7046,7 +7046,7 @@ const FIN_EDITORS = {
   }),
   memberPay: () => ({
     title: "Members' remuneration", arr: DATA.finProc.memberPay, section: "fin_member_pay",
-    rowLabel: (r) => `${r[0]} â€” ${fmtR(r[3])} (${r[4] || "?"})`,
+    rowLabel: (r) => `${r[0]} — ${fmtR(r[3])} (${r[4] || "?"})`,
     blank: () => ["", "", MEMBER_PAY_TYPES[0], 0, "", "", false, ""],
     fields: (r) => [
       { key: "name", label: "Member name", type: "text", value: r[0], required: true },
@@ -7054,7 +7054,7 @@ const FIN_EDITORS = {
       { key: "type", label: "Payment type", type: "select", options: MEMBER_PAY_TYPES, value: r[2] },
       { key: "amount", label: "Amount (R)", type: "number", value: r[3], min: 0 },
       { key: "period", label: "Period (e.g. 2026 Q2)", type: "text", value: r[4] },
-      { key: "resolution", label: "Resolution ref. (see Governance â†’ Resolutions)", type: "text", value: r[5] },
+      { key: "resolution", label: "Resolution ref. (see Governance → Resolutions)", type: "text", value: r[5] },
       { key: "disclosed", label: "Disclosed at AGM", type: "select", options: ["No", "Yes"], value: r[6] ? "Yes" : "No" },
       { key: "notes", label: "Notes", type: "textarea", value: r[7] },
     ],
@@ -7065,7 +7065,7 @@ const FIN_EDITORS = {
   }),
   bankRecon: () => ({
     title: "Bank reconciliations", arr: DATA.finProc.bankRecon, section: "fin_bank_recon",
-    rowLabel: (r) => `${r[0]} â€” ${r[5]}`,
+    rowLabel: (r) => `${r[0]} — ${r[5]}`,
     blank: () => ["", 0, 0, "", "", "Draft", ""],
     fields: (r) => [
       { key: "period", label: "Period (e.g. March 2026)", type: "text", value: r[0], required: true },
@@ -7080,7 +7080,7 @@ const FIN_EDITORS = {
   }),
   close: () => ({
     title: "Month-end close", arr: DATA.finProc.close, section: "fin_close",
-    rowLabel: (r) => `${r[0]} â€” ${closeCompletionPct(r)}% complete`,
+    rowLabel: (r) => `${r[0]} — ${closeCompletionPct(r)}% complete`,
     blank: () => ["", false, false, false, false, "", "", ""],
     fields: (r) => [
       { key: "period", label: "Period (e.g. March 2026)", type: "text", value: r[0], required: true },
@@ -7099,7 +7099,7 @@ const FIN_EDITORS = {
   }),
   suppliers: () => ({
     title: "Suppliers", arr: DATA.finProc.suppliers, section: "proc_suppliers",
-    rowLabel: (r) => `${r[0]} â€” ${r[6]}`,
+    rowLabel: (r) => `${r[0]} — ${r[6]}`,
     blank: () => ["", "", "", "", "None", "", "Active"],
     fields: (r) => [
       { key: "name", label: "Supplier name", type: "text", value: r[0], required: true },
@@ -7114,7 +7114,7 @@ const FIN_EDITORS = {
   }),
   requisitions: () => ({
     title: "Purchase requisitions", arr: DATA.finProc.requisitions, section: "proc_requisitions",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${r[2]} Â· ${r[7]}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2]} · ${r[7]}`,
     blank: () => ["", new Date().toISOString().slice(0, 10), "", "", 0, "", "", "Submitted"],
     fields: (r) => [
       { key: "ref", label: "Reference", type: "text", value: r[0] },
@@ -7130,7 +7130,7 @@ const FIN_EDITORS = {
   }),
   pos: () => ({
     title: "Purchase orders", arr: DATA.finProc.pos, section: "proc_purchase_orders",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${r[2] || "?"} Â· ${fmtR(r[4])}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[2] || "?"} · ${fmtR(r[4])}`,
     blank: () => ["", new Date().toISOString().slice(0, 10), "", "", 0, "", "Open"],
     fields: (r) => [
       { key: "ref", label: "PO reference", type: "text", value: r[0] },
@@ -7145,7 +7145,7 @@ const FIN_EDITORS = {
   }),
   payments: () => ({
     title: "Payments", arr: DATA.finProc.payments, section: "fin_payments",
-    rowLabel: (r) => `${r[0] || "?"} â€” ${r[1]} Â· ${fmtR(r[3])}`,
+    rowLabel: (r) => `${r[0] || "?"} — ${r[1]} · ${fmtR(r[3])}`,
     blank: () => [new Date().toISOString().slice(0, 10), "", "", 0, "EFT", "", "", "Pending"],
     fields: (r) => [
       { key: "date", label: "Date", type: "date", value: r[0] },
@@ -7161,11 +7161,11 @@ const FIN_EDITORS = {
   }),
 };
 
-/* listEditor configs â€” Land & Assets (infra + maintenance) and Productivity */
+/* listEditor configs — Land & Assets (infra + maintenance) and Productivity */
 const ASSET_EDITORS = {
   infrastructure: () => ({
     title: "Infrastructure", arr: DATA.assets.infrastructure, section: "infrastructure",
-    rowLabel: (r) => `${r[0]} â€” ${r[5]}`,
+    rowLabel: (r) => `${r[0]} — ${r[5]}`,
     blank: () => ["", "Water", "", new Date().getFullYear(), 0, "Fair", "In use", ""],
     fields: (r) => [
       { key: "name", label: "Asset name", type: "text", value: r[0], required: true },
@@ -7181,7 +7181,7 @@ const ASSET_EDITORS = {
   }),
   maintenance: () => ({
     title: "Maintenance tasks", arr: DATA.assets.maintenance, section: "asset_maintenance",
-    rowLabel: (r) => `${r[0]} â€” ${r[2]} (${r[7]})`,
+    rowLabel: (r) => `${r[0]} — ${r[2]} (${r[7]})`,
     blank: () => ["", "Infrastructure", "", new Date().toISOString().slice(0, 10), "", 0, "", "Scheduled", ""],
     fields: (r) => [
       { key: "asset", label: "Asset", type: "text", value: r[0], required: true },
@@ -7200,14 +7200,14 @@ const ASSET_EDITORS = {
 const PROD_EDITORS = {
   enterprises: (etype) => ({
     title: "Production enterprises", arr: DATA.productivity.enterprises, section: "prod_enterprises",
-    rowLabel: (r) => `${r[1]} (${r[0]}) â€” ${r[6]}`,
+    rowLabel: (r) => `${r[1]} (${r[0]}) — ${r[6]}`,
     blank: () => [etype || "Crop", "", "", 0, "", "", "Active", ""],
     fields: (r) => [
       { key: "etype", label: "Type", type: "select", options: ["Crop", "Orchard", "Timber", "Livestock", "Other"], value: r[0] || "Crop" },
       { key: "name", label: "Enterprise name", type: "text", value: r[1], required: true },
       { key: "portion", label: "Portion / location", type: "text", value: r[2] },
       { key: "area", label: "Area (ha)", type: "number", value: r[3], min: 0 },
-      { key: "units", label: "Scale (e.g. â€œ420 headâ€, â€œ4 400 treesâ€)", type: "text", value: r[4] },
+      { key: "units", label: "Scale (e.g. “420 head”, “4 400 trees”)", type: "text", value: r[4] },
       { key: "manager", label: "Manager / operator", type: "text", value: r[5] },
       { key: "status", label: "Status", type: "select", options: ENTERPRISE_STATUSES, value: r[6] },
       { key: "notes", label: "Notes", type: "textarea", value: r[7] },
@@ -7221,8 +7221,8 @@ const PROD_EDITORS = {
     fields: (r) => [
       { key: "name", label: "Source name", type: "text", value: r[0], required: true },
       { key: "source", label: "Type", type: "select", options: WATER_SOURCES, value: r[1] },
-      { key: "alloc", label: "Licensed allocation (mÂ³/yr)", type: "number", value: r[2], min: 0 },
-      { key: "usage", label: "Recorded use (mÂ³)", type: "number", value: r[3], min: 0 },
+      { key: "alloc", label: "Licensed allocation (m³/yr)", type: "number", value: r[2], min: 0 },
+      { key: "usage", label: "Recorded use (m³)", type: "number", value: r[3], min: 0 },
       { key: "lic", label: "Licence reference", type: "text", value: r[4] },
       { key: "status", label: "Status", type: "select", options: ["Active", "Dormant", "Decommissioned"], value: r[5] },
       { key: "notes", label: "Notes", type: "textarea", value: r[6] },
@@ -7231,26 +7231,26 @@ const PROD_EDITORS = {
   }),
   records: (rtype) => ({
     title: (rtype || "Production") + " records", arr: DATA.productivity.records, section: "prod_records",
-    rowLabel: (r) => `${r[0]} Â· ${r[1] || "â€”"} â€” ${r[3]}`,
+    rowLabel: (r) => `${r[0]} · ${r[1] || "—"} — ${r[3]}`,
     blank: () => [rtype || "Inputs", "", "", "", 0, "", 0],
     fields: (r) => [
       { key: "rtype", label: "Record type", type: "select", options: ["Labour", "Inputs", "Harvest", "Sales"], value: r[0] || "Inputs" },
       { key: "ent", label: "Enterprise", type: "select", options: ["", ...DATA.productivity.enterprises.map((e) => e[1])], value: r[1] },
-      { key: "period", label: "Period (e.g. â€œ2026 Q1â€)", type: "text", value: r[2] },
+      { key: "period", label: "Period (e.g. “2026 Q1”)", type: "text", value: r[2] },
       { key: "desc", label: "Description", type: "text", value: r[3], required: true },
       { key: "qty", label: "Quantity", type: "number", value: r[4], min: 0 },
-      { key: "unit", label: "Unit (kg, tonne, headâ€¦)", type: "text", value: r[5] },
+      { key: "unit", label: "Unit (kg, tonne, head…)", type: "text", value: r[5] },
       { key: "amount", label: "Amount / value (R)", type: "number", value: r[6], min: 0 },
     ],
     write: (r, o) => { r[0] = o.rtype; r[1] = o.ent; r[2] = o.period; r[3] = o.desc; r[4] = parseFloat(o.qty) || 0; r[5] = o.unit; r[6] = parseFloat(o.amount) || 0; },
   }),
 };
 
-/* listEditor configs â€” Commercialisation registers */
+/* listEditor configs — Commercialisation registers */
 const COM_EDITORS = {
   markets: () => ({
     title: "Markets", arr: DATA.commercial.markets, section: "markets",
-    rowLabel: (r) => `${r[0]} â†’ ${r[1] || "?"} (${r[6]})`,
+    rowLabel: (r) => `${r[0]} → ${r[1] || "?"} (${r[6]})`,
     blank: () => ["", "", "Contract", "", "", "None", "Exploring", ""],
     fields: (r) => [
       { key: "commodity", label: "Commodity", type: "text", value: r[0], required: true },
@@ -7266,7 +7266,7 @@ const COM_EDITORS = {
   }),
   partnerships: () => ({
     title: "Partnerships", arr: DATA.commercial.partnerships, section: "partnerships",
-    rowLabel: (r) => `${r[0]} (${r[1]}) â€” ${r[5]}`,
+    rowLabel: (r) => `${r[0]} (${r[1]}) — ${r[5]}`,
     blank: () => ["", "Technical", "", "", "", "Active", ""],
     fields: (r) => [
       { key: "partner", label: "Partner", type: "text", value: r[0], required: true },
@@ -7281,7 +7281,7 @@ const COM_EDITORS = {
   }),
   revenue: () => ({
     title: "Revenue streams", arr: DATA.commercial.revenue, section: "revenue_streams",
-    rowLabel: (r) => `${r[0]} â€” ${fmtR(r[2])}/yr`,
+    rowLabel: (r) => `${r[0]} — ${fmtR(r[2])}/yr`,
     blank: () => ["", "Enterprise sales", 0, true, "Active", ""],
     fields: (r) => [
       { key: "stream", label: "Stream", type: "text", value: r[0], required: true },
@@ -7295,11 +7295,11 @@ const COM_EDITORS = {
   }),
 };
 
-/* listEditor configs â€” Administration + HR */
+/* listEditor configs — Administration + HR */
 const ADMIN_EDITORS = {
   correspondence: () => ({
     title: "Correspondence", arr: DATA.admin.correspondence, section: "admin_correspondence",
-    rowLabel: (r) => `${r[0] || "(no ref)"} â€” ${(r[4] || "").slice(0, 44)}`,
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${(r[4] || "").slice(0, 44)}`,
     blank: () => ["", "Incoming", new Date().toISOString().slice(0, 10), "", "", "Email", "", "", "Open"],
     fields: (r) => [
       { key: "ref", label: "Reference", type: "text", value: r[0] },
@@ -7316,12 +7316,12 @@ const ADMIN_EDITORS = {
   }),
   doa: () => ({
     title: "Delegation of authority", arr: DATA.admin.doa, section: "admin_doa",
-    rowLabel: (r) => `${r[0]} (${r[2] || "any"}) â†’ ${r[3] || "?"}`,
+    rowLabel: (r) => `${r[0]} (${r[2] || "any"}) → ${r[3] || "?"}`,
     blank: () => ["", "Finance", "", "", "", ""],
     fields: (r) => [
       { key: "fn", label: "Function / decision", type: "text", value: r[0], required: true },
       { key: "cat", label: "Category", type: "select", options: ["Finance", "Land", "HR", "Beneficiary", "Governance", "Projects", "Other"], value: r[1] || "Finance" },
-      { key: "thr", label: "Threshold (e.g. â€œup to R25 000â€)", type: "text", value: r[2] },
+      { key: "thr", label: "Threshold (e.g. “up to R25 000”)", type: "text", value: r[2] },
       { key: "app", label: "Approver", type: "text", value: r[3] },
       { key: "sec", label: "Secondary approver", type: "text", value: r[4] },
       { key: "ref", label: "Policy / resolution reference", type: "text", value: r[5] },
@@ -7330,7 +7330,7 @@ const ADMIN_EDITORS = {
   }),
   policies: () => ({
     title: "Policies & SOPs", arr: DATA.admin.policies, section: "admin_policies",
-    rowLabel: (r) => `${r[0]} â€” ${r[6]}`,
+    rowLabel: (r) => `${r[0]} — ${r[6]}`,
     blank: () => ["", "Governance", "v1.0", "", "", "", "Draft"],
     fields: (r) => [
       { key: "title", label: "Policy / SOP title", type: "text", value: r[0], required: true },
@@ -7345,7 +7345,7 @@ const ADMIN_EDITORS = {
   }),
   records: () => ({
     title: "Records index", arr: DATA.admin.records, section: "admin_records",
-    rowLabel: (r) => `${r[0]} â€” ${r[6]}`,
+    rowLabel: (r) => `${r[0]} — ${r[6]}`,
     blank: () => ["", "", "Digital", "", "", "", "Current"],
     fields: (r) => [
       { key: "series", label: "Record series", type: "text", value: r[0], required: true },
@@ -7362,7 +7362,7 @@ const ADMIN_EDITORS = {
 const HR_EDITORS = {
   staff: () => ({
     title: "Staff register", arr: DATA.hr.staff, section: "hr_staff",
-    rowLabel: (r) => `${r[1]} â€” ${r[2] || "?"} (${r[7]})`,
+    rowLabel: (r) => `${r[1]} — ${r[2] || "?"} (${r[7]})`,
     blank: () => ["", "", "", "Permanent", "", "", "", "Active"],
     fields: (r) => [
       { key: "ref", label: "Employee ref.", type: "text", value: r[0] },
@@ -7378,7 +7378,7 @@ const HR_EDITORS = {
   }),
   positions: () => ({
     title: "Positions", arr: DATA.hr.positions, section: "hr_positions",
-    rowLabel: (r) => `${r[0]} â€” ${r[5]}`,
+    rowLabel: (r) => `${r[0]} — ${r[5]}`,
     blank: () => ["", "", "", "", 1, "Vacant"],
     fields: (r) => [
       { key: "title", label: "Position title", type: "text", value: r[0], required: true },
@@ -7392,7 +7392,7 @@ const HR_EDITORS = {
   }),
   payroll: () => ({
     title: "Payroll summaries", arr: DATA.hr.payroll, section: "hr_payroll",
-    rowLabel: (r) => `${r[0]} â€” ${fmtR(r[4])} (${r[7]})`,
+    rowLabel: (r) => `${r[0]} — ${fmtR(r[4])} (${r[7]})`,
     blank: () => [new Date().toISOString().slice(0, 7), 0, 0, 0, 0, "", "", "Draft"],
     fields: (r) => [
       { key: "period", label: "Period (YYYY-MM)", type: "text", value: r[0], required: true },
@@ -7417,13 +7417,13 @@ const BUTTONS = {
   "import-allocations-btn": () => importModal(IMPORT.allocations),
   "edit-permits-btn": editPermits, "edit-finance-btn": editFinanceFigures, "edit-categories-btn": editCategories,
   "add-project-btn": () => editProject(null), "edit-jobs-btn": editJobsByYear, "edit-impact-btn": editImpactFigures,
-  "score-doc-btn": () => attachmentsModal("score", null, "Institutional Score â€” assessment document"),
+  "score-doc-btn": () => attachmentsModal("score", null, "Institutional Score — assessment document"),
   "score-rescan-btn": () => {
     const changed = syncAutoScore();
     if (changed && CAN_EDIT) { commit("score"); toast("Score updated from the latest data."); }
-    else { renderScore(); toast(changed ? "Score updated locally (viewer â€” not saved)." : "Score already reflects the latest data."); }
+    else { renderScore(); toast(changed ? "Score updated locally (viewer — not saved)." : "Score already reflects the latest data."); }
   },
-  "mf-general-btn": () => attachmentsModal("general", null, "CPA â€” general documents"),
+  "mf-general-btn": () => attachmentsModal("general", null, "CPA — general documents"),
   "import-actions-btn": () => importModal(IMPORT.actions),
   "import-committee-btn": () => importModal(IMPORT.committee),
   "import-masterfile-btn": () => importModal(IMPORT.masterfile),
@@ -7474,7 +7474,7 @@ function applyRoleGate() {
 }
 
 /* "Verified on" date for the registration receipt: stamped the moment a member's verification
-   becomes Verified (by any route â€” edit form, card, import, inline), cleared if it changes away.
+   becomes Verified (by any route — edit form, card, import, inline), cleared if it changes away.
    Compares with the row as loaded, so members who were already verified before this existed
    keep a blank date rather than being stamped "verified today". */
 function stampVerifiedDates() {
@@ -7506,7 +7506,7 @@ async function commit(section) {
     try { DATA = await repo.loadOrg(orgId); } catch (_) {}
   }
   if (section === "beneficiaries" && saved) queueDeathNotices(newlyDeceased);
-  // The Institutional Score is a live reflection of the other registers â€”
+  // The Institutional Score is a live reflection of the other registers —
   // any commit here may have moved an auto-scored criterion, so re-scan and
   // persist the score alongside whatever the caller just saved.
   if (section !== "score") {
@@ -7559,7 +7559,7 @@ export function mountView(el, viewId) {
     const b = document.createElement("div");
     b.className = "illus-banner";
     b.setAttribute("role", "note");
-    b.textContent = "Illustrative CPA360 assessment â€” this workspace is the Kwezi Valley demo dataset, not a real CPA.";
+    b.textContent = "Illustrative CPA360 assessment — this workspace is the Kwezi Valley demo dataset, not a real CPA.";
     el.insertBefore(b, el.firstChild);
   }
   currentView = NAV.some((n) => n.id === viewId) ? viewId : "exec";
@@ -7593,7 +7593,7 @@ export function showView(name, tab) {
   window.scrollTo({ top: 0 });
 }
 
-/* consolidated "needs attention" list â€” shared by the shell + exec dashboard */
+/* consolidated "needs attention" list — shared by the shell + exec dashboard */
 function computeAlerts() {
   if (!DATA) return [];
   const now = new Date(), a = [];
@@ -7622,10 +7622,10 @@ function computeAlerts() {
   const disp = (DATA.beneficiaryCentre?.disputes || []).filter((r) => r[5] !== "Resolved").length;
   if (disp) a.push({ tone: "warning", text: `${disp} beneficiary dispute${disp > 1 ? "s" : ""} open`, goto: "#/v/beneficiary" });
   const bdToday = birthdayDue(0).length, bdWeek = birthdayDue(7).length;
-  if (bdToday) a.push({ tone: "info", text: `${bdToday} member birthday${bdToday > 1 ? "s" : ""} today â€” send a wish`, goto: "#/v/beneficiary/birthdays" });
+  if (bdToday) a.push({ tone: "info", text: `${bdToday} member birthday${bdToday > 1 ? "s" : ""} today — send a wish`, goto: "#/v/beneficiary/birthdays" });
   else if (bdWeek) a.push({ tone: "info", text: `${bdWeek} member birthday${bdWeek > 1 ? "s" : ""} in the next 7 days`, goto: "#/v/beneficiary/birthdays" });
   const posterN = CAN_EDIT && !posterDoneToday(orgId, isoDay(now)) ? posterPeople(0).people.length : 0;
-  if (posterN) a.push({ tone: "info", text: `${posterN} birthday${posterN > 1 ? "s" : ""} today â€” make the shoutout poster for WhatsApp Status`, goto: "#/v/beneficiary/birthdays" });
+  if (posterN) a.push({ tone: "info", text: `${posterN} birthday${posterN > 1 ? "s" : ""} today — make the shoutout poster for WhatsApp Status`, goto: "#/v/beneficiary/birthdays" });
   const pend = (DATA.beneficiaryCentre?.register || []).filter((r) => r[9] === "Pending").length;
   if (pend) a.push({ tone: "info", text: `${pend} beneficiar${pend > 1 ? "ies" : "y"} pending verification`, goto: "#/v/beneficiary" });
   const noReqPO = (DATA.finProc?.pos || []).filter((r) => !r[5] && r[6] !== "Cancelled").length;
@@ -7648,14 +7648,14 @@ function nextStep() {
   const now = new Date();
   const overdue = DATA.actions.filter((x) => x[5] === "Overdue");
   if (overdue.length)
-    return { line: `Clear ${overdue.length} overdue action${overdue.length > 1 ? "s" : ""} â€” start with "${(overdue[0][2] || "").slice(0, 60)}".`, label: "Open Action Tracker", goto: "#/v/actions" };
+    return { line: `Clear ${overdue.length} overdue action${overdue.length > 1 ? "s" : ""} — start with "${(overdue[0][2] || "").slice(0, 60)}".`, label: "Open Action Tracker", goto: "#/v/actions" };
   const lowest = [...DATA.score.domains].sort((x, y) => domainScore(x) / (x.weight || 1) - domainScore(y) / (y.weight || 1))[0];
   if (lowest && domainScore(lowest) / (lowest.weight || 1) < 0.45)
     return { line: `${lowest.name} is your weakest domain at ${domainScore(lowest)}/${lowest.weight}. Focus improvement here.`, label: "View performance", goto: "#/v/score" };
   const cur = DATA.gates.find((g) => g.state === "current") || { n: 7 };
   if (cur.n < 7) {
     const nxt = JOURNEY.find((s) => s.n === cur.n + 1);
-    return { line: `Systems are holding. Work toward Stage ${cur.n + 1}: ${nxt ? nxt.key : ""} â€” ${nxt ? nxt.blurb : ""}`, label: "Open the Journey", goto: "#/v/journey" };
+    return { line: `Systems are holding. Work toward Stage ${cur.n + 1}: ${nxt ? nxt.key : ""} — ${nxt ? nxt.blurb : ""}`, label: "Open the Journey", goto: "#/v/journey" };
   }
   return { line: `You're at the final stage. Sustain investment readiness and keep the score above 85.`, label: "View performance", goto: "#/v/score" };
 }
@@ -7679,7 +7679,7 @@ export function printPack() {
   applyRoleGate();
   const d = new Date().toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" });
   const ph = container.querySelector("#print-header");
-  // Brand Box: the CPA's own logo/colors on the printed board pack, when set â€” see #/brand.
+  // Brand Box: the CPA's own logo/colors on the printed board pack, when set — see #/brand.
   const primary = DATA.cpa.brandPrimary || "#132a4f";
   const logo = DATA.cpa.logoDataUrl ? `<img src="${DATA.cpa.logoDataUrl}" alt="" style="max-height:38px;max-width:140px;">` : "";
   if (ph) ph.innerHTML =
@@ -7687,8 +7687,8 @@ export function printPack() {
        ${logo}
        <div>
          <div style="font-family:var(--font-display);font-weight:800;font-size:17px;color:${esc(primary)};">${esc(DATA.cpa.name)}</div>
-         <div style="font-size:12px;color:#444;margin-top:2px;">${esc(DATA.cpa.reg)} Â· Generated ${d}
-           ${DATA.cpa.brandFooter ? " Â· " + esc(DATA.cpa.brandFooter) : ""} Â· CPA360&trade; Command Center</div>
+         <div style="font-size:12px;color:#444;margin-top:2px;">${esc(DATA.cpa.reg)} · Generated ${d}
+           ${DATA.cpa.brandFooter ? " · " + esc(DATA.cpa.brandFooter) : ""} · CPA360&trade; Command Center</div>
        </div>
      </div>`;
   window.print();
@@ -7784,8 +7784,8 @@ const VIEW_HTML = `
         <button class="btn view-ok" id="score-doc-btn" type="button" style="margin-top:12px;">Assessment doc</button>
       </div>
       <div class="card">
-        <div class="card-head"><h3>The 100-point CPA360â„¢ score</h3>
-          <span class="hint">Most criteria auto-scan your registers live â€” add a document, verify a household, close
+        <div class="card-head"><h3>The 100-point CPA360™ score</h3>
+          <span class="hint">Most criteria auto-scan your registers live — add a document, verify a household, close
             a dispute, and its criterion updates on its own. Switch a criterion to manual only if you have a good
             reason the data doesn't capture.</span></div>
         <button class="btn view-ok" id="score-rescan-btn" type="button">Rescan now</button>
@@ -7863,7 +7863,7 @@ const VIEW_HTML = `
     <div class="grid grid-5" id="impact-stats"></div>
     <div class="split split-impact" style="margin-top:14px;">
       <div class="card">
-        <div class="card-head"><h3>Jobs Created (FTE) â€” by Year</h3><button class="btn" id="edit-jobs-btn" type="button">Manage</button></div>
+        <div class="card-head"><h3>Jobs Created (FTE) — by Year</h3><button class="btn" id="edit-jobs-btn" type="button">Manage</button></div>
         <div id="impact-bars"></div>
       </div>
       <div class="card">

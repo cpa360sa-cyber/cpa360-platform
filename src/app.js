@@ -1,5 +1,5 @@
 import { supabase, FUNCTIONS_URL } from "./supabase.js";
-import { onAuth, getSession, signOut, needsProfile } from "./auth.js";
+import { onAuth, getSession, signOut, needsProfile, consumeManualSignOut } from "./auth.js";
 import { renderAuth } from "./auth-ui.js";
 import {
   myOrgs, resolveActiveOrg, setActiveOrgId, createOrg, seedSandbox, atLeast,
@@ -121,15 +121,24 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
   const hp = new URLSearchParams((location.hash || "").replace(/^#/, "") + "&" + (location.search || "").replace(/^\?/, ""));
   let recovering = hp.get("type") === "recovery";
   const linkError = hp.get("error_description") || (hp.get("error_code") ? "That link has expired or was already used." : "");
-  const finishRecovery = () => { recovering = false; history.replaceState(null, "", location.pathname); enterApp(); };
+  const finishRecovery = () => { recovering = false; shownFor = state.session?.user?.id || null; history.replaceState(null, "", location.pathname); enterApp(); };
   // An invited teammate lands here from the invite link already signed in, but with no name, cell or
   // password yet. Show the welcome screen first; "joining" stops a tab-refocus SIGNED_IN from
   // redrawing it and wiping what they've typed.
   let joining = false;
+  // The login library re-announces SIGNED_IN whenever a tab is refocused or a token is renewed. Redrawing the
+  // whole app each time looked like the page "keeps refreshing" (and threw away anything half-typed), so an
+  // announcement for the person who is already looking at the app is ignored.
+  let shownFor = null;
   const gateAndEnter = async () => {
     if (joining) return;
     const user = state.session?.user;
-    if (!needsProfile(user)) { enterApp(); return; }
+    if (!needsProfile(user)) {
+      if (user && shownFor === user.id && root.querySelector(".app")) return;
+      shownFor = user ? user.id : null;
+      enterApp();
+      return;
+    }
     joining = true;
     let orgs = [];
     try { orgs = await myOrgs(); } catch (e) { /* the welcome screen still works without the CPA name */ }
@@ -137,6 +146,7 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
     const roleName = ROLE_INFO[org?.role]?.label || "";
     renderAuth(root, "join", () => {
       joining = false;
+      shownFor = user.id;
       history.replaceState(null, "", location.pathname);
       if (org) setActiveOrgId(org.id);
       enterApp();
@@ -151,10 +161,15 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
     } else if (event === "SIGNED_IN") {
       if (!recovering) gateAndEnter();
     } else if (event === "SIGNED_OUT") {
-      recovering = false; joining = false;
+      recovering = false; joining = false; shownFor = null;
       dash.destroyDashboard();
       state.orgs = []; state.active = null; state.dashOrgId = null;
       renderAuth(root, "signin");
+      // not pressed by the person → say so instead of silently dropping them on the login page
+      if (!consumeManualSignOut()) {
+        const m = root.querySelector("#auth-msg");
+        if (m) m.innerHTML = `<div class="msg err">You were signed out because your session ended. Please sign in again.</div>`;
+      }
     }
   });
   // The personal invite link (#join=<code>) only opens this screen. The sign-in is created when the person

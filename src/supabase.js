@@ -22,9 +22,26 @@ const waiting = [];
 const acquire = () => new Promise((res) => { if (active < REST_SLOTS) { active++; res(); } else waiting.push(res); });
 const release = () => { const next = waiting.shift(); if (next) next(); else active--; };
 
+/* Wrong-clock protection. The login server says when a token expires ("expires_at", in ITS clock) and the
+   library compares that with the DEVICE's clock. On a computer whose clock is more than ~an hour ahead, every
+   brand-new token already looks expired, so the app refreshes it again straight away — about once a second —
+   until the server's rate limit kicks in and the person is signed out, then signs in again and it repeats.
+   So for sessions we drop the server's timestamp: the library then works it out as "now (device clock) +
+   expires_in", which is correct on any clock because only the elapsed time matters. */
+async function localExpiry(res) {
+  try {
+    if (!res.ok || !(res.headers.get("content-type") || "").includes("json")) return res;
+    const data = await res.clone().json();
+    if (!data || typeof data.expires_in !== "number" || !("access_token" in data)) return res;
+    delete data.expires_at;
+    return new Response(JSON.stringify(data), { status: res.status, statusText: res.statusText, headers: res.headers });
+  } catch (e) { return res; }
+}
+
 async function resilientFetch(input, init = {}) {
   const url = typeof input === "string" ? input : input.url;
   const method = String(init.method || (typeof input !== "string" && input.method) || "GET").toUpperCase();
+  if (url.includes("/auth/v1/")) return localExpiry(await fetch(input, init));
   if (!((method === "GET" || method === "HEAD") && url.includes("/rest/v1/"))) return fetch(input, init);
   await acquire();
   try {

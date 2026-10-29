@@ -31,7 +31,10 @@ export const needsProfile = (user) => {
   return !!(m.invited_to_org && m.profile_done !== true);
 };
 
-export const signOut = () => supabase.auth.signOut();
+// remembers that the person pressed Sign out, so an unexpected sign-out (expired / revoked session) can say so
+let manualSignOut = false;
+export const signOut = () => { manualSignOut = true; return supabase.auth.signOut(); };
+export const consumeManualSignOut = () => { const v = manualSignOut; manualSignOut = false; return v; };
 
 export const getSession = () =>
   supabase.auth.getSession().then((r) => r.data.session);
