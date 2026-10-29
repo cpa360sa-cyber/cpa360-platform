@@ -21,6 +21,16 @@ export const sendReset = (email) =>
 export const setPassword = (password) =>
   supabase.auth.updateUser({ password });
 
+/** Finish joining a CPA: password + name + cell, and mark the profile done so the welcome screen doesn't return. */
+export const completeProfile = ({ password, fullName, phone }) =>
+  supabase.auth.updateUser({ password, data: { full_name: fullName, phone, profile_done: true } });
+
+/** An invited person who hasn't finished the welcome screen yet (no name / password chosen). */
+export const needsProfile = (user) => {
+  const m = (user && user.user_metadata) || {};
+  return !!(m.invited_to_org && m.profile_done !== true);
+};
+
 export const signOut = () => supabase.auth.signOut();
 
 export const getSession = () =>

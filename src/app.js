@@ -1,5 +1,5 @@
 import { supabase } from "./supabase.js";
-import { onAuth, getSession, signOut } from "./auth.js";
+import { onAuth, getSession, signOut, needsProfile } from "./auth.js";
 import { renderAuth } from "./auth-ui.js";
 import {
   myOrgs, resolveActiveOrg, setActiveOrgId, createOrg, seedSandbox, atLeast,
@@ -8,6 +8,7 @@ import {
 } from "./orgs.js";
 import {
   listMembers, addMember, setMemberRole, removeMember,
+  ROLE_INFO, assignableRoles, canManage, whatsappInviteUrl,
 } from "./members.js";
 import * as dash from "./dashboard.js";
 import { renderToolsLibrary } from "./tools-library.js";
@@ -103,7 +104,7 @@ const NAV = [
   { group: "Manage", items: [
     { id: "members", label: "Members", icon: "team", app: true, admin: true },
     { id: "brand", label: "Brand Box", icon: "palette", app: true, admin: true },
-    { id: "integrations", label: "Integrations", icon: "plug", app: true },
+    { id: "integrations", label: "Integrations", icon: "plug", app: true, admin: true },
     { id: "leads", label: "Leads Inbox", icon: "inbox", app: true, platformAdmin: true },
     { id: "stage-reviews", label: "Stage Reviews", icon: "check", app: true, platformAdmin: true },
     { id: "settings", label: "Settings", icon: "cog", app: true },
@@ -121,6 +122,26 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
   let recovering = hp.get("type") === "recovery";
   const linkError = hp.get("error_description") || (hp.get("error_code") ? "That link has expired or was already used." : "");
   const finishRecovery = () => { recovering = false; history.replaceState(null, "", location.pathname); enterApp(); };
+  // An invited teammate lands here from the invite link already signed in, but with no name, cell or
+  // password yet. Show the welcome screen first; "joining" stops a tab-refocus SIGNED_IN from
+  // redrawing it and wiping what they've typed.
+  let joining = false;
+  const gateAndEnter = async () => {
+    if (joining) return;
+    const user = state.session?.user;
+    if (!needsProfile(user)) { enterApp(); return; }
+    joining = true;
+    let orgs = [];
+    try { orgs = await myOrgs(); } catch (e) { /* the welcome screen still works without the CPA name */ }
+    const org = orgs.find((o) => o.id === user.user_metadata.invited_to_org) || orgs[0];
+    const roleName = ROLE_INFO[org?.role]?.label || "";
+    renderAuth(root, "join", () => {
+      joining = false;
+      history.replaceState(null, "", location.pathname);
+      if (org) setActiveOrgId(org.id);
+      enterApp();
+    }, { email: user.email, orgName: org?.name || "", role: roleName });
+  };
   state.session = await getSession();
   onAuth((event, session) => {
     state.session = session;
@@ -128,16 +149,16 @@ const STRIP_VIEWS = new Set(["exec", "score", "journey", "reports"]);
       recovering = true;
       renderAuth(root, "setpw", finishRecovery);
     } else if (event === "SIGNED_IN") {
-      if (!recovering) enterApp();
+      if (!recovering) gateAndEnter();
     } else if (event === "SIGNED_OUT") {
-      recovering = false;
+      recovering = false; joining = false;
       dash.destroyDashboard();
       state.orgs = []; state.active = null; state.dashOrgId = null;
       renderAuth(root, "signin");
     }
   });
   if (state.session && recovering) renderAuth(root, "setpw", finishRecovery);
-  else if (state.session) enterApp();
+  else if (state.session) gateAndEnter();
   else {
     renderAuth(root, "signin");
     if (linkError) {
@@ -195,7 +216,8 @@ function navGroupsHtml() {
 
 function renderShell() {
   const email = state.session?.user?.email || "";
-  const avatar = (email[0] || "?").toUpperCase();
+  const fullName = (state.session?.user?.user_metadata?.full_name || "").trim();
+  const avatar = ((fullName || email)[0] || "?").toUpperCase();
 
   root.innerHTML = `
     <div class="app" data-nav-open="false">
@@ -242,7 +264,8 @@ function renderShell() {
             <div class="tb-icon-wrap">
               <button class="tb-icon tb-avatar" id="tb-profile" type="button" aria-label="Account">${esc(avatar)}</button>
               <div class="tb-pop tb-pop-r" id="profile-pop" hidden>
-                <div class="tb-pop-head">${esc(email)}</div>
+                <div class="tb-pop-head">${esc(fullName || email)}</div>
+                ${fullName ? `<div class="tb-pop-sub">${esc(email)}</div>` : ""}
                 <div class="tb-pop-sub" id="profile-role"></div>
                 <button class="tb-pop-item" data-route="#/settings" type="button">${svg("cog")}Settings</button>
                 <button class="tb-pop-item" id="pp-print" type="button">${svg("report")}Print board pack</button>
@@ -621,6 +644,7 @@ async function renderView() {
     return renderSettings(view);
   }
   if (r.name === "integrations") {
+    if (!atLeast(state.active.role, "admin")) { location.hash = "#/v/exec"; return; }
     setHeader("Manage", "Integrations — " + state.active.name); markActiveNav("integrations");
     refreshChrome("integrations");
     return renderIntegrations(view, {
@@ -963,72 +987,178 @@ function renderNewOrg(view) {
 
 /* ---- members ---- */
 async function renderMembers(view) {
-  const org = state.active;
-  view.innerHTML = `<div class="booting" style="min-height:120px">Loading members…</div>`;
+  const org = state.active, myRole = org.role;
+  view.innerHTML = `<div class="booting" style="min-height:120px">Loading your team…</div>`;
 
   let members = [];
   try { members = await listMembers(org.id); }
   catch (e) { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
 
   const me = state.session?.user?.id;
+  const myName = (state.session?.user?.user_metadata?.full_name || "").trim();
   const owners = members.filter((m) => m.role === "owner").length;
+  const giveRoles = assignableRoles(myRole);
 
   view.innerHTML = `
-    <form class="card" id="add-form" style="margin-bottom:22px">
-      <div class="section-title" style="margin-top:0">Add a member</div>
-      <div class="row-inline">
-        <div class="field" style="flex:1;min-width:200px">
-          <label for="m-email">Email</label>
-          <input id="m-email" type="email" placeholder="person@example.org" required />
+    <div class="card" style="margin-bottom:22px">
+      <div class="section-title" style="margin-top:0">Invite a teammate</div>
+      <p class="hint" style="margin:0 0 12px">They get a link. It opens a short welcome screen where they add their name, cell number and a password — then they are inside ${esc(org.name)}. No account needed beforehand.</p>
+      <form id="add-form">
+        <div class="row-inline">
+          <div class="field" style="flex:1;min-width:200px">
+            <label for="m-email">Their email</label>
+            <input id="m-email" type="email" placeholder="person@gmail.com" autocomplete="off" required />
+          </div>
+          <div class="field">
+            <label for="m-role">Access level</label>
+            <select id="m-role">${giveRoles.map((r) => `<option value="${r}"${r === "member" ? " selected" : ""}>${esc(ROLE_INFO[r].label)} — ${esc(ROLE_INFO[r].short)}</option>`).join("")}</select>
+          </div>
+          <button class="btn primary" type="submit" style="width:auto">Send invitation</button>
         </div>
-        <div class="field">
-          <label for="m-role">Role</label>
-          <select id="m-role">
-            <option value="member" selected>Member</option>
-            <option value="admin">Admin</option>
-            <option value="viewer">Viewer</option>
-          </select>
-        </div>
-        <button class="btn primary" type="submit" style="width:auto">Add</button>
-      </div>
-      <div id="m-msg"></div>
-      <p style="font-size:11.5px;color:var(--ink-muted);margin:10px 0 0">
-        If they don't have an account, they'll get an email invitation.</p>
-    </form>
+        <p class="hint" id="m-role-hint" style="margin:6px 0 0"></p>
+        <div id="m-msg"></div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-bottom:22px">
+      <div class="section-title" style="margin-top:0">What each access level can do</div>
+      <div class="table-wrap"><table>
+        <tbody>${["viewer", "member", "admin", "owner"].map((r) => `<tr><td style="white-space:nowrap"><b>${esc(ROLE_INFO[r].label)}</b></td><td>${esc(ROLE_INFO[r].detail)}</td></tr>`).join("")}</tbody>
+      </table></div>
+    </div>
 
     <div class="table-wrap"><table>
-      <thead><tr><th>Email</th><th>Role</th><th>Joined</th><th></th></tr></thead>
-      <tbody>${members.map((m) => memberRow(m, me, owners)).join("")}</tbody>
+      <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+      <tbody id="team-body">${members.map((m) => memberRow(m, me, owners, myRole)).join("")}</tbody>
     </table></div>`;
+
+  const roleSel = view.querySelector("#m-role"), hint = view.querySelector("#m-role-hint");
+  const showHint = () => { hint.textContent = ROLE_INFO[roleSel.value]?.detail || ""; };
+  roleSel.addEventListener("change", showHint); showHint();
+
+  const showLink = (m, email, link, note) => showInviteLink(m, org, myName, link, note);
 
   view.querySelector("#add-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = view.querySelector("#m-email").value.trim();
-    const role = view.querySelector("#m-role").value;
-    const btn = e.target.querySelector("button");
+    const role = roleSel.value;
+    const btn = e.target.querySelector("button[type=submit]");
     const msg = view.querySelector("#m-msg");
-    btn.disabled = true; btn.textContent = "…";
+    btn.disabled = true; btn.textContent = "Sending…";
     try {
-      const { invited } = await addMember(org.id, email, role);
-      msg.innerHTML = `<div class="msg ok">${invited ? "Invitation emailed to " : "Added "}${esc(email)}.</div>`;
-      setTimeout(() => renderMembers(view), 700);
+      const r = await addMember(org.id, email, role);
+      if (r.existing) {
+        msg.innerHTML = `<div class="msg ok">${esc(email)} already has a CPA360 account, so no invitation was needed — they now have <b>${esc(ROLE_INFO[role].label)}</b> access to ${esc(org.name)}. They'll see it the next time they sign in (the CPA switcher at the top lists every CPA they belong to).</div>`;
+      } else {
+        msg.innerHTML = `<div class="msg ok">Invitation emailed to <b>${esc(email)}</b>. Ask them to check their inbox (and Spam).
+          <div style="margin-top:8px"><button class="btn" type="button" data-getlink>Prefer WhatsApp? Get a link to send instead</button></div>
+          <span class="hint">Making a new link cancels the emailed one.</span></div>`;
+        msg.querySelector("[data-getlink]").addEventListener("click", async (ev) => {
+          ev.target.disabled = true;
+          try {
+            const l = await addMember(org.id, email, role, "link");
+            showLink(msg, email, l.link, `Link for <b>${esc(email)}</b> — send it to them:`);
+          } catch (err) { msg.innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
+        });
+      }
+      view.querySelector("#m-email").value = "";
+      btn.disabled = false; btn.textContent = "Send invitation";
+      refreshTeamTable(view);
     } catch (err) {
       msg.innerHTML = `<div class="msg err">${esc(err.message)}</div>`;
-      btn.disabled = false; btn.textContent = "Add";
+      btn.disabled = false; btn.textContent = "Send invitation";
     }
   });
 
-  view.querySelectorAll("[data-role-for]").forEach((sel) =>
-    sel.addEventListener("change", async () => {
+  wireTeamTable(view, org, myName, showLink);
+}
+
+/* the personal invite link, with Copy + WhatsApp */
+function showInviteLink(msg, org, myName, link, note) {
+  msg.innerHTML = `<div class="msg ok">${note}
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <input readonly value="${esc(link)}" style="flex:1;min-width:220px" aria-label="Invite link">
+      <button class="btn" type="button" data-copy>Copy link</button>
+      <a class="btn primary" target="_blank" rel="noopener" href="${esc(whatsappInviteUrl({ cpaName: org.name, link, inviterName: myName }))}">Send on WhatsApp</a>
+    </div></div>`;
+  msg.querySelector("[data-copy]").addEventListener("click", async (ev) => {
+    try { await navigator.clipboard.writeText(link); ev.target.textContent = "Copied ✓"; }
+    catch { msg.querySelector("input").select(); }
+  });
+}
+
+/* re-draw just the team table (so the invite result message stays on screen) */
+async function refreshTeamTable(view) {
+  const org = state.active;
+  const myName = (state.session?.user?.user_metadata?.full_name || "").trim();
+  try {
+    const members = await listMembers(org.id);
+    const me = state.session?.user?.id, owners = members.filter((m) => m.role === "owner").length;
+    const body = view.querySelector("#team-body");
+    if (!body) return;
+    body.innerHTML = members.map((m) => memberRow(m, me, owners, org.role)).join("");
+    wireTeamTable(view, org, myName, (m, email, link, note) => showInviteLink(m, org, myName, link, note));
+  } catch (e) { /* the page still shows the previous list */ }
+}
+
+function wireTeamTable(view, org, myName, showLink) {
+  const msg = view.querySelector("#m-msg");
+  view.querySelectorAll("[data-role-for]").forEach((sel) => {
+    sel.onchange = async () => {
       try { await setMemberRole(org.id, sel.dataset.roleFor, sel.value); renderMembers(view); }
       catch (e) { alert(e.message); renderMembers(view); }
-    }));
-  view.querySelectorAll("[data-remove]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      if (!confirm("Remove this member?")) return;
+    };
+  });
+  view.querySelectorAll("[data-remove]").forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm(`Remove ${b.dataset.name} from ${org.name}? They will lose access straight away.`)) return;
       try { await removeMember(org.id, b.dataset.remove); renderMembers(view); }
       catch (e) { alert(e.message); }
-    }));
+    };
+  });
+  view.querySelectorAll("[data-resend]").forEach((b) => {
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await addMember(org.id, b.dataset.resend, b.dataset.role, b.dataset.how);
+        if (b.dataset.how === "link" && r.link) showLink(msg, b.dataset.resend, r.link, `New link for <b>${esc(b.dataset.resend)}</b> — send it to them:`);
+        else msg.innerHTML = `<div class="msg ok">Invitation emailed again to <b>${esc(b.dataset.resend)}</b>.</div>`;
+        msg.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch (err) { msg.innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
+      b.disabled = false;
+    };
+  });
+}
+
+function memberRow(m, meId, ownerCount, myRole) {
+  const isMe = m.user_id === meId;
+  const lockOwner = m.role === "owner" && ownerCount <= 1;
+  const manage = canManage(myRole, m.role, isMe) && !lockOwner;
+  const joined = m.joined_at ? new Date(m.joined_at).toLocaleDateString("en-ZA") : "";
+  const label = m.full_name || m.email;
+  const options = myRole === "owner" ? ["viewer", "member", "admin", "owner"] : ["viewer", "member"];
+  const status = !m.status || m.status === "active" ? '<span class="role-pill">Active</span>'
+    : m.status === "setup" ? '<span class="role-pill">Setting up their profile</span>'
+    : '<span class="role-pill" style="background:var(--status-warning-bg,#fff4d6);color:var(--status-warning,#8a5a00)">Invited — hasn\'t joined yet</span>';
+  const pending = m.status && m.status !== "active" && manage && !isMe;
+  const roleCell = manage
+    ? `<select class="role-pill" data-role-for="${m.user_id}" aria-label="Access for ${esc(label)}"
+        style="border:1px solid var(--border);background:var(--surface);color:var(--ink)">
+        ${options.map((r) => `<option value="${r}"${r === m.role ? " selected" : ""}>${ROLE_INFO[r].label}</option>`).join("")}
+      </select>`
+    : `<span class="role-pill">${esc(ROLE_INFO[m.role]?.label || m.role)}</span>`;
+  const actions = [
+    pending ? `<button class="linkbtn" data-resend="${esc(m.email)}" data-role="${m.role}" data-how="email">resend email</button>` : "",
+    pending ? `<button class="linkbtn" data-resend="${esc(m.email)}" data-role="${m.role}" data-how="link">get link</button>` : "",
+    manage && !isMe ? `<button class="linkbtn" data-remove="${m.user_id}" data-name="${esc(label)}">remove</button>` : "",
+  ].filter(Boolean).join(" · ");
+  return `<tr>
+    <td>${m.full_name ? `<b>${esc(m.full_name)}</b><br><span class="hint">${esc(m.email)}</span>` : esc(m.email)}${isMe ? ' <span class="role-pill">you</span>' : ""}${m.phone ? `<br><span class="hint mono">${esc(m.phone)}</span>` : ""}</td>
+    <td>${roleCell}</td>
+    <td>${status}</td>
+    <td class="mono">${esc(joined)}</td>
+    <td style="white-space:nowrap">${actions}</td>
+  </tr>`;
 }
 
 /* ---- dev: preview the shell chrome without signing in (?preview) ---- */
@@ -1055,20 +1185,3 @@ function previewShell() {
   root.querySelector("#view").innerHTML = `<div class="note">Shell preview — sign in for the real dashboard.</div>`;
 }
 
-function memberRow(m, meId, ownerCount) {
-  const isMe = m.user_id === meId;
-  const lockOwner = m.role === "owner" && ownerCount <= 1;
-  const joined = m.joined_at ? new Date(m.joined_at).toLocaleDateString("en-ZA") : "";
-  return `<tr>
-    <td>${esc(m.email)}${isMe ? ' <span class="role-pill">you</span>' : ""}</td>
-    <td>
-      <select class="role-pill" data-role-for="${m.user_id}" ${lockOwner ? "disabled" : ""}
-        style="border:1px solid var(--border);background:var(--surface);color:var(--ink)">
-        ${["viewer", "member", "admin", "owner"].map((r) =>
-          `<option value="${r}"${r === m.role ? " selected" : ""}>${r}</option>`).join("")}
-      </select>
-    </td>
-    <td class="mono">${esc(joined)}</td>
-    <td>${lockOwner ? "" : `<button class="linkbtn" data-remove="${m.user_id}">remove</button>`}</td>
-  </tr>`;
-}

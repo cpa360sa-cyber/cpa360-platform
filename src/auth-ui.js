@@ -1,4 +1,4 @@
-import { signIn, signUp, sendMagicLink, sendReset, setPassword, signInWithGoogle } from "./auth.js";
+import { signIn, signUp, sendMagicLink, sendReset, setPassword, signInWithGoogle, completeProfile } from "./auth.js";
 
 // Off until the Google provider is actually turned on in Supabase (Authentication →
 // Providers → Google, which needs a Google Cloud OAuth client) — see README.
@@ -20,17 +20,20 @@ const COPY = {
   magic:   { h: "Email me a link",    sub: "No password — we send a one-time sign-in link." },
   reset:   { h: "Reset your password", sub: "We'll email you a link to set a new one." },
   setpw:   { h: "Set a new password", sub: "Choose a password for your account." },
+  join:    { h: "Welcome — set up your profile", sub: "Tell us who you are and choose a password. You'll use this email and password to sign in from now on." },
 };
 
 /**
  * Render the auth screen into `root`.
- * mode: "signin" | "signup" | "magic" | "reset" | "setpw"
- * onSignedIn: called when a session is established here (setpw success).
+ * mode: "signin" | "signup" | "magic" | "reset" | "setpw" | "join"
+ * onSignedIn: called when a session is established here (setpw / join success).
+ * ctx (join only): { email, orgName, role } shown above the form.
  */
-export function renderAuth(root, mode = "signin", onSignedIn) {
-  const c = COPY[mode] || COPY.signin;
-  const needsPw = mode === "signin" || mode === "signup" || mode === "setpw";
-  const needsEmail = mode !== "setpw";
+export function renderAuth(root, mode = "signin", onSignedIn, ctx = {}) {
+  const c = { ...(COPY[mode] || COPY.signin) };
+  if (mode === "join" && ctx.orgName) c.h = `Welcome to ${ctx.orgName}`;
+  const needsPw = mode === "signin" || mode === "signup" || mode === "setpw" || mode === "join";
+  const needsEmail = mode !== "setpw" && mode !== "join";
 
   root.className = "";
   root.innerHTML = `
@@ -61,6 +64,16 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
           <div class="auth-or"><span>or</span></div>` : ""}
         <div id="auth-msg"></div>
         <form id="auth-form" novalidate>
+          ${mode === "join" ? `
+            <p class="hint" style="margin:0 0 14px;">Signing in as <b>${esc(ctx.email || "")}</b>${ctx.role ? ` · access: <b>${esc(ctx.role)}</b>` : ""}</p>
+            <div class="field">
+              <label for="au-name">Your full name</label>
+              <input id="au-name" type="text" autocomplete="name" placeholder="e.g. Nhlakanipho Sthole" required />
+            </div>
+            <div class="field">
+              <label for="au-phone">Cell number</label>
+              <input id="au-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 082 123 4567" required />
+            </div>` : ""}
           ${needsEmail ? `
             <div class="field">
               <label for="au-email">Email</label>
@@ -68,10 +81,16 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
             </div>` : ""}
           ${needsPw ? `
             <div class="field">
-              <label for="au-pw">${mode === "setpw" ? "New password" : "Password"}</label>
+              <label for="au-pw">${mode === "setpw" ? "New password" : mode === "join" ? "Create a password" : "Password"}</label>
               <input id="au-pw" type="password" minlength="8"
                      autocomplete="${mode === "signin" ? "current-password" : "new-password"}" required />
-            </div>` : ""}
+              ${mode === "join" ? `<span class="hint">At least 8 characters.</span>` : ""}
+            </div>
+            ${mode === "join" ? `
+            <div class="field">
+              <label for="au-pw2">Type the password again</label>
+              <input id="au-pw2" type="password" minlength="8" autocomplete="new-password" required />
+            </div>` : ""}` : ""}
           <button class="btn primary" type="submit" id="au-submit">${esc(c.h)}</button>
         </form>
         <div class="auth-alt" id="auth-alt"></div>
@@ -85,6 +104,7 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
     magic:   [["signin", "Sign in with a password"]],
     reset:   [["signin", "Back to sign in"]],
     setpw:   [],
+    join:    [],
   }[mode] || [];
   alt.innerHTML = links.map(([m, label]) => `<button class="linkbtn" data-mode="${m}">${esc(label)}</button>`).join("");
   alt.querySelectorAll("[data-mode]").forEach((b) =>
@@ -133,6 +153,19 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
         const { error } = await sendReset(email);
         if (error) throw error;
         show("If that address has an account, a reset link is on its way.", "ok");
+      } else if (mode === "join") {
+        const fullName = (root.querySelector("#au-name")?.value || "").trim().replace(/\s+/g, " ");
+        const phone = (root.querySelector("#au-phone")?.value || "").trim();
+        const pw2 = root.querySelector("#au-pw2")?.value || "";
+        if (fullName.length < 2 || !/\s/.test(fullName)) throw new Error("Please type your first name and surname.");
+        const digits = phone.replace(/\D/g, "");
+        if (digits.length < 9 || digits.length > 15) throw new Error("Please type a cell number we can reach you on, e.g. 082 123 4567.");
+        if (pw.length < 8) throw new Error("Use at least 8 characters for the password.");
+        if (pw !== pw2) throw new Error("The two passwords don't match.");
+        const { error } = await completeProfile({ password: pw, fullName, phone });
+        if (error) throw error;
+        show("All set. Opening your CPA…", "ok");
+        onSignedIn && onSignedIn();
       } else if (mode === "setpw") {
         if (pw.length < 8) throw new Error("Use at least 8 characters.");
         const { error } = await setPassword(pw);
@@ -148,5 +181,5 @@ export function renderAuth(root, mode = "signin", onSignedIn) {
     }
   });
 
-  root.querySelector("#au-email, #au-pw")?.focus();
+  root.querySelector("#au-name, #au-email, #au-pw")?.focus();
 }
