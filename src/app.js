@@ -107,6 +107,7 @@ const NAV = [
     { id: "integrations", label: "Integrations", icon: "plug", app: true, admin: true },
     { id: "leads", label: "Leads Inbox", icon: "inbox", app: true, platformAdmin: true },
     { id: "stage-reviews", label: "Stage Reviews", icon: "check", app: true, platformAdmin: true },
+    { id: "backoffice", label: "Back Office", icon: "kanban", href: "./backoffice.html", platformAdmin: true },
     { id: "settings", label: "Settings", icon: "cog", app: true },
   ]},
 ];
@@ -250,6 +251,7 @@ function navGroupsHtml() {
     const items = g.items.filter((it) => !(it.admin && !canManage) && !(it.platformAdmin && !state.isPlatformAdmin));
     if (!items.length) return "";
     return `<div class="sb-group">${esc(g.group)}</div>` + items.map((it) => {
+      if (it.href) return `<a class="sb-link" href="${esc(it.href)}" data-navid="${esc(it.id)}">${svg(it.icon)}<span>${esc(it.label)}</span></a>`;
       const route = it.app ? "#/" + it.id : "#/v/" + it.id;
       return `<button class="sb-link${it.sub ? " sub" : ""}" data-route="${route}" data-navid="${esc(it.id)}">
         ${svg(it.icon)}<span>${esc(it.label)}</span></button>`;
@@ -390,7 +392,7 @@ function wireShell() {
   /* search */
   const si = root.querySelector("#tb-search"), sp = root.querySelector("#tb-search-pop");
   const idx = [];
-  NAV.forEach((g) => g.items.forEach((it) => idx.push({ label: it.label, group: g.group, route: it.app ? "#/" + it.id : "#/v/" + it.id })));
+  NAV.forEach((g) => g.items.forEach((it) => !it.href && idx.push({ label: it.label, group: g.group, route: it.app ? "#/" + it.id : "#/v/" + it.id })));
   dash.NAV.forEach((n) => { if (n.sub) idx.push({ label: n.title, group: "Section", route: "#/v/" + n.id, hint: n.sub }); });
   si.addEventListener("input", () => {
     const q = si.value.trim().toLowerCase();
