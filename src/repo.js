@@ -10,10 +10,16 @@ import { orgLogoDataUrl } from "./orgs.js";
 const num = (v) => (v == null || v === "" ? 0 : Number(v));
 const nn = (v) => (v == null || v === "" ? null : v);
 
+/* Every row id this browser has loaded or inserted. reconcile() only deletes ids in here, so a
+   save can never remove a row it never saw (added by a colleague, another tab, or a save
+   still in flight) — it used to delete "anything in the database that isn't in my list". */
+const SEEN = new Set();
+
 /* Carry the DB row id on the array/object the dashboard hands back, so
    saveSection() can tell an edit from an insert. The dashboard ignores it. */
 function tagArr(arr, row) {
   arr._id = row.id;
+  SEEN.add(row.id);
   // fingerprint of the row as loaded/saved — reconcile() skips rows that haven't changed
   Object.defineProperty(arr, "_orig", { value: JSON.stringify(arr), writable: true, configurable: true, enumerable: false });
   return arr;
@@ -33,7 +39,7 @@ async function pageAll(make) {
     if (!data || data.length < PAGE) return { data: out, error: null };
   }
 }
-function tagObj(obj, row) { return Object.defineProperty(obj, "_id", { value: row.id, enumerable: false }); }
+function tagObj(obj, row) { SEEN.add(row.id); return Object.defineProperty(obj, "_id", { value: row.id, enumerable: false }); }
 
 /* Maturity bands are methodology, not per-org data — kept with the dashboard. */
 export const BANDS = [
@@ -680,7 +686,17 @@ export async function deleteDoc(doc) {
 /* ---------------------------------------------------------------- save ---- */
 /* Reconcile a whole collection: update tagged rows, insert new ones (writing
    the id back onto the array so the next save updates), delete what's gone. */
-async function reconcile(table, orgId, rows, toDb) {
+/* One save per table at a time. Each edit commits straight away, so two saves used to overlap:
+   both inserted the same new member, the later one deleted the first copy as "not in my list",
+   and the next save deleted the survivor — the member vanished on reload. */
+const SAVING = new Map();
+function reconcile(table, orgId, rows, toDb) {
+  const run = (SAVING.get(table) || Promise.resolve()).catch(() => {}).then(() => reconcileNow(table, orgId, rows, toDb));
+  SAVING.set(table, run);
+  return run;
+}
+
+async function reconcileNow(table, orgId, rows, toDb) {
   const { data: existing, error: exErr } = await pageAll((a, b) =>
     supabase.from(table).select("id").eq("org_id", orgId).order("id", { ascending: true }).range(a, b));
   if (exErr) throw exErr;
@@ -693,18 +709,20 @@ async function reconcile(table, orgId, rows, toDb) {
       // Unchanged since it was loaded/last saved → nothing to send. Without this, editing one
       // member re-sent an UPDATE for every row in the register, one at a time (~25 min for 1,608).
       if (row._orig !== undefined && row._orig === JSON.stringify(row)) continue;
-      const { error } = await supabase.from(table).update(toDb(row, i)).eq("id", row._id);
+      const { data: upd, error } = await supabase.from(table).update(toDb(row, i)).eq("id", row._id).select("id");
       if (error) throw error;
-      stamp(row);
-    } else {
-      const { data, error } = await supabase.from(table).insert({ ...toDb(row, i), org_id: orgId }).select("id").single();
-      if (error) throw error;
-      row._id = data.id;
-      keep.add(data.id);
-      stamp(row);
+      if ((upd && upd.length) || !Object.getOwnPropertyDescriptor(row, "_id").writable) { stamp(row); continue; }
+      // the row is gone from the database (removed elsewhere) — save it again rather than lose it
+      keep.delete(row._id);
     }
+    const { data, error } = await supabase.from(table).insert({ ...toDb(row, i), org_id: orgId }).select("id").single();
+    if (error) throw error;
+    row._id = data.id;
+    SEEN.add(data.id);
+    keep.add(data.id);
+    stamp(row);
   }
-  const gone = (existing || []).map((r) => r.id).filter((id) => !keep.has(id));
+  const gone = (existing || []).map((r) => r.id).filter((id) => SEEN.has(id) && !keep.has(id));
   if (gone.length) {
     const { error } = await supabase.from(table).delete().in("id", gone);
     if (error) throw error;
