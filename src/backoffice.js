@@ -39,15 +39,23 @@ const RISK_STATUS = { open: "Open", monitoring: "Monitoring", closed: "Closed" }
 const DECISION_STATUS = { open: "Open", decided: "Decided", deferred: "Deferred" };
 const PROVINCES = ["Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo", "Mpumalanga", "North West", "Northern Cape", "Western Cape"];
 const PARTIES = { GAD: "GAD Foundation", Afribot: "Afribot Solutions", JV: "JV-appointed" };
+const CAMPAIGN_STATUS = { planned: "Planned", active: "Active", paused: "Paused", done: "Done", cancelled: "Cancelled" };
+const AUDIENCES = { department: "Department (national & provincial)", ecosystem: "Ecosystem partners", funders: "Funders & corporate partners", municipalities: "Municipalities & traditional authorities", cpas: "CPAs", graduated: "Graduated CPAs", general: "General / all" };
+const CONTENT_STATUS = { idea: "Idea", drafting: "Drafting", review: "In review", approved: "Approved", scheduled: "Scheduled", published: "Published", archived: "Archived" };
+const CONTENT_KINDS = { linkedin: "LinkedIn post", website: "Website page", case_study: "Case study", one_pager: "One-pager / brief", deck: "Pitch deck", brochure: "Brochure", newsletter: "Newsletter", press: "Press release", event_material: "Event material", video: "Video", photo: "Photo", template: "Template / guide", other: "Other" };
+const CONSENT = { not_needed: "Not needed", requested: "Requested", received: "Received (written)", refused: "Refused" };
+const EVENT_KINDS = { sector_event: "Sector event", department_forum: "Department forum", provincial_meeting: "Provincial meeting", partner_meeting: "Partner meeting", webinar: "Webinar", conference: "Conference", community: "Community / courtesy visit", other: "Other" };
+const EVENT_STATUS = { idea: "Idea", planned: "Planned", confirmed: "Confirmed", held: "Held", cancelled: "Cancelled" };
+const YESNO = { false: "No", true: "Yes" };
 const KPI_GROUPS = [["K0", "JV level"], ["K1", "Client delivery"], ["K2", "Platform & technology"], ["K3", "Programme & quality"], ["K4", "Business development"], ["K5", "Back office"], ["K6", "Compliance & people"]];
 
 /* ---------- state ---------- */
 const S = {
   session: null, me: null, missing: false, loadError: "",
-  d: { bo_team: [], bo_clients: [], bo_milestones: [], bo_tasks: [], bo_task_comments: [], bo_visits: [], bo_tickets: [], bo_risks: [], bo_decisions: [], bo_kpis: [], bo_kpi_readings: [], bo_settings: [] },
+  d: { bo_team: [], bo_clients: [], bo_milestones: [], bo_tasks: [], bo_task_comments: [], bo_visits: [], bo_tickets: [], bo_risks: [], bo_decisions: [], bo_kpis: [], bo_kpi_readings: [], bo_settings: [], bo_campaigns: [], bo_content: [], bo_events: [] },
   platform: { orgs: [], leads: [], summary: null, error: "" },
   activity: [],
-  ui: { taskView: "board", taskQ: "", taskDept: "", taskWho: "", taskMs: "", clientTab: "pipeline", navOpen: false },
+  ui: { taskView: "board", taskQ: "", taskDept: "", taskWho: "", taskMs: "", clientTab: "pipeline", mktTab: "overview", mktMonth: "", mktCampaign: "", navOpen: false },
 };
 
 /* ---------- small helpers ---------- */
@@ -63,6 +71,7 @@ const teamName = (id) => { const t = byId(S.d.bo_team, id); return t ? t.full_na
 const clientName = (id) => byId(S.d.bo_clients, id)?.name || "";
 const msLabel = (id) => { const m = byId(S.d.bo_milestones, id); return m ? `${m.code ? m.code + " · " : ""}${m.title}` : ""; };
 const orgName = (id) => byId(S.platform.orgs, id)?.name || "";
+const campName = (id) => { const c = byId(S.d.bo_campaigns, id); return c ? `${c.code ? c.code + " · " : ""}${c.name}` : ""; };
 const isManager = () => !!S.me?.is_manager;
 const myTeamId = () => S.me?.team?.id || null;
 
@@ -95,12 +104,13 @@ const ICONS = {
   x: "M6 6l12 12M18 6L6 18",
   plus: "M12 5v14M5 12h14",
   moon: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z",
+  megaphone: "M3 11v3a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1zM17 8a5 5 0 0 1 0 8M7 15l1.5 5",
 };
 const svg = (k) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[k]}"/></svg>`;
 
 const NAV = [
   { group: "Run the JV", items: [["overview", "Overview", "home"], ["tasks", "Tasks & projects", "kanban"], ["roadmap", "Roadmap & milestones", "route"]] },
-  { group: "Clients", items: [["clients", "Pipeline & lifecycle", "users"], ["visits", "Field visits", "map"], ["support", "Support desk", "life"]] },
+  { group: "Clients", items: [["clients", "Pipeline & lifecycle", "users"], ["marketing", "Marketing", "megaphone"], ["visits", "Field visits", "map"], ["support", "Support desk", "life"]] },
   { group: "Oversight", items: [["kpis", "KPI scorecard", "gauge"], ["governance", "Decisions & risks", "shield"], ["platform", "Platform link", "pulse"]] },
   { group: "Office", items: [["team", "Team", "team"], ["activity", "Activity log", "clock"]] },
 ];
@@ -273,6 +283,7 @@ function navCount(id) {
   if (id === "tasks") n = S.d.bo_tasks.filter((t) => t.status !== "done" && t.due_date && t.due_date < today()).length;
   if (id === "support") n = S.d.bo_tickets.filter((t) => t.status === "open").length;
   if (id === "clients") n = S.platform.leads.filter((l) => !l.imported && l.status === "new").length;
+  if (id === "marketing") n = S.d.bo_content.filter((c) => c.status === "review").length;
   return n ? `<span class="bo-count">${n}</span>` : "";
 }
 
@@ -405,7 +416,7 @@ function sparkBars(rows) {
 
 function activityList(rows) {
   if (!rows.length) return empty("No back-office activity yet.");
-  const what = { bo_tasks: "Task", bo_clients: "Client", bo_milestones: "Milestone", bo_visits: "Visit", bo_tickets: "Ticket", bo_risks: "Risk", bo_decisions: "Decision", bo_team: "Team", bo_task_comments: "Comment" };
+  const what = { bo_tasks: "Task", bo_clients: "Client", bo_milestones: "Milestone", bo_visits: "Visit", bo_tickets: "Ticket", bo_risks: "Risk", bo_decisions: "Decision", bo_team: "Team", bo_task_comments: "Comment", bo_campaigns: "Campaign", bo_content: "Content", bo_events: "Event" };
   return `<ul class="bo-list bo-activity">${rows.map((a) => `<li><span class="bo-tag">${esc(what[a.table_name] || a.table_name)}</span>
     <span class="bo-grow"><b>${esc(a.action === "insert" ? "Added" : a.action === "delete" ? "Removed" : "Updated")}</b> ${esc(a.summary || "")}</span>
     <span class="bo-muted">${esc((a.actor_email || "system").split("@")[0])} · ${fmtDT(a.at)}</span></li>`).join("")}</ul>`;
@@ -850,6 +861,206 @@ VIEWS.platform = () => {
   </section>`;
 };
 
+/* ---------- Marketing (16.2, 16.5, 9.9; PROG-01 4.3) ---------- */
+const MKT_TABS = [["overview", "Overview"], ["campaigns", "Campaigns"], ["calendar", "Calendar"], ["content", "Content"], ["events", "Events & forums"], ["stakeholders", "Stakeholders"], ["tasks", "Marketing tasks"]];
+const isMktTask = (t) => !!t.campaign_id || (t.labels || []).includes("marketing");
+const consentOpen = (c) => c.needs_consent && c.status !== "archived" && !(c.consent_status === "received" && c.committee_approved);
+const leadsOf = (campId) => S.d.bo_clients.filter((c) => c.campaign_id === campId);
+const ADVANCED = ["qualified", "proposal", "negotiation", "won"];
+
+VIEWS.marketing = () => {
+  const tab = S.ui.mktTab;
+  const review = S.d.bo_content.filter((c) => c.status === "review").length;
+  const add = { overview: "", campaigns: addBtn("bo_campaigns", "New campaign"), calendar: addBtn("bo_content", "New content") + addBtn("bo_events", "New event"),
+    content: addBtn("bo_content", "New content"), events: addBtn("bo_events", "New event"), stakeholders: addBtn("bo_clients", "New stakeholder", { kind: "partner" }),
+    tasks: addBtn("bo_tasks", "New marketing task", { labels: ["marketing"], department: "bd", ...(S.ui.mktCampaign ? { campaign_id: S.ui.mktCampaign } : {}) }) }[tab];
+  return `
+  <div class="bo-toolbar">
+    <div class="bo-seg bo-seg-wrap" role="tablist" aria-label="Marketing views">
+      ${MKT_TABS.map(([k, l]) => `<button type="button" data-mtab="${k}" class="${tab === k ? "on" : ""}" role="tab" aria-selected="${tab === k}">${l}${k === "content" && review ? ` (${review})` : ""}</button>`).join("")}
+    </div>
+    ${add || ""}
+  </div>
+  ${{ overview: mktOverview, campaigns: mktCampaigns, calendar: mktCalendar, content: mktContent, events: mktEvents, stakeholders: mktStakeholders, tasks: mktTasks }[tab]()}`;
+};
+
+function mktOverview() {
+  const C = S.d.bo_campaigns, K = S.d.bo_content, E = S.d.bo_events;
+  const m0 = today().slice(0, 7);
+  const since = new Date(); since.setDate(since.getDate() - 90);
+  const newLeads = S.d.bo_clients.filter((c) => toDate(c.referral_date || c.created_at) >= since);
+  const published = K.filter((c) => c.status === "published" && (c.publish_date || "").slice(0, 7) === m0).length;
+  const consent = K.filter(consentOpen);
+  const soonEvents = E.filter((e) => e.event_date && !["held", "cancelled"].includes(e.status) && daysUntil(e.event_date) >= 0 && daysUntil(e.event_date) <= 30);
+  const budget = C.reduce((s, c) => s + Number(c.budget_zar || 0), 0), spend = C.reduce((s, c) => s + Number(c.spend_zar || 0), 0) + E.reduce((s, e) => s + Number(e.cost_zar || 0), 0);
+  // leads by source, last 12 months
+  const yr = new Date(); yr.setFullYear(yr.getFullYear() - 1);
+  const bySrc = {};
+  S.d.bo_clients.filter((c) => toDate(c.referral_date || c.created_at) >= yr).forEach((c) => { const k = (c.source || "Not recorded").replace(/\s*\(.*\)$/, ""); (bySrc[k] ||= { n: 0, won: 0 }).n++; if (c.pipeline_stage === "won") bySrc[k].won++; });
+  const src = Object.entries(bySrc).sort((a, b) => b[1].n - a[1].n);
+  const maxSrc = Math.max(1, ...src.map(([, v]) => v.n));
+  const horizon = [
+    ...K.filter((c) => c.publish_date && !["published", "archived"].includes(c.status) && daysUntil(c.publish_date) <= 14).map((c) => ({ kind: CONTENT_KINDS[c.kind] || "Content", label: c.title, d: c.publish_date, open: `bo_content:${c.id}` })),
+    ...E.filter((e) => e.event_date && !["held", "cancelled"].includes(e.status) && daysUntil(e.event_date) <= 14).map((e) => ({ kind: EVENT_KINDS[e.kind] || "Event", label: e.name, d: e.event_date, open: `bo_events:${e.id}` })),
+  ].sort((a, b) => a.d.localeCompare(b.d)).slice(0, 10);
+  return `
+  <div class="tiles">
+    ${tile("Active campaigns", C.filter((c) => c.status === "active").length, `${C.filter((c) => c.status === "planned").length} planned`)}
+    ${tile("New leads, 90 days", newLeads.length, `${newLeads.filter((c) => ADVANCED.includes(c.pipeline_stage)).length} qualified or better`)}
+    ${tile("Published this month", published, `${K.filter((c) => c.status === "review").length} waiting for Friday approval`)}
+    ${tile("Consent outstanding", consent.length, "Can't publish until received + Committee-approved", consent.length ? "warning" : "")}
+    ${tile("Events, next 30 days", soonEvents.length, `${E.filter((e) => e.status === "held").length} held so far`)}
+    ${tile("Spend vs budget", money(spend), budget ? `of ${money(budget)} · ${Math.round((spend / budget) * 100)}%` : "No budget set (§23.1 [●])", budget && spend > budget ? "critical" : "")}
+  </div>
+  <div class="bo-grid2">
+    <section class="card">
+      ${sectionHead("Leads by source, 12 months", `<a class="linkbtn" href="#/clients">Pipeline</a>`)}
+      ${src.length ? `<ul class="bo-hbars">${src.map(([k, v]) => `<li><span class="bo-hb-l" title="${esc(k)}">${esc(k)}</span><span class="bo-hb-t"><span style="width:${(v.n / maxSrc) * 100}%"></span></span><b>${v.n}</b><span class="bo-muted">${v.won} won</span></li>`).join("")}</ul>` : empty("No leads in the last 12 months.")}
+      <p class="bo-muted bo-mt">Referrals first (§16.5). Record a source on every pipeline record so this stays honest.</p>
+    </section>
+    <section class="card">
+      ${sectionHead("Coming up, 14 days", `<button class="linkbtn" type="button" data-mtab="calendar">Calendar</button>`)}
+      ${horizon.length ? `<ul class="bo-list">${horizon.map((h) => `<li data-open="${h.open}" class="bo-click"><span class="bo-tag">${esc(h.kind)}</span><span class="bo-grow">${esc(h.label)}</span>${dueChip(h.d)}</li>`).join("")}</ul>` : empty("Nothing scheduled in the next two weeks.")}
+    </section>
+    <section class="card">
+      ${sectionHead("Campaign results", `<button class="linkbtn" type="button" data-mtab="campaigns">All campaigns</button>`)}
+      ${C.filter((c) => !["cancelled"].includes(c.status)).length ? `<div class="table-wrap bo-flat"><table><thead><tr><th>Campaign</th><th>Leads</th><th>Qualified+</th><th>Won</th><th>Target</th></tr></thead>
+        <tbody>${C.filter((c) => c.status !== "cancelled").map((c) => { const l = leadsOf(c.id); return `<tr class="bo-click" data-open="bo_campaigns:${c.id}"><td><span class="bo-mono bo-muted">${esc(c.code || "")}</span> ${esc(c.name)}</td><td>${l.length}</td><td>${l.filter((x) => ADVANCED.includes(x.pipeline_stage)).length}</td><td>${l.filter((x) => x.pipeline_stage === "won").length}</td><td>${c.target_leads ?? "—"}</td></tr>`; }).join("")}</tbody></table></div>` : empty("No campaigns yet.")}
+    </section>
+    <section class="card bo-rules">
+      ${sectionHead("House rules (§16.5)")}
+      <ul>
+        <li><b>Referrals first</b> — then a simple website, LinkedIn, sector events and Department forums.</li>
+        <li><b>Consent</b> — every case study, photo or quote needs the CPA's written consent <i>and</i> a Committee-approved message. The calendar blocks publishing until both are recorded.</li>
+        <li><b>No compliance claims</b> about any CPA without its consent.</li>
+        <li><b>Prices</b> only from the Committee-approved list (§16.3).</li>
+        <li><b>Brand</b> — “CPA360” is joint Foreground IP; both Parties are named as the Committee agrees.</li>
+        <li><b>Fridays</b> — the BD Lead approves marketing content and updates the CRM (§9.9).</li>
+      </ul>
+    </section>
+  </div>
+  ${consent.length ? `<section class="card bo-mt">${sectionHead("Waiting on consent or Committee approval")}<ul class="bo-list">${consent.map((c) => `<li class="bo-click" data-open="bo_content:${c.id}"><span class="bo-tag">${esc(CONTENT_KINDS[c.kind])}</span><span class="bo-grow">${esc(c.title)}${c.client_id ? ` <span class="bo-muted">· ${esc(clientName(c.client_id))}</span>` : ""}</span>${chip(CONSENT, c.consent_status)}${c.committee_approved ? `<span class="badge good">Committee ✓</span>` : `<span class="badge warning">Committee pending</span>`}</li>`).join("")}</ul></section>` : ""}`;
+}
+
+function mktCampaigns() {
+  const C = S.d.bo_campaigns;
+  if (!C.length) return empty("No campaigns yet.");
+  return `<p class="bo-lead">Each campaign groups its content, events, tasks and the leads it brings in. Tag a pipeline record with its campaign to see conversion here.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Campaign</th><th>Audience</th><th>Dates</th><th>Leads / target</th><th>Content</th><th>Tasks</th><th>Spend</th><th>Status</th></tr></thead>
+    <tbody>${C.map((c) => {
+      const l = leadsOf(c.id), k = S.d.bo_content.filter((x) => x.campaign_id === c.id), t = S.d.bo_tasks.filter((x) => x.campaign_id === c.id), td = t.filter((x) => x.status === "done").length;
+      const spent = Number(c.spend_zar || 0) + S.d.bo_events.filter((e) => e.campaign_id === c.id).reduce((s, e) => s + Number(e.cost_zar || 0), 0);
+      return `<tr class="bo-click" data-open="bo_campaigns:${c.id}">
+        <td><span class="bo-mono bo-muted">${esc(c.code || "")}</span> <b>${esc(c.name)}</b>${c.objective ? `<div class="bo-sub">${esc(c.objective.slice(0, 140))}</div>` : ""}</td>
+        <td>${esc(AUDIENCES[c.audience] || "—")}${c.channels ? `<div class="bo-sub">${esc(c.channels)}</div>` : ""}</td>
+        <td class="bo-mono">${fmtD(c.start_date)}<div class="bo-sub">to ${fmtD(c.end_date)}</div></td>
+        <td>${l.length}${c.target_leads ? ` / ${c.target_leads}${bar((l.length / c.target_leads) * 100)}` : ""}</td>
+        <td>${k.filter((x) => x.status === "published").length}/${k.length} live</td>
+        <td>${t.length ? `${td}/${t.length}${bar((td / t.length) * 100)}` : "—"}</td>
+        <td>${money(spent)}${c.budget_zar ? `<div class="bo-sub">of ${money(c.budget_zar)}</div>${bar((spent / c.budget_zar) * 100, spent > c.budget_zar ? "warn" : "")}` : ""}</td>
+        <td><select class="bo-inline" data-quick="bo_campaigns:${c.id}:status" aria-label="Status">${opts(CAMPAIGN_STATUS, c.status, null)}</select></td></tr>`;
+    }).join("")}</tbody></table></div>`;
+}
+
+const ym = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
+function mktCalendar() {
+  const m = S.ui.mktMonth || today().slice(0, 7);
+  const [y, mo] = m.split("-").map(Number);
+  const lead = (new Date(y, mo - 1, 1).getDay() + 6) % 7; // Monday first
+  const days = new Date(y, mo, 0).getDate();
+  const cells = Array(lead).fill(null).concat(Array.from({ length: days }, (_, i) => `${m}-${String(i + 1).padStart(2, "0")}`));
+  while (cells.length % 7) cells.push(null);
+  const item = (d) => [
+    ...S.d.bo_content.filter((c) => c.publish_date === d && c.status !== "archived").map((c) => `<button type="button" class="bo-cal-item bo-ci-${c.status}${consentOpen(c) ? " bo-ci-consent" : ""}" data-open="bo_content:${c.id}" title="${esc(CONTENT_KINDS[c.kind])} · ${esc(CONTENT_STATUS[c.status])}">${esc(c.title)}</button>`),
+    ...S.d.bo_events.filter((e) => e.event_date === d && e.status !== "cancelled").map((e) => `<button type="button" class="bo-cal-item bo-ci-event" data-open="bo_events:${e.id}" title="${esc(EVENT_KINDS[e.kind])}">◆ ${esc(e.name)}</button>`),
+  ].join("");
+  const label = new Date(y, mo - 1, 1).toLocaleDateString("en-ZA", { month: "long", year: "numeric" });
+  return `<div class="bo-cal-head"><button class="btn" type="button" data-mmonth="-1" aria-label="Previous month">‹</button><h2>${label}</h2><button class="btn" type="button" data-mmonth="1" aria-label="Next month">›</button><button class="linkbtn" type="button" data-mmonth="0">Today</button>
+    <span class="bo-cal-key"><i class="bo-ci-published"></i>Published <i class="bo-ci-approved"></i>Approved / scheduled <i class="bo-ci-drafting"></i>In progress <i class="bo-ci-event"></i>Event <i class="bo-ci-consent"></i>Consent pending</span></div>
+  <div class="bo-cal" role="grid" aria-label="${esc(label)}">
+    ${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="bo-cal-dow" role="columnheader">${d}</div>`).join("")}
+    ${cells.map((d) => d ? `<div class="bo-cal-day${d === today() ? " today" : ""}" role="gridcell"><span class="bo-cal-n">${Number(d.slice(8))}</span>${item(d)}</div>` : `<div class="bo-cal-day off" role="gridcell"></div>`).join("")}
+  </div>
+  ${(() => { const undated = S.d.bo_content.filter((c) => !c.publish_date && !["published", "archived"].includes(c.status)); return undated.length ? `<section class="card bo-mt">${sectionHead("Not scheduled yet")}<ul class="bo-list">${undated.map((c) => `<li class="bo-click" data-open="bo_content:${c.id}"><span class="bo-tag">${esc(CONTENT_KINDS[c.kind])}</span><span class="bo-grow">${esc(c.title)}</span>${chip(CONTENT_STATUS, c.status)}</li>`).join("")}</ul></section>` : ""; })()}`;
+}
+
+function mktContent() {
+  const cols = Object.entries(CONTENT_STATUS).filter(([k]) => k !== "archived");
+  const archived = S.d.bo_content.filter((c) => c.status === "archived").length;
+  return `<p class="bo-lead">Idea → drafting → review → approved → scheduled → published. Content goes to <b>review</b> for the BD Lead's Friday approval (§9.9). Anything featuring a CPA can't be scheduled or published until written consent is received and the Committee has approved the message (§16.5).${archived ? ` ${archived} archived.` : ""}</p>
+  <div class="bo-board bo-board-6">${cols.map(([k, label]) => {
+    const col = S.d.bo_content.filter((c) => c.status === k).sort((a, b) => (a.publish_date || "9").localeCompare(b.publish_date || "9"));
+    return `<section class="bo-col" aria-label="${label}"><header><span class="bo-dot bo-c-${k}"></span>${label}<span class="bo-muted">${col.length}</span></header>
+      <div class="bo-col-body">${col.map((c) => `<article class="bo-card" data-open="bo_content:${c.id}" tabindex="0">
+        <div class="bo-card-top"><span class="bo-tag">${esc(CONTENT_KINDS[c.kind] || c.kind)}</span>${c.campaign_id ? `<span class="bo-tag">${esc(byId(S.d.bo_campaigns, c.campaign_id)?.code || "")}</span>` : ""}</div>
+        <div class="bo-card-title">${esc(c.title)}</div>
+        ${c.client_id ? `<div class="bo-card-meta">◆ ${esc(clientName(c.client_id))}</div>` : ""}
+        ${c.needs_consent ? `<div class="bo-card-meta">${consentOpen(c) ? `<span class="badge warning">Consent ${esc((CONSENT[c.consent_status] || "").toLowerCase())}${c.committee_approved ? "" : " · Committee pending"}</span>` : `<span class="badge good">Consent ✓ Committee ✓</span>`}</div>` : ""}
+        <div class="bo-card-foot"><span class="bo-avatar" title="${esc(teamName(c.owner_id) || "No owner")}">${esc(initials(teamName(c.owner_id)))}</span>${c.publish_date ? dueChip(c.publish_date, c.status === "published") : `<span class="bo-muted">No date</span>`}</div>
+      </article>`).join("") || `<div class="bo-col-empty">—</div>`}</div></section>`;
+  }).join("")}</div>`;
+}
+
+function mktEvents() {
+  const E = [...S.d.bo_events].sort((a, b) => (a.event_date || "9").localeCompare(b.event_date || "9"));
+  if (!E.length) return empty("No events or forums logged yet.");
+  return `<p class="bo-lead">Sector events, Department forums, quarterly provincial meetings and partner meetings (§16.2, §16.5). After each one, record attendees, leads captured and the follow-up — then add the leads to the pipeline with this event's campaign.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Where</th><th>Campaign</th><th>Cost</th><th>Leads</th><th>Status</th></tr></thead>
+    <tbody>${E.map((e) => `<tr class="bo-click" data-open="bo_events:${e.id}">
+      <td class="bo-mono">${e.event_date ? fmtD(e.event_date) : "TBC"}${e.event_date && !["held", "cancelled"].includes(e.status) ? `<div>${dueChip(e.event_date)}</div>` : ""}</td>
+      <td><b>${esc(e.name)}</b>${e.follow_up ? `<div class="bo-sub">Follow-up: ${esc(e.follow_up)}</div>` : e.notes ? `<div class="bo-sub">${esc(e.notes.slice(0, 120))}</div>` : ""}</td>
+      <td>${esc(EVENT_KINDS[e.kind] || "—")}</td><td>${esc([e.location, e.province].filter(Boolean).join(", ") || "—")}</td>
+      <td>${e.campaign_id ? `<span class="bo-tag" title="${esc(campName(e.campaign_id))}">${esc(byId(S.d.bo_campaigns, e.campaign_id)?.code || "—")}</span>` : "—"}</td>
+      <td>${money(e.cost_zar)}</td><td>${e.leads_captured ?? "—"}${e.attendees ? `<div class="bo-sub">${e.attendees} attended</div>` : ""}</td>
+      <td><select class="bo-inline" data-quick="bo_events:${e.id}:status" aria-label="Status">${opts(EVENT_STATUS, e.status, null)}</select></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+const STAKE_GROUPS = [
+  { k: "government", label: "Department (national and provincial CPA offices)", want: "Referrals; recognition of CPA360 evidence for compliance; data sharing with CPA consent", cadence: "Quarterly meeting per province; annual report", days: 92 },
+  { k: "partner", label: "Ecosystem partners", want: "Referrals; co-funding; joint work on land and commercial deals", cadence: "Quarterly", days: 92 },
+  { k: "funder", label: "Funders and corporate partners", want: "Cohort funding; grants", cadence: "Per funder reporting cycle", days: 92 },
+  { k: "municipality", label: "Municipalities and traditional authorities", want: "Local support and access; possible licences", cadence: "As needed; courtesy visit before work in an area", days: null },
+  { k: "graduated", label: "Graduated CPAs", want: "Peer visits; case studies with consent", cadence: "Twice a year", days: 183 },
+];
+function mktStakeholders() {
+  return `<p class="bo-lead">Who we work with and how often (§16.2). Records come from the pipeline; a record shows <span class="badge warning">Due a touch</span> when it hasn't been updated within its cadence. Log the next step on the record each time you meet.</p>
+  <div class="bo-team-grid">${STAKE_GROUPS.map((g) => {
+    const list = S.d.bo_clients.filter((c) => (g.k === "graduated" ? c.kind === "cpa" && c.lifecycle === "graduated" : c.kind === g.k));
+    return `<section class="card"><h3 class="bo-dept">${esc(g.label)}<span class="bo-muted">${list.length}</span></h3>
+      <p class="bo-sub"><b>We want:</b> ${esc(g.want)}<br><b>How often:</b> ${esc(g.cadence)}</p>
+      <ul class="bo-people">${list.map((c) => {
+        const stale = g.days && daysUntil(String(c.updated_at || c.created_at).slice(0, 10)) < -g.days;
+        return `<li class="bo-click" data-open="bo_clients:${c.id}"><div class="bo-grow"><b>${esc(c.name)}</b><div class="bo-sub">${esc([c.province, c.contact_name, PIPELINE[c.pipeline_stage]].filter(Boolean).join(" · "))}</div>${c.next_step ? `<div class="bo-sub">Next: ${esc(c.next_step)}</div>` : ""}</div>
+          <div class="bo-right">${c.next_step_date ? dueChip(c.next_step_date) : ""}${stale ? `<div><span class="badge warning">Due a touch</span></div>` : ""}</div></li>`;
+      }).join("") || `<li class="bo-muted">None yet.</li>`}</ul>
+      ${g.k !== "graduated" ? `<div class="bo-mt">${addBtn("bo_clients", "Add", { kind: g.k, pipeline_stage: "lead", lifecycle: "first_contact" })}</div>` : ""}</section>`;
+  }).join("")}</div>`;
+}
+
+function mktTasks() {
+  const camp = S.ui.mktCampaign;
+  const list = S.d.bo_tasks.filter((t) => isMktTask(t) && (!camp || t.campaign_id === camp));
+  const campMap = Object.fromEntries(S.d.bo_campaigns.map((c) => [c.id, `${c.code ? c.code + " · " : ""}${c.name}`]));
+  const open = list.filter((t) => t.status !== "done");
+  return `<div class="bo-toolbar"><select class="bo-input" id="mcamp" aria-label="Campaign">${opts(campMap, camp, "All campaigns")}</select>
+    <span class="bo-muted">${open.length} open · ${list.length - open.length} done · ${open.filter((t) => t.due_date && t.due_date < today()).length} overdue</span>
+    <a class="linkbtn" href="#/tasks">Open the full task board</a></div>
+  ${taskTable(list)}`;
+}
+
+WIRES.marketing = () => {
+  root.querySelectorAll("[data-mtab]").forEach((b) => (b.onclick = () => { S.ui.mktTab = b.dataset.mtab; render(); }));
+  root.querySelectorAll("[data-mmonth]").forEach((b) => (b.onclick = () => {
+    const d = Number(b.dataset.mmonth);
+    if (!d) S.ui.mktMonth = "";
+    else { const [y, m] = (S.ui.mktMonth || today().slice(0, 7)).split("-").map(Number); const n = new Date(y, m - 1 + d, 1); S.ui.mktMonth = ym(n.getFullYear(), n.getMonth() + 1); }
+    render();
+  }));
+  root.querySelector("#mcamp")?.addEventListener("change", (e) => { S.ui.mktCampaign = e.target.value; render(); });
+};
+
 /* ---------- Team ---------- */
 VIEWS.team = () => {
   const T = S.d.bo_team.filter((t) => t.status !== "left");
@@ -888,12 +1099,12 @@ const FORMS = {
   bo_tasks: { title: "Task", fields: () => [F("title", "Title", "text", { req: true, wide: true }), F("status", "Status", "select", { map: TASK_STATUS }), F("priority", "Priority", "select", { map: PRIORITY }),
     F("assignee_id", "Assignee", "select", { map: teamOpts() }), F("department", "Department", "select", { map: DEPTS }), F("milestone_id", "Milestone", "select", { map: Object.fromEntries(S.d.bo_milestones.map((m) => [m.id, `${m.code || ""} ${m.title}`.trim().slice(0, 80)])), wide: true }),
     F("client_id", "Client", "select", { map: Object.fromEntries(S.d.bo_clients.map((c) => [c.id, c.name])) }), F("stream", "Stream", "select", { map: STREAMS }),
-    F("start_date", "Start", "date"), F("due_date", "Due", "date"), F("estimate_hours", "Estimate (hours)", "number"), F("description", "Description", "textarea", { wide: true })] },
+    F("campaign_id", "Marketing campaign", "select", { map: campOpts(), wide: true }), F("start_date", "Start", "date"), F("due_date", "Due", "date"), F("estimate_hours", "Estimate (hours)", "number"), F("description", "Description", "textarea", { wide: true })] },
   bo_milestones: { title: "Milestone", fields: () => [F("code", "Code"), F("phase", "Phase", "select", { map: PHASES, req: true }), F("title", "Milestone", "text", { req: true, wide: true }), F("status", "Status", "select", { map: MS_STATUS }),
     F("due_date", "Due", "date"), F("department", "Department", "select", { map: DEPTS }), F("owner_role", "Owner (role)"), F("owner_id", "Owner (person)", "select", { map: teamOpts() }), F("evidence", "Evidence of completion", "text", { wide: true }), F("notes", "Notes", "textarea", { wide: true })] },
   bo_clients: { title: "Client / prospect", fields: () => [F("name", "Name", "text", { req: true, wide: true }), F("kind", "Type", "select", { map: KINDS }), F("province", "Province", "select", { map: Object.fromEntries(PROVINCES.map((p) => [p, p])) }),
     F("pipeline_stage", "Pipeline stage", "select", { map: PIPELINE }), F("lifecycle", "Lifecycle step", "select", { map: LIFECYCLE }), F("segment", "Triage segment", "select", { map: SEGMENTS }), F("stream", "Stream", "select", { map: STREAMS }),
-    F("contact_name", "Contact person"), F("contact_phone", "Contact phone"), F("contact_email", "Contact email", "email", { wide: true }), F("source", "Referral source"), F("payer", "Who pays"), F("value_zar", "Value (R)", "number"),
+    F("contact_name", "Contact person"), F("contact_phone", "Contact phone"), F("contact_email", "Contact email", "email", { wide: true }), F("source", "Referral source"), F("campaign_id", "Marketing campaign", "select", { map: campOpts() }), F("payer", "Who pays"), F("value_zar", "Value (R)", "number"),
     F("owner_id", "BD owner", "select", { map: teamOpts() }), F("facilitator_id", "Facilitator", "select", { map: teamOpts() }),
     F("org_id", "Linked platform workspace", "select", { map: Object.fromEntries(S.platform.orgs.map((o) => [o.id, o.name])), wide: true }),
     F("referral_date", "Referral logged", "date"), F("triage_date", "Triage decision", "date"), F("signed_date", "Engagement signed", "date"), F("onboarded_date", "Onboarding complete", "date"),
@@ -911,8 +1122,22 @@ const FORMS = {
   bo_team: { title: "Team member", fields: () => [F("full_name", "Full name (blank = vacant)"), F("status", "Status", "select", { map: { active: "In post", vacant: "Vacant", left: "Left" } }), F("role_title", "Role", "text", { req: true, wide: true }),
     F("department", "Department", "select", { map: DEPTS, req: true }), F("party", "Provided by", "select", { map: PARTIES }), F("fte", "FTE", "number", { step: 0.1, min: 0, max: 1 }), F("starts_on", "Starts", "date"),
     F("email", "Login email (gives access)", "email", { wide: true }), F("phone", "Phone"), F("access", "Access", "select", { map: { member: "Member — edit work", admin: "Manager — also team & deletes" } }), F("notes", "Notes", "textarea", { wide: true })] },
+  bo_campaigns: { title: "Campaign", fields: () => [F("code", "Code"), F("status", "Status", "select", { map: CAMPAIGN_STATUS }), F("name", "Campaign", "text", { req: true, wide: true }), F("objective", "Objective", "textarea", { wide: true }),
+    F("audience", "Audience", "select", { map: AUDIENCES }), F("channels", "Channels"), F("start_date", "Start", "date"), F("end_date", "End", "date"),
+    F("budget_zar", "Budget (R)", "number"), F("spend_zar", "Spend so far (R, excl. events)", "number"), F("target_leads", "Target leads", "number"), F("owner_id", "Owner", "select", { map: teamOpts() }), F("notes", "Notes", "textarea", { wide: true })] },
+  bo_content: { title: "Content", fields: () => [F("title", "Title", "text", { req: true, wide: true }), F("kind", "Type", "select", { map: CONTENT_KINDS, req: true }), F("status", "Status", "select", { map: CONTENT_STATUS, req: true }),
+    F("campaign_id", "Campaign", "select", { map: campOpts() }), F("owner_id", "Owner", "select", { map: teamOpts() }), F("publish_date", "Publish date", "date"), F("url", "Link (draft or live)", "url"),
+    F("client_id", "Features a CPA / client", "select", { map: Object.fromEntries(S.d.bo_clients.map((c) => [c.id, c.name])), wide: true }),
+    F("needs_consent", "Needs CPA consent?", "select", { map: YESNO, req: true }), F("consent_status", "Written consent", "select", { map: CONSENT, req: true }), F("consent_date", "Consent received on", "date"),
+    F("committee_approved", "Committee-approved message?", "select", { map: YESNO, req: true }), F("notes", "Notes / brief", "textarea", { wide: true })] },
+  bo_events: { title: "Event", fields: () => [F("name", "Event", "text", { req: true, wide: true }), F("kind", "Type", "select", { map: EVENT_KINDS, req: true }), F("status", "Status", "select", { map: EVENT_STATUS, req: true }),
+    F("event_date", "Date", "date"), F("end_date", "End date", "date"), F("province", "Province", "select", { map: Object.fromEntries(PROVINCES.map((p) => [p, p])) }), F("location", "Venue / town"),
+    F("campaign_id", "Campaign", "select", { map: campOpts() }), F("owner_id", "Owner", "select", { map: teamOpts() }), F("cost_zar", "Cost (R)", "number"), F("attendees", "Attendees", "number"), F("leads_captured", "Leads captured", "number"),
+    F("follow_up", "Follow-up", "text", { wide: true }), F("notes", "Notes", "textarea", { wide: true })] },
 };
-const NUMERIC = new Set(["value_zar", "estimate_hours", "satisfaction", "likelihood", "impact", "fte", "tier"]);
+const campOpts = () => Object.fromEntries(S.d.bo_campaigns.map((c) => [c.id, `${c.code ? c.code + " · " : ""}${c.name}`.slice(0, 80)]));
+const NUMERIC = new Set(["value_zar", "estimate_hours", "satisfaction", "likelihood", "impact", "fte", "tier", "budget_zar", "spend_zar", "target_leads", "cost_zar", "attendees", "leads_captured"]);
+const BOOL = new Set(["needs_consent", "committee_approved"]);
 
 function field(f, v) {
   const id = "f-" + f.k, req = f.req ? " required" : "";
@@ -956,7 +1181,7 @@ function openDrawer(table, id, preset = {}) {
     const patch = {};
     spec.fields().forEach((f) => {
       let v = form.elements[f.k].value;
-      v = v === "" ? null : NUMERIC.has(f.k) ? Number(v) : v;
+      v = BOOL.has(f.k) ? v === "true" : v === "" ? null : NUMERIC.has(f.k) ? Number(v) : v;
       if (!id || String(v ?? "") !== String(row[f.k] ?? "")) patch[f.k] = v;
     });
     const btn = form.querySelector("[type=submit]"); btn.disabled = true;
@@ -982,6 +1207,9 @@ function defaults(table) {
     bo_risks: { likelihood: 3, impact: 3, status: "open" },
     bo_decisions: { status: "open" },
     bo_team: { status: "active", access: "member", fte: 1, department: "back_office" },
+    bo_campaigns: { status: "planned", owner_id: me, start_date: today() },
+    bo_content: { kind: "linkedin", status: "idea", owner_id: me, needs_consent: false, consent_status: "not_needed", committee_approved: false },
+    bo_events: { kind: "sector_event", status: "planned", owner_id: me },
   }[table] || {};
 }
 
@@ -1010,6 +1238,16 @@ function drawerExtra(table, row) {
       ${ts.map((t) => `<div class="bo-rel-row">T-${t.number} ${esc(t.title)} ${chip(TASK_STATUS, t.status)}</div>`).join("") || `<p class="bo-muted">No tasks linked yet.</p>`}
       <button class="btn" type="button" data-rel="bo_tasks">${svg("plus")}Add task</button></section>`;
   }
+  if (table === "bo_campaigns") {
+    const ks = S.d.bo_content.filter((c) => c.campaign_id === row.id), es = S.d.bo_events.filter((e) => e.campaign_id === row.id);
+    const ts = S.d.bo_tasks.filter((t) => t.campaign_id === row.id), ls = leadsOf(row.id);
+    return `<section class="bo-related">
+      <h3>Leads (${ls.length})</h3>${ls.map((c) => `<div class="bo-rel-row">${esc(c.name)} ${chip(PIPELINE, c.pipeline_stage)}</div>`).join("") || `<p class="bo-muted">None tagged yet — set this campaign on a pipeline record.</p>`}
+      <h3>Content</h3>${ks.map((c) => `<div class="bo-rel-row">${esc(c.title)} ${chip(CONTENT_STATUS, c.status)}</div>`).join("") || `<p class="bo-muted">None yet.</p>`}
+      <h3>Events</h3>${es.map((e) => `<div class="bo-rel-row">${e.event_date ? fmtD(e.event_date) : "TBC"} — ${esc(e.name)} ${chip(EVENT_STATUS, e.status)}</div>`).join("") || `<p class="bo-muted">None yet.</p>`}
+      <h3>Tasks</h3>${ts.map((t) => `<div class="bo-rel-row">T-${t.number} ${esc(t.title)} ${chip(TASK_STATUS, t.status)}</div>`).join("") || `<p class="bo-muted">None yet.</p>`}
+      <div class="bo-row"><button class="btn" type="button" data-rel="bo_content">${svg("plus")}Content</button><button class="btn" type="button" data-rel="bo_events">${svg("plus")}Event</button><button class="btn" type="button" data-rel="bo_tasks">${svg("plus")}Task</button></div></section>`;
+  }
   return "";
 }
 
@@ -1023,7 +1261,9 @@ function wireDrawerExtra(table, row) {
     if (await create("bo_task_comments", { task_id: row.id, body, author_name: name }, false)) openDrawer(table, row.id);
   });
   host.querySelectorAll("[data-rel]").forEach((b) => (b.onclick = () => {
-    const preset = table === "bo_clients" ? { client_id: row.id } : { milestone_id: row.id, department: row.department };
+    const preset = table === "bo_clients" ? { client_id: row.id }
+      : table === "bo_campaigns" ? { campaign_id: row.id, ...(b.dataset.rel === "bo_tasks" ? { labels: ["marketing"], department: "bd" } : {}) }
+      : { milestone_id: row.id, department: row.department };
     openDrawer(b.dataset.rel, null, preset);
   }));
 }
@@ -1069,13 +1309,30 @@ function stamp(table, row, patch) {
   // clients: winning a deal moves the client to contracting
   if (table === "bo_clients" && patch.pipeline_stage === "won" && row && ["referral", "first_contact", "evidence", "triage", "triage_confirmed", "proposal"].includes(row.lifecycle) && !patch.lifecycle) patch.lifecycle = "contracting";
   if (table === "bo_decisions" && patch.status === "decided" && !row?.decided_on && !patch.decided_on) patch.decided_on = today();
+  if (table === "bo_content") {
+    const next = { ...row, ...patch };
+    // featuring a CPA always needs its consent (16.5)
+    if (next.client_id && !next.needs_consent) patch.needs_consent = true;
+    if ((patch.needs_consent ?? next.needs_consent) && next.consent_status === "not_needed") patch.consent_status = "requested";
+    if (patch.consent_status === "received" && !next.consent_date) patch.consent_date = today();
+    if (patch.status === "published" && !next.publish_date) patch.publish_date = today();
+  }
   return patch;
+}
+
+/** House rules the database also enforces, checked first so the message is plain. */
+function guard(table, row) {
+  if (table === "bo_content" && ["scheduled", "published"].includes(row.status) && row.needs_consent && !(row.consent_status === "received" && row.committee_approved))
+    return "This content features a CPA. It can't be scheduled or published until the CPA's written consent is received and the Committee has approved the message (Operations Plan 16.5).";
+  return "";
 }
 
 async function save(table, id, patch, rerender = true) {
   const row = byId(S.d[table], id);
   stamp(table, row, patch);
   if (!Object.keys(patch).length) return true;
+  const why = guard(table, { ...row, ...patch });
+  if (why) { const m = root.querySelector("#dr-msg"); if (m) m.innerHTML = `<div class="msg err">${esc(why)}</div>`; else { toast(why, ""); render(); } return false; }
   try {
     const r = await db.update(table, id, patch);
     S.d[table] = S.d[table].map((x) => (x.id === id ? r : x));
@@ -1087,6 +1344,8 @@ async function save(table, id, patch, rerender = true) {
 
 async function create(table, row, rerender = true) {
   stamp(table, null, row);
+  const why = guard(table, row);
+  if (why) { const m = root.querySelector("#dr-msg"); if (m) m.innerHTML = `<div class="msg err">${esc(why)}</div>`; else toast(why, ""); return false; }
   try {
     const r = await db.insert(table, row);
     S.d[table] = [...S.d[table], r];
@@ -1102,9 +1361,9 @@ async function create(table, row, rerender = true) {
 
 async function refreshActivity() { try { S.activity = await db.activity(); } catch {} }
 
-function toast(msg) {
+function toast(msg, prefix = "Couldn't save — ") {
   const t = document.createElement("div");
-  t.className = "bo-toast"; t.setAttribute("role", "alert"); t.textContent = `Couldn't save — ${msg}`;
+  t.className = "bo-toast"; t.setAttribute("role", "alert"); t.textContent = prefix + msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 5000);
 }

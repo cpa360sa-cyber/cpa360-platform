@@ -17,6 +17,7 @@ const ORDER = {
   bo_tasks: ["sort", true], bo_task_comments: ["created_at", true], bo_visits: ["planned_date", false],
   bo_tickets: ["opened_at", false], bo_risks: ["sort", true], bo_decisions: ["sort", true],
   bo_kpis: ["sort", true], bo_kpi_readings: ["period", false], bo_settings: ["key", true],
+  bo_campaigns: ["sort", true], bo_content: ["publish_date", true], bo_events: ["event_date", true],
 };
 
 /* ---------- live adapter ---------- */

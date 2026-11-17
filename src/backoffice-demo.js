@@ -132,6 +132,56 @@ export function demoSeed() {
     ["K61", "Access review done", "yesno", "gte", 1, 1, 1, "Technical Lead", false],
   ].map(([kid, name, unit, direction, target_y1, target_y2, target_y3, owner_role, auto], i) => ({ id: kid, name, unit, direction, target_y1, target_y2, target_y3, owner_role, auto, sort: i + 1, frequency: "Monthly", definition: "", source: "" }));
 
+  // marketing — mirrors 0057_backoffice_marketing_seed.sql (16.2, 16.5; PROG-01 4.3)
+  const BD = T("BD & Partnerships Lead");
+  const campaigns = [
+    ["MC1", "Brand and consent foundations", "general", "Internal · Committee", "active", -2, 75, null, 0, 0],
+    ["MC2", "Referral-partner launch", "ecosystem", "Meetings · one-page brief · pitch deck", "active", 0, 135, 6, 15000, 2400],
+    ["MC3", "Department provincial engagement: Limpopo and Mpumalanga", "department", "Provincial meetings · evidence brief", "planned", 48, 135, 4, 12000, 0],
+    ["MC4", "Website and LinkedIn presence", "general", "Website · LinkedIn", "active", 14, 103, 5, 25000, 6500],
+    ["MC5", "Funder cohort offer", "funders", "Proposals · funder meetings", "planned", 76, 225, 3, 8000, 0],
+    ["MC6", "Sector events and Department forums 2027", "ecosystem", "Events · forums", "planned", 76, 378, 8, 40000, 0],
+    ["MC7", "Success stories with consent", "general", "Case studies · website · LinkedIn", "planned", 226, 409, null, 10000, 0],
+  ].map(([code, name, audience, channels, status, s, e, target_leads, budget_zar, spend_zar], i) => ({
+    id: id("mc"), code, name, audience, channels, status, start_date: day(s), end_date: day(e), target_leads, budget_zar, spend_zar, owner_id: BD, sort: i + 1, objective: "", notes: "", created_at: ts(-5),
+  }));
+  const MC = (code) => campaigns.find((c) => c.code === code).id;
+  clients[3].campaign_id = MC("MC4"); clients[5].campaign_id = MC("MC2"); clients[0].campaign_id = MC("MC2");
+  clients.push(
+    { id: id("cl"), kind: "government", name: "DALRRD Limpopo provincial CPA office (sample)", province: "Limpopo", pipeline_stage: "qualified", lifecycle: "first_contact", source: "BD outreach", campaign_id: MC("MC3"), next_step: "Briefing with the evidence one-pager", next_step_date: day(9), owner_id: BD, created_at: ts(-30), updated_at: ts(-30) },
+    { id: id("cl"), kind: "partner", name: "Referral partner (sample)", pipeline_stage: "lead", lifecycle: "first_contact", source: "Partner referral", campaign_id: MC("MC2"), next_step: "Introductory meeting", next_step_date: day(4), owner_id: BD, created_at: ts(-120), updated_at: ts(-120) },
+  );
+  const content = [
+    ["One-page evidence brief: the national CPA picture", "one_pager", "review", "MC2", -1],
+    ["CPA360 messaging guide", "template", "drafting", "MC1", 1],
+    ["Referral-partner pitch deck (segmentation-led)", "deck", "idea", "MC2", 21],
+    ["LinkedIn company page launch post", "linkedin", "approved", "MC4", 6],
+    ["Website: services, segmentation and enquiry form", "website", "drafting", "MC4", 30],
+    ["Weekly LinkedIn: what the Department's own report says", "linkedin", "published", "MC4", -3],
+    ["Case study and photo consent form", "template", "drafting", "MC1", null],
+    ["Sample CPA North: first 90 days (case study)", "case_study", "drafting", "MC7", 40],
+  ].map(([title, kind, status, c, d]) => ({ id: id("ct"), title, kind, status, campaign_id: MC(c), owner_id: BD, publish_date: d == null ? null : day(d), url: null, client_id: null, needs_consent: false, consent_status: "not_needed", committee_approved: false, notes: "", created_at: ts(-4) }));
+  Object.assign(content[7], { client_id: C("Sample CPA North"), needs_consent: true, consent_status: "requested" });
+  const events = [
+    ["Introductory meeting: referral partner (sample)", "partner_meeting", "confirmed", 4, null, "MC2", null],
+    ["DALRRD Limpopo provincial CPA office briefing", "provincial_meeting", "planned", 9, "Limpopo", "MC3", null],
+    ["Sector land-reform forum (sample)", "sector_event", "held", -10, "Gauteng", "MC6", 1800],
+    ["DALRRD Mpumalanga provincial CPA office briefing", "provincial_meeting", "idea", 23, "Mpumalanga", "MC3", null],
+  ].map(([name, kind, status, d, province, c, cost_zar]) => ({ id: id("ev"), name, kind, status, event_date: day(d), province, campaign_id: MC(c), owner_id: BD, cost_zar, attendees: status === "held" ? 60 : null, leads_captured: status === "held" ? 3 : null, follow_up: status === "held" ? "Send the evidence brief to the three CPAs met" : "", notes: "" }));
+  [
+    ["Agree how both Parties are named in CPA360 materials", "todo", "P1", "committee", "MC1", 8],
+    ["Write the consent-and-approval procedure for case studies, photos and quotes", "in_progress", "P1", "bd", "MC1", 11],
+    ["Produce the one-page evidence brief from the Program Profile", "review", "P1", "bd", "MC2", -1],
+    ["Request a meeting with Vumelana Advisory Fund", "todo", "P1", "bd", "MC2", 7],
+    ["Brief the DALRRD Mpumalanga provincial CPA office", "backlog", "P1", "bd", "MC3", 23],
+    ["Build the simple CPA360 website with enquiry form", "in_progress", "P2", "platform", "MC4", 30],
+    ["Draft the funder cohort offer after pilot pricing (D9)", "backlog", "P2", "bd", "MC5", 70],
+    ["Shortlist 2027 sector events and Department forums", "done", "P3", "bd", "MC6", -4],
+  ].forEach(([title, status, priority, department, c, due], i) => tasks.push({
+    id: id("tk"), number: tasks.length + 1, title, status, priority, department, assignee_id: BD, milestone_id: null, client_id: null, campaign_id: MC(c),
+    due_date: day(due), sort: 100 + i, labels: ["marketing"], created_at: ts(-3), done_at: status === "done" ? ts(-4) : null, description: "",
+  }));
+
   const month = (o) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + o); return d.toISOString().slice(0, 10); };
   const readings = [
     ["K20", -2, 99.6], ["K20", -1, 98.4], ["K23", -1, 100], ["K02", -1, 0], ["K50", -1, 1], ["K61", -1, 0], ["K61", -2, 0],
@@ -146,6 +196,7 @@ export function demoSeed() {
   return {
     bo_team: team, bo_milestones: ms, bo_clients: clients, bo_tasks: tasks, bo_visits: visits, bo_tickets: tickets,
     bo_decisions: decisions, bo_risks: risks, bo_kpis: kpis, bo_kpi_readings: readings,
+    bo_campaigns: campaigns, bo_content: content, bo_events: events,
     bo_task_comments: [{ id: id("cm"), task_id: tasks[2].id, author_name: "Operations Lead (demo)", body: "Waiting for attorneys' view on clause 7.6 before we can draft.", created_at: ts(-1) }],
     bo_settings: [{ key: "plan", value: { name: "CPA360 Operations Plan 2026–2029", code: "CPA360-OPS-01", version: "0.2", month1: "2026-12-01", signature_target: "2026-11-30" } }],
     bo_activity: [{ id: 1, table_name: "bo_tasks", action: "update", summary: "Circulate the Operations Plan to both Parties → done", actor_email: "demo@cpa360.local", at: ts(-6) }],
