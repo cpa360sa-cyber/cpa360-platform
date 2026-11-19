@@ -255,7 +255,9 @@ export async function loadOrg(orgId) {
         [r.party, r.portion || "", r.land_use || "", num(r.area_ha), r.start_date || "", r.end_date || "", num(r.rental), r.status], r)),
       allocations: (allocations || []).map((r) => tagArr(
         [r.beneficiary, r.portion || "", r.purpose || "", num(r.area_ha), r.allocated_on || "", r.agreement_ref || "", r.status], r)),
-      movable: (movable || []).map((r) => tagArr([r.asset_class, num(r.item_count), r.condition || ""], r)),
+      movable: (movable || []).map((r) => tagArr([r.asset_class, num(r.item_count), r.condition || "",
+        r.category || "", r.asset_no || "", r.make || "", r.model || "", r.serial_no || "", r.location || "", r.custodian || "",
+        r.purchase_date || "", r.cost == null ? "" : num(r.cost), r.supplier || "", r.warranty_until || "", r.status || "", r.notes || ""], r)),
       permits: (permits || []).map((r) => tagArr([r.name, r.valid_until || "", r.status,
         r.commodity || "Other", r.applicant_name || "", r.applicant_email || "", r.site_ref || "",
         r.species || "", r.quantity || "", r.purpose || "", r.workflow_stage || "Not Started",
@@ -906,7 +908,10 @@ export async function saveSection(orgId, section, D) {
       }));
     case "movable":
       return reconcile("movable_assets", orgId, D.assets.movable, (r, i) => ({
-        asset_class: r[0], item_count: num(r[1]), condition: nn(r[2]), sort: i,
+        asset_class: r[0], item_count: Math.round(num(r[1])), condition: nn(r[2]),
+        category: nn(r[3]), asset_no: nn(r[4]), make: nn(r[5]), model: nn(r[6]), serial_no: nn(r[7]),
+        location: nn(r[8]), custodian: nn(r[9]), purchase_date: nn(r[10]), cost: r[11] === "" || r[11] == null ? null : num(r[11]),
+        supplier: nn(r[12]), warranty_until: nn(r[13]), status: nn(r[14]), notes: nn(r[15]), sort: i,
       }));
     case "permits":
       return reconcile("permits", orgId, D.assets.permits, (r, i) => ({

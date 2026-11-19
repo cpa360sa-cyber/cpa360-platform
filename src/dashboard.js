@@ -48,6 +48,7 @@ const STATUS_TONE = {
   "Under Review": "warning", "On leave": "warning", "Archived": "warning", "Frozen": "warning",
   "Overdue": "critical", "Disputed": "critical", "Delayed": "critical", "Vacant": "critical", "Inquorate": "critical", "Outstanding": "critical", "Expired": "critical",
   "Not Started": "neutral", "Retired": "neutral", "Exited": "neutral", "Disposed": "neutral",
+  "In use": "good", "In storage": "neutral", "Under repair": "warning", "Lost / stolen": "critical", "Disposed / written off": "neutral",
 };
 const MATURITY = [
   { name: "Critical", min: 0, max: 30 }, { name: "Foundational", min: 31, max: 50 },
@@ -1044,18 +1045,57 @@ function editAllocations() {
     },
   });
 }
-function editMovable() {
-  listEditor({
-    title: "Movable assets", arr: DATA.assets.movable, section: "movable",
-    rowLabel: (r) => `${r[0] || "—"} — ${r[1]}`,
-    blank: () => ["", 0, "Serviceable"],
-    fields: (r) => [
-      { key: "cls", label: "Asset class", type: "text", value: r[0], required: true },
-      { key: "count", label: "Count", type: "number", value: r[1], min: 0 },
-      { key: "cond", label: "Condition", type: "text", value: r[2] },
-    ],
-    write: (r, o) => { r[0] = o.cls; r[1] = parseFloat(o.count) || 0; r[2] = o.cond; },
-  });
+/* Asset register — one line per item (or a group of identical items: quantity > 1), covering every asset the
+   CPA owns: administration and office, ICT gadgets, vehicles, plant, farm equipment.
+   Row: [0 item/description, 1 quantity, 2 condition, 3 category, 4 asset no., 5 make/brand, 6 model, 7 serial no.,
+   8 location, 9 custodian, 10 purchase date, 11 cost (R), 12 supplier / invoice, 13 warranty until, 14 status, 15 notes] */
+const ASSET_CATEGORIES = ["Administration", "Office furniture & equipment", "ICT & gadgets", "Vehicles", "Plant & machinery",
+  "Farm equipment & tools", "Security equipment", "Other"];
+const ASSET_CONDITIONS = ["New", "Good", "Fair", "Poor", "Not working"];
+const ASSET_STATUSES = ["In use", "In storage", "Under repair", "Lost / stolen", "Disposed / written off"];
+const ASSET_GONE = ["Lost / stolen", "Disposed / written off"];
+const assetSerialKey = (s) => String(s || "").replace(/[\s\-_/]/g, "").toUpperCase();
+function nextAssetNo() {
+  const n = Math.max(0, ...(DATA.assets.movable || []).map((r) => +(/(\d+)\s*$/.exec(r[4] || "") || [])[1] || 0));
+  return "AST-" + String(n + 1).padStart(4, "0");
+}
+const withCurrent = (opts, v) => (v && !opts.includes(v) ? [...opts, v] : opts);
+const ASSET_EDITOR = () => ({
+  title: "Asset register", arr: DATA.assets.movable, section: "movable",
+  rowLabel: (r) => `${r[4] || "—"} — ${r[0] || "(no description)"}${r[7] ? " · S/N " + r[7] : ""}`,
+  blank: () => ["", 1, "Good", "", nextAssetNo(), "", "", "", "", "", "", "", "", "", "In use", ""],
+  fields: (r) => [
+    { key: "cat", label: "Category", type: "select", options: withCurrent(["", ...ASSET_CATEGORIES], r[3]), value: r[3] || "" },
+    { key: "desc", label: "Item / description (e.g. Laptop, Office desk, Toyota Hilux bakkie)", type: "text", value: r[0], required: true },
+    { key: "no", label: "Asset no. / tag", type: "text", value: r[4] },
+    { key: "make", label: "Make / brand", type: "text", value: r[5] },
+    { key: "model", label: "Model", type: "text", value: r[6] },
+    { key: "serial", label: "Serial no. (or IMEI / VIN / engine no.)", type: "text", value: r[7] },
+    { key: "qty", label: "Quantity (1 for an item with its own serial number)", type: "number", value: r[1], min: 0 },
+    { key: "loc", label: "Location (office, store room, farm…)", type: "text", value: r[8] },
+    { key: "cust", label: "Custodian — person responsible / using it", type: "text", value: r[9] },
+    { key: "bought", label: "Purchase / acquisition date", type: "date", value: r[10] },
+    { key: "cost", label: "Cost (R) — total for this line", type: "number", value: r[11], min: 0 },
+    { key: "supplier", label: "Supplier / invoice no.", type: "text", value: r[12] },
+    { key: "warranty", label: "Warranty until", type: "date", value: r[13] },
+    { key: "cond", label: "Condition", type: "select", options: withCurrent(ASSET_CONDITIONS, r[2]), value: r[2] || "Good" },
+    { key: "status", label: "Status", type: "select", options: withCurrent(ASSET_STATUSES, r[14]), value: r[14] || "In use" },
+    { key: "notes", label: "Notes", type: "textarea", value: r[15] },
+  ],
+  write: (r, o) => {
+    r[0] = o.desc; r[1] = Math.max(0, Math.round(parseFloat(o.qty))) || (o.serial ? 1 : 0); r[2] = o.cond; r[3] = o.cat;
+    r[4] = o.no; r[5] = o.make; r[6] = o.model; r[7] = (o.serial || "").trim(); r[8] = o.loc; r[9] = o.cust;
+    r[10] = o.bought; r[11] = o.cost === "" || o.cost == null ? "" : parseFloat(o.cost) || 0; r[12] = o.supplier; r[13] = o.warranty;
+    r[14] = o.status; r[15] = o.notes;
+    const k = assetSerialKey(r[7]);
+    const dup = k && (DATA.assets.movable || []).find((x) => x !== r && assetSerialKey(x[7]) === k);
+    if (dup) toast(`Serial no. ${r[7]} is also on ${dup[4] || dup[0]} — check for a duplicate.`, true);
+  },
+});
+function editMovable() { listEditor(ASSET_EDITOR()); }
+function editAssetRow(r) {
+  const cfg = ASSET_EDITOR();
+  openModal("Edit asset — " + (r[4] || r[0] || ""), cfg.fields(r), (o) => { cfg.write(r, o); renderCurrent(); commit(cfg.section); });
 }
 /* ============ Timber Permit workflow (Permits & Licences) ============
    A permit row can carry an optional application→verification→issuance
@@ -4624,20 +4664,52 @@ function renderAssetInfra(host) {
 }
 function renderAssetRegister(host) {
   const m = DATA.assets.movable;
+  const held = m.filter((r) => !ASSET_GONE.includes(r[14]));
+  const gadget = (r) => r[3] === "ICT & gadgets";
+  const noSerial = (r) => gadget(r) && !r[7] && !ASSET_GONE.includes(r[14]);
+  const serialCount = new Map();
+  m.forEach((r) => { const k = assetSerialKey(r[7]); if (k) serialCount.set(k, (serialCount.get(k) || 0) + 1); });
+  const dupSerial = (r) => (serialCount.get(assetSerialKey(r[7])) || 0) > 1;
+  const value = held.reduce((s, r) => s + (+r[11] || 0), 0);
+  const items = held.reduce((s, r) => s + (+r[1] || 0), 0);
   mountRegister(host, {
-    title: "Movable Asset Register", importKey: "movable",
-    hint: "Vehicles, plant, equipment and other movable items.",
+    title: "Asset Register", importKey: "movable",
+    hint: "Every asset the CPA owns — administration, office furniture and equipment, ICT gadgets (laptops, phones, tablets, printers), vehicles, plant and tools. Record each gadget on its own line with its serial number.",
     stats: () => [
-      statTile("Asset classes", m.length, "Grouped lines", ""),
-      statTile("Items logged", m.reduce((s, r) => s + (+r[1] || 0), 0), "Total count", ""),
-      statTile("Infrastructure value", fmtR((DATA.assets.infrastructure || []).reduce((s, r) => s + (+r[4] || 0), 0)), "See Infrastructure tab", ""),
-      statTile("Maintenance open", (DATA.assets.maintenance || []).filter((r) => r[7] !== "Completed").length, "Tasks outstanding", ""),
+      statTile("Assets held", items, `${held.length} line${held.length === 1 ? "" : "s"} · excl. lost / disposed`, ""),
+      statTile("Recorded value", fmtR(value), "Cost of assets held", ""),
+      statTile("Gadgets", held.filter(gadget).reduce((s, r) => s + (+r[1] || 0), 0), `${m.filter(noSerial).length} without a serial no.`, m.some(noSerial) ? "warning" : "good"),
+      statTile("Lost / stolen", m.filter((r) => r[14] === "Lost / stolen").length, "Report and follow up", m.some((r) => r[14] === "Lost / stolen") ? "critical" : "good"),
     ],
-    columns: [{ label: "Asset class" }, { label: "Count", cls: "num" }, { label: "Condition" }],
+    columns: [{ label: "Asset no." }, { label: "Item" }, { label: "Category" }, { label: "Serial no." }, { label: "Qty", cls: "num" },
+      { label: "Location / custodian" }, { label: "Purchased" }, { label: "Cost", cls: "num" }, { label: "Condition" }, { label: "Status" }, { label: "" }],
     rows: () => m,
-    empty: "No movable assets recorded.",
-    cell: (r) => [`<span style="font-weight:600;">${esc(r[0])}</span>`, `<span class="mono">${esc(r[1])}</span>`, `<span style="color:var(--ink-2);">${esc(r[2])}</span>`],
+    empty: "No assets recorded yet — add each item, or import a spreadsheet.",
+    cell: (r) => [
+      `<span class="mono">${esc(r[4] || "—")}</span>`,
+      `<span style="font-weight:600;">${esc(r[0])}</span>${r[5] || r[6] ? `<div class="hint">${esc([r[5], r[6]].filter(Boolean).join(" "))}</div>` : ""}`,
+      r[3] ? `<span class="pill neutral">${esc(r[3])}</span>` : '<span class="hint">—</span>',
+      r[7] ? `<span class="mono">${esc(r[7])}</span>${dupSerial(r) ? '<div class="hint" style="color:var(--status-critical);">duplicate serial</div>' : ""}`
+        : gadget(r) ? '<span class="hint" style="color:var(--status-warning);">missing</span>' : '<span class="hint">—</span>',
+      `<span class="mono">${esc(r[1])}</span>`,
+      `${esc(r[8] || "")}${r[9] ? `<div class="hint">${esc(r[9])}</div>` : ""}`,
+      `<span class="mono">${esc(r[10] || "")}</span>`,
+      r[11] === "" || r[11] == null ? '<span class="hint">—</span>' : `<span class="mono">${esc(fmtR(+r[11] || 0))}</span>`,
+      `<span style="color:var(--ink-2);">${esc(r[2] || "")}</span>`,
+      r[14] ? statusPill(r[14]) : '<span class="hint">—</span>',
+      CAN_EDIT ? `<button type="button" class="btn small" data-asset-edit="${m.indexOf(r)}" title="Edit this asset">Edit</button>` : "",
+    ],
     manage: editMovable,
+    addNew: { label: "Add asset", editor: ASSET_EDITOR },
+    bulkKey: "asset-register", section: "movable",
+    search: "Search item, category, asset no., serial no., custodian…",
+    toggles: [
+      { key: "gadget", label: "Gadgets", test: gadget },
+      { key: "noserial", label: "Gadgets without serial no.", test: noSerial },
+      { key: "dup", label: "Duplicate serial no.", test: dupSerial },
+    ],
+    rerender: () => renderAssetRegister(host),
+    afterRender: (h) => h.querySelectorAll("[data-asset-edit]").forEach((b) => (b.onclick = () => editAssetRow(m[+b.dataset.assetEdit]))),
   });
 }
 const MAINT_STATUSES = ["Scheduled", "In Progress", "Completed", "Overdue"];
@@ -6807,9 +6879,15 @@ const IMPORT = {
     make: (v) => [v.beneficiary, v.portion || "", v.purpose || "", parseFloat(v.ha) || 0, v.date || "", v.ref || "", v.status || "Active"],
   },
   movable: {
-    title: "movable assets", section: "movable", arr: () => DATA.assets.movable,
-    targets: [{ k: "cls", label: "Asset class", required: true }, { k: "count", label: "Count" }, { k: "cond", label: "Condition" }],
-    make: (v) => [v.cls, parseFloat(v.count) || 0, v.cond || ""],
+    title: "assets", section: "movable", arr: () => DATA.assets.movable,
+    targets: [{ k: "cls", label: "Item / description", required: true }, { k: "cat", label: "Category" }, { k: "no", label: "Asset no. / tag" },
+      { k: "make", label: "Make / brand" }, { k: "model", label: "Model" }, { k: "serial", label: "Serial no." }, { k: "count", label: "Quantity" },
+      { k: "loc", label: "Location" }, { k: "cust", label: "Custodian" }, { k: "bought", label: "Purchase date" }, { k: "cost", label: "Cost (R)" },
+      { k: "supplier", label: "Supplier / invoice" }, { k: "warranty", label: "Warranty until" }, { k: "cond", label: "Condition" },
+      { k: "status", label: "Status" }, { k: "notes", label: "Notes" }],
+    make: (v) => [v.cls, v.count === "" || v.count == null ? 1 : Math.round(parseFloat(v.count)) || 0, v.cond || "", v.cat || "", v.no || "",
+      v.make || "", v.model || "", (v.serial || "").trim(), v.loc || "", v.cust || "", v.bought || "",
+      v.cost ? parseFloat(String(v.cost).replace(/[^\d.-]/g, "")) || 0 : "", v.supplier || "", v.warranty || "", v.status || "In use", v.notes || ""],
   },
   permits: {
     title: "permits", section: "permits", arr: () => DATA.assets.permits,
