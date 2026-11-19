@@ -2569,6 +2569,7 @@ function renderBeneficiary() {
 }
 const BENE_STATUSES = ["Active", "Deceased", "Removed", "Transferred"];
 const VERIF_STATUSES = ["Verified", "Pending", "Disputed", "Rejected"];
+const MARITAL_STATUSES = ["", "Single", "Married", "Customary marriage", "Widowed", "Divorced", "Separated"];
 /* Every person in a household's family tree — the ODI, the Family
    Representative, each descendant — is a real beneficiary; this is the
    structured "which one are they" tag, set automatically when extracted
@@ -3631,10 +3632,11 @@ function renderBeneBirthdays(host) {
    (Dept. of Land Reform and Rural Development) or for the AGM/funders: letterhead, document number +
    check code, summary, the register (headers repeat on every page, "Page x of y"), then a
    certification page with the Chairperson's and Secretary's signatures and a stamp box.
-   Formats: PDF (browser print), Word, CSV. ID numbers are printed exactly as held — masked (last 4
-   digits) — the platform never stores full ID numbers. No prescribed Departmental template is
-   assumed: the layout follows what the CPA Act asks a membership list to show. */
+   Formats: PDF (browser print), Word, CSV. Two layouts: the Department's "List of Beneficiaries" template
+   (the default — see brmDeptRows) and a flat list with one row per member. The platform never stores
+   full ID numbers, so IDs print masked. */
 const BRM_TITLE = "Beneficiary Master Register";
+const BRM_LAYOUTS = { dept: "Department format — List of Beneficiaries (ODI and 1st–6th descendants)", flat: "Flat list — one row per member" };
 const natCmp = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
 function brmRows(reg, o) {
   let rows = reg.filter((r) => (o.scope === "all" ? true : o.scope === "selected" ? o.selected.has(String(r._id)) : r[8] === "Active"));
@@ -3662,6 +3664,78 @@ function brmColumns(o) {
   if (o.contact) cols.push(["Contact", (r) => r[6] || ""]);
   cols.push(["Date joined", (r) => fmtDay(r[7])], ["Status", (r) => r[8] || ""], ["Verification", (r) => r[9] || ""], ["Date verified", (r) => fmtDay(r[12])]);
   return cols;
+}
+/* Department layout — the Registrar's "List of Beneficiaries" template: one block per ODI family (numbered),
+   each person on their own row under the columns of their generation (ODI, then 1st–6th descendant), in
+   family-tree order. The ODI cell also names the family representative. IDs show the date-of-birth digits and
+   the last 4 (e.g. 580720 *** 3087) — the middle digits are never stored. An ancestor outside the chosen scope
+   (e.g. a deceased parent when exporting active members) is still printed, greyed, so the lineage reads. */
+const DEPT_GENS = 6;
+const DEPT_ORD = ["1st", "2nd", "3rd", "4th", "5th", "6th"];
+const DEPT_HEAD = ["No.", "Name of ODI", "ID no. of ODI", "Gender (M/F)", "Marital Status", "Address",
+  ...DEPT_ORD.flatMap((o, i) => [`${o} Descendant${i ? "s" : ""}`, `ID ${o} Descendant`, "Gender (M/F)"])];
+function brmGen(r) {
+  if (r[11] === "ODI" || /-ODI$/.test(r[0] || "")) return 0;
+  const m = /-D(\d+)-/.exec(r[0] || "") || /^(\d+)(?:st|nd|rd|th) Descendant/.exec(r[11] || "");
+  return m ? +m[1] : null;
+}
+function brmDeptId(r) {
+  const l4 = /(\d{4})$/.exec(String(r[4] || "").replace(/\s/g, "")), d = /^\d{2}(\d{2})-(\d{2})-(\d{2})/.exec(r[3] || "");
+  if (d) return `${d[1]}${d[2]}${d[3]} *** ${l4 ? l4[1] : "****"}`;
+  return r[4] || "";
+}
+const brmMF = (g) => (/^m/i.test(g || "") ? "M" : /^f/i.test(g || "") ? "F" : "");
+const brmIsRep = (r) => /^Family Representative/.test(r[11] || "");
+function brmDeptName(r, ctx) {
+  const late = r[8] === "Deceased" ? " (late)" : r[8] === "Removed" || r[8] === "Transferred" ? ` (${r[8].toLowerCase()})` : "";
+  return (r[1] || "") + late + (ctx ? " — shown for the family line only" : "");
+}
+function brmDeptRows(reg, o) {
+  const keep = new Set(brmRows(reg, o));
+  const byRef = new Map(reg.filter((r) => r[0]).map((r) => [r[0], r]));
+  const parentOf = (r) => { const p = byRef.get(r[14] || ""); return p && p !== r && p[5] === r[5] ? p : null; };
+  const kids = new Map();
+  reg.forEach((r) => { const p = parentOf(r); if (p) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(r); } });
+  const byHh = new Map();
+  reg.forEach((r) => { const k = r[5] || ""; if (!byHh.has(k)) byHh.set(k, []); byHh.get(k).push(r); });
+  const blank = () => Array(6 + DEPT_GENS * 3).fill("");
+  const out = [];
+  let no = 0;
+  [...byHh.keys()].sort((a, b) => (!a) - (!b) || natCmp(a, b)).forEach((hh) => {
+    const ms = byHh.get(hh);
+    if (!ms.some((r) => keep.has(r))) return;
+    const need = new Set();
+    ms.filter((r) => keep.has(r)).forEach((r) => { for (let x = r, n = 0; x && n < 12 && !need.has(x); x = parentOf(x), n++) need.add(x); });
+    const odi = ms.find((r) => brmGen(r) === 0);
+    const rep = ms.find((r) => brmIsRep(r) && keep.has(r));
+    const h = householdOf(hh) || [];
+    const head = blank();
+    head[0] = String(++no);
+    head[1] = [odi ? brmDeptName(odi, !keep.has(odi)) : (odiNameOf(h) || (hh ? hh : "Not linked to an ODI family")),
+      rep ? `Family Rep - ${rep[1]}${rep[6] ? " - " + rep[6] : ""}` : ""].filter(Boolean).join("\n");
+    head[2] = [odi ? brmDeptId(odi) : "", rep ? brmDeptId(rep) : ""].filter(Boolean).join("\n");
+    head[3] = odi ? brmMF(odi[2]) : "";
+    head[4] = odi ? odi[15] || "" : "";
+    head[5] = (odi && odi[16]) || h[16] || "";
+    out.push({ cells: head, ctx: !!odi && !keep.has(odi), odi: true });
+    const seen = new Set(odi ? [odi] : []);
+    const place = (r) => {
+      if (seen.has(r)) return; seen.add(r);
+      const g = brmGen(r);
+      if (need.has(r) && !(brmIsRep(r) && g == null)) {
+        const c = blank(), gi = Math.min(Math.max(g || 1, 1), DEPT_GENS), b = 6 + (gi - 1) * 3;
+        c[b] = brmDeptName(r, !keep.has(r)) + (g == null ? " (generation to be confirmed)" : g > DEPT_GENS ? ` (${g}th descendant)` : "");
+        c[b + 1] = brmDeptId(r); c[b + 2] = brmMF(r[2]);
+        out.push({ cells: c, ctx: !keep.has(r) });
+      }
+      (kids.get(r) || []).sort((a, z) => natCmp(a[0], z[0])).forEach(place);
+    };
+    (odi ? kids.get(odi) || [] : []).sort((a, z) => natCmp(a[0], z[0])).forEach(place);
+    ms.filter((r) => !seen.has(r) && !parentOf(r))
+      .sort((a, z) => (brmGen(a) ?? 99) - (brmGen(z) ?? 99) || natCmp(a[0], z[0])).forEach(place);
+    ms.filter((r) => !seen.has(r)).forEach(place);
+  });
+  return out;
 }
 function brmDocNo(rows, asAt) {
   const check = fnv1a(rows.map((r) => [r[0], r[1], r[4], r[5], r[8], r[9]].join("~")).join("\n") + "|" + (DATA.cpa.reg || "") + "|" + asAt).toString(36).toUpperCase().padStart(7, "0").slice(0, 7);
@@ -3701,6 +3775,9 @@ function brmHtml(rows, o, mode) {
     table.reg th{background:${primary};color:#fff;padding:3pt 4pt;text-align:left;border:.5pt solid ${primary};}
     table.reg td{border:.5pt solid #bdbdbd;padding:2pt 4pt;vertical-align:top;}
     table.reg tr:nth-child(even) td{background:#f6f8fb;}
+    table.reg.dept{font-size:6.4pt;} table.reg.dept th{padding:2pt 2pt;font-size:6.2pt;vertical-align:bottom;} table.reg.dept td{padding:1.5pt 2pt;}
+    table.reg.dept tr td{background:#fff;} table.reg.dept tr.odi td{background:#eef2f7;border-top:1pt solid ${primary};font-weight:bold;}
+    table.reg.dept tr.ctx td{color:#8a8a8a;font-style:italic;}
     thead{display:table-header-group;} tr{page-break-inside:avoid;break-inside:avoid;}
     .cert{page-break-before:always;break-before:page;}
     .cert p{font-size:10.5pt;line-height:1.5;margin:6pt 0;}
@@ -3709,8 +3786,12 @@ function brmHtml(rows, o, mode) {
     .stamp{border:1pt dashed #888;width:120pt;height:90pt;text-align:center;color:#999;font-size:8.5pt;padding-top:36pt;}
     .fine{font-size:8pt;color:#666;margin-top:10pt;}
     .box td{border:.5pt solid #999;padding:6pt 8pt;font-size:9.5pt;height:24pt;}`;
-  const head = cols.map((c) => `<th>${esc(c[0])}</th>`).join("");
-  const body = rows.map((r, i) => `<tr>${cols.map((c) => `<td>${esc(c[1](r, i))}</td>`).join("")}</tr>`).join("");
+  const dept = o.layout === "dept", br = (v) => esc(v).replace(/\n/g, "<br>");
+  const head = dept ? DEPT_HEAD.map((h) => `<th>${esc(h)}</th>`).join("") : cols.map((c) => `<th>${esc(c[0])}</th>`).join("");
+  const body = dept
+    ? brmDeptRows(DATA.beneficiaryCentre.register || [], o).map((x) => `<tr class="${x.odi ? "odi" : ""}${x.ctx ? " ctx" : ""}">${x.cells.map((v) => `<td>${br(v)}</td>`).join("")}</tr>`).join("")
+    : rows.map((r, i) => `<tr>${cols.map((c) => `<td>${esc(c[1](r, i))}</td>`).join("")}</tr>`).join("");
+  const nCols = dept ? DEPT_HEAD.length : cols.length;
   const sigCellHtml = (which, label, nm) => `<td>${sigOn ? sigImg(which, 46) : "<div style=\"height:46px\"></div>"}<div class="sigline"><b>${esc(label)}</b><br>${esc(nm || "")}<br>Date: ${sigOn ? esc(fmtDay(isoDay(new Date()))) : "________________"}</div></td>`;
   return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(BRM_TITLE)} — ${esc(cpa)}</title>
   <style>${css}</style></head><body>
@@ -3726,12 +3807,12 @@ function brmHtml(rows, o, mode) {
     <td class="k">Members in this register</td><td class="v">${s.total}</td><td class="k">Verified</td><td class="v">${s.verified}</td><td class="k">Female</td><td class="v">${s.female}</td></tr><tr>
     <td class="k">Active</td><td class="v">${s.active}</td><td class="k">Not yet verified</td><td class="v">${s.notVerified}</td><td class="k">Male</td><td class="v">${s.male}</td></tr><tr>
     <td class="k">Deceased / removed / transferred</td><td class="v">${s.deceased} / ${s.removed} / ${s.transferred}</td><td class="k">Households represented</td><td class="v">${s.households}</td><td class="k">Scope</td><td class="v" style="text-align:left;">${o.scope === "all" ? "All members" : o.scope === "selected" ? "Selected members" : "Active members"}${o.verifiedOnly ? ", verified only" : ""}</td></tr></table>
-  <h2>Register of members</h2>
-  <table class="reg"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}">No members match the chosen scope.</td></tr>`}</tbody></table>
+  <h2>${dept ? `${esc(cpa.toUpperCase())} LIST OF BENEFICIARIES as at ${esc(asAtLong.toUpperCase())}` : "Register of members"}</h2>
+  <table class="reg${dept ? " dept" : ""}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${nCols}">No members match the chosen scope.</td></tr>`}</tbody></table>
   <div class="cert">
     <div class="hdr"><div class="org">${esc(cpa)}${reg ? " · " + esc(reg) : ""}</div><h1 style="font-size:17pt;">Certification of the ${esc(BRM_TITLE)}</h1></div>
     <p>We, the undersigned office bearers of <b>${esc(cpa)}</b>${reg ? ` (registration no. ${esc(reg)})` : ""}, certify that this ${esc(BRM_TITLE)} (document no. <b>${esc(no)}</b>) has been extracted from the association's membership records, reflects <b>${s.total}</b> member${s.total === 1 ? "" : "s"} as at <b>${esc(asAtLong)}</b> — of whom <b>${s.verified}</b> ${s.verified === 1 ? "has" : "have"} been verified by the association — and is a true and accurate record to the best of our knowledge. It is submitted in terms of the Communal Property Associations Act, 1996 (Act 28 of 1996), to the Registrar of Communal Property Associations.</p>
-    <p>Identity numbers are shown masked (last four digits), as held on the association's register. The full register, with supporting identity documents, is available from the association's records on request.</p>
+    <p>${dept ? "Identity numbers show the date-of-birth digits and the last four digits (e.g. 580720 *** 3087); the middle digits are masked because the association's register does not hold full identity numbers. Members are listed by ODI family, each under the column of their generation." : "Identity numbers are shown masked (last four digits), as held on the association's register."} The full register, with supporting identity documents, is available from the association's records on request.</p>
     <table class="sig"><tr>${sigCellHtml("chair", "Chairperson", chairName())}${sigCellHtml("secretary", "Secretary", secName())}</tr></table>
     <table style="width:100%;margin-top:14pt;"><tr><td style="border:0;vertical-align:top;"><div class="stamp">Official stamp<br>of the Association</div></td>
       <td style="border:0;vertical-align:top;padding-left:20pt;"><table class="box"><tr><td style="width:40%;"><b>Date of the AGM at which the register was presented</b></td><td>&nbsp;</td></tr>
@@ -3740,8 +3821,12 @@ function brmHtml(rows, o, mode) {
   </div></div></body></html>`;
 }
 function brmCsv(rows, o) {
-  const cols = brmColumns(o);
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  if (o.layout === "dept") {
+    const title = `${(DATA.cpa.name || "").toUpperCase()} LIST OF BENEFICIARIES as at ${new Date(o.asAt + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" }).toUpperCase()}`;
+    return "﻿" + [q(title), DEPT_HEAD.map(q).join(","), ...brmDeptRows(DATA.beneficiaryCentre.register || [], o).map((x) => x.cells.map(q).join(","))].join("\r\n");
+  }
+  const cols = brmColumns(o);
   return "﻿" + [cols.map((c) => q(c[0])).join(","), ...rows.map((r, i) => cols.map((c) => q(c[1](r, i))).join(","))].join("\r\n");
 }
 function brmExport(o) {
@@ -3763,10 +3848,11 @@ function brmDialog(selected) {
   if (selected.size) scopes.push(["selected", `Only the ${selected.size} selected member${selected.size > 1 ? "s" : ""}`]);
   const fields = [
     { key: "i", label: BRM_TITLE, type: "info", value: "A formal register with the CPA's letterhead, summary, every member, and a certification page for the Chairperson and Secretary. Review it before you sign and submit." },
+    { key: "layout", label: "Layout", type: "select", options: [BRM_LAYOUTS.dept, BRM_LAYOUTS.flat], value: BRM_LAYOUTS.dept },
     { key: "scope", label: "Who to include", type: "select", options: scopes.map((s) => s[1]), value: scopes[0][1] },
     { key: "ver", label: "Verification", type: "select", options: ["All members", "Verified members only"], value: "All members" },
-    { key: "sort", label: "Order", type: "select", options: ["By member number", "By name"], value: "By member number" },
-    { key: "extra", label: "Extra columns", type: "select", options: ["None", "Date of birth", "Contact number", "Date of birth and contact number"], value: "None" },
+    { key: "sort", label: "Order (flat list only — the Department format follows the family tree)", type: "select", options: ["By member number", "By name"], value: "By member number" },
+    { key: "extra", label: "Extra columns (flat list only)", type: "select", options: ["None", "Date of birth", "Contact number", "Date of birth and contact number"], value: "None" },
     { key: "asAt", label: "Register as at", type: "date", value: isoDay(new Date()) },
     { key: "period", label: "Reporting period / financial year (optional)", type: "text", value: "" },
     { key: "sign", label: "Chairperson & Secretary signatures", type: "select", options: hasSig ? ["Apply the signatures from Brand Box", "Leave blank — I will sign by hand"] : ["Leave blank — I will sign by hand"], value: hasSig ? "Apply the signatures from Brand Box" : "Leave blank — I will sign by hand" },
@@ -3778,6 +3864,7 @@ function brmDialog(selected) {
       sort: out.sort === "By name" ? "name" : "ref", dob: /birth/.test(out.extra), contact: /ontact/.test(out.extra),
       asAt: out.asAt || isoDay(new Date()), period: out.period, sign: /^Apply/.test(out.sign),
       format: /^Word/.test(out.format) ? "word" : /^CSV/.test(out.format) ? "csv" : "print", selected,
+      layout: out.layout === BRM_LAYOUTS.flat ? "flat" : "dept",
     });
   }, "Export");
 }
@@ -6838,6 +6925,8 @@ const BENE_EDITORS = {
       { key: "hh", label: "ODI / household — linked to the ODI register (Beneficiaries → Households)", type: "select", ...(() => { const c = hhChoices(r[5]); return { options: c.options, value: c.current }; })() },
       { key: "role", label: "Family position (filled automatically if the name matches the household)", type: "select", options: HOUSEHOLD_ROLES, value: r[11] || "" },
       { key: "contact", label: "Contact", type: "text", value: r[6] },
+      { key: "marital", label: "Marital status", type: "select", options: MARITAL_STATUSES, value: r[15] || "" },
+      { key: "address", label: "Address", type: "text", value: r[16] },
       { key: "joined", label: "Joined on", type: "date", value: r[7] },
       { key: "status", label: "Status", type: "select", options: BENE_STATUSES, value: r[8] },
       { key: "verif", label: "Verification", type: "select", options: VERIF_STATUSES, value: r[9] },
@@ -6851,6 +6940,7 @@ const BENE_EDITORS = {
       r[13] = /^Do not/.test(o.wishes || "");
       r[6] = o.contact; r[7] = o.joined; r[8] = o.status; r[9] = o.verif; r[10] = o.notes;
       r[11] = o.role || inferHouseholdRole(householdOf(r[5]), o.name);
+      r[15] = o.marital || ""; r[16] = o.address || "";
     },
   }),
   households: () => ({
