@@ -126,7 +126,7 @@ export function openIdIntake(ctx) {
             ${fld("ii-role", "Family position", `<select id="ii-role">${ctx.roles.map((o) => `<option value="${esc(o)}">${esc(o || "— none —")}</option>`).join("")}</select>`)}
             ${fld("ii-contact", "Contact (cell number)", `<input id="ii-contact" type="text" autocomplete="off">`)}
             ${fld("ii-joined", "Joined on", `<input id="ii-joined" type="date" value="${todayIso()}">`)}
-            ${fld("ii-ref", "Register / member no.", `<input id="ii-ref" type="text" value="${esc(suggestRef(R))}" autocomplete="off">`)}
+            ${fld("ii-ref", "Register / member no.", `<input id="ii-ref" type="text" value="${esc(suggestRef(R))}" placeholder="Leave blank — allocated automatically" autocomplete="off">`)}
             ${fld("ii-status", "Status", sel("ii-status", ctx.statuses, "Active"))}
           </div>
           ${fld("ii-verif", "Verification", sel("ii-verif", ctx.verifs, "Pending"))}
