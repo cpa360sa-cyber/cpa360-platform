@@ -7,6 +7,7 @@ import { householdPeople, layoutFamily, NODE_W } from "./family-tree-layout.js";
 import { treeSvg, themeFor, THEMES, familyTitle } from "./family-tree-svg.js";
 import { makePdf } from "./pdf-write.js";
 import { listGroups, listTotals, listCsv, listHtml } from "./family-tree-list.js";
+import { memberRef } from "./family-tree-logic.js";
 
 const UI = { q: "", filter: "all", sort: "name", shown: 24, theme: "brand", ids: false, paper: "fit" };
 const FILTERS = [["all", "All households"], ["desc", "With descendants"], ["odionly", "ODI only (no family recorded)"], ["virtual", "Named on the household record, not yet on the register"], ["pending", "Members awaiting verification"], ["deceased", "With deceased members"], ["noodi", "No ODI recorded"]];
@@ -311,7 +312,7 @@ function openPerson(ctx, b, key, repaint) {
   const add = $s("#pp-add");
   if (add) add.onclick = async () => {
     add.disabled = true;
-    ctx.register().push([p.ref, p.name, "Unspecified", "", "", b.hh[0], "", "", "Active", "Pending", `Added from the household record on ${new Date().toISOString().slice(0, 10)}.`, p.role || "", "", false, ""]);
+    ctx.register().push([memberRef(b.hh[0], p.role, new Set(ctx.register().map((x) => String(x[0] || "")))), p.name, "Unspecified", "", "", b.hh[0], "", "", "Active", "Pending", `Added from the household record on ${new Date().toISOString().slice(0, 10)}.`, p.role || "", "", false, ""]);
     try { await ctx.commit("beneficiaries"); u.toast(`${p.name} added to the register.`); close(); repaint(); } catch (e) { add.disabled = false; $s("#pp-msg").textContent = "Couldn't save: " + ((e && e.message) || e); }
   };
 }

@@ -27,7 +27,8 @@ export function householdPeople(h, register) {
   const used = new Set();
   householdSlots(h).forEach((s) => {
     if (!s.name) return;
-    const byRef = people.find((p) => p.ref === `${ref}-${s.suffix}`);
+    // only the ODI has a fixed member no. (MCPA-004-ODI); everyone else is matched by name
+    const byRef = s.suffix === "ODI" ? people.find((p) => p.ref === `${ref}-ODI`) : null;
     const byName = people.find((p) => !used.has(p) && nameSimilarity(p.name, s.name) >= 0.9);
     const m = byRef || byName;
     if (m) {

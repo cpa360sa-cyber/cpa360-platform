@@ -14,7 +14,7 @@
    · Works without the AI too: the originals are still kept with the household and people can be typed
      or pasted into the same review screen. */
 import * as repo from "./repo.js";
-import { analyse, layoutTree, mergeFill, nameSimilarity } from "./family-tree-logic.js";
+import { analyse, layoutTree, mergeFill, nameSimilarity, memberRef } from "./family-tree-logic.js";
 
 const SECTION = "household-tree";
 const ROLES = ["ODI", "Family Representative", "1st Descendant", "2nd Descendant", "3rd Descendant", "4th Descendant", "5th Descendant", "6th Descendant", "7th Descendant", "Spouse", "Other family member"];
@@ -175,9 +175,7 @@ function openReview(ctx, scan) {
   const refUnique = (r) => {
     const taken = new Set(reg().map((x) => String(x[0] || "")));
     state.rows.forEach((x) => { if (x !== r && x.action !== "skip" && x.ref) taken.add(x.ref); });
-    let ref = `${hhRef}-${r.suffix}`, n = 2;
-    while (taken.has(ref)) ref = `${hhRef}-${r.suffix}-${n++}`;
-    return ref;
+    return taken.has(r.ref) || !r.ref ? memberRef(hhRef, r.role, taken) : r.ref;
   };
   const counts = () => {
     const c = { n: state.rows.length, add: 0, merge: 0, skip: 0, review: 0, exact: 0, possible: 0, low: 0 };
@@ -239,7 +237,7 @@ function openReview(ctx, scan) {
       if (f === "del") el.onclick = () => { state.rows.splice(i, 1); rebuild(); paint(); };
       else el.onchange = () => {
         if (f === "name") { r.name = el.value.trim(); rebuild(); paint(); }
-        else if (f === "role") { r.role = el.value; r.roleEdited = true; r.suffix = suffixOf(el.value, state.rows.filter((x) => /^F\d/.test(x.suffix || "")).length + 1); r.ref = refUnique(r); paint(); }
+        else if (f === "role") { r.role = el.value; r.roleEdited = true; r.suffix = suffixOf(el.value, state.rows.filter((x) => /^F\d/.test(x.suffix || "")).length + 1); r.ref = ""; r.ref = refUnique(r); paint(); }
         else if (f === "action") { r.action = el.value; r.actionTouched = true; paint(); }
       };
     });

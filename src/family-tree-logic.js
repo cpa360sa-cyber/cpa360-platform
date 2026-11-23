@@ -104,6 +104,27 @@ export function householdSlots(h) {
 }
 const ORD = ["", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th"];
 
+/** Generation of a family position: ODI → 0, "3rd Descendant" → 3, anything else (Family Rep, Spouse…) → null. */
+export function levelOfRole(role) {
+  if (role === "ODI") return 0;
+  const m = /^(\d+)(?:st|nd|rd|th) Descendant/.exec(role || "");
+  return m ? +m[1] : null;
+}
+/** The next free member no. in a household, in the register's scheme: MCPA-004-ODI, MCPA-004-D2-7 (the 7th person
+    of the 2nd generation), MCPA-004-REP for a family representative whose generation isn't known, MCPA-004-TBC-n for
+    anyone else. `taken` is every ref already in use (the register plus anything reserved in the same batch). */
+export function memberRef(hhRef, role, taken) {
+  const lvl = levelOfRole(role);
+  if (lvl === 0 && !taken.has(`${hhRef}-ODI`)) return `${hhRef}-ODI`;
+  const rep = /^Family Representative/.test(role || "");
+  if (rep && !taken.has(`${hhRef}-REP`)) return `${hhRef}-REP`;
+  const stem = lvl > 0 ? `${hhRef}-D${lvl}-` : rep ? `${hhRef}-REP-` : `${hhRef}-TBC-`;
+  let max = rep ? 1 : 0;
+  taken.forEach((r) => { if (r.startsWith(stem)) { const n = +r.slice(stem.length); if (n > max) max = n; } });
+  return stem + (max + 1);
+}
+const GEN_OF_REL = { child: 1, grandchild: 2, great_grandchild: 3 };
+
 /** Turns raw scan output into review rows: role, register ref, duplicate flags and a default action. */
 export function analyse(people, { register, household, hhRef }) {
   const slots = householdSlots(household);
@@ -138,12 +159,11 @@ export function analyse(people, { register, household, hhRef }) {
   });
   // 2) the head
   rows.forEach((r) => { if (!r.scanDup && !r.role && r.relationship === "self_head") { const s = slots[0]; if (!usedSuffix.has("ODI") && (!s.name || nameSimilarity(r.name, s.name) >= 0.9)) { r.role = "ODI"; r.suffix = "ODI"; usedSuffix.add("ODI"); } } });
-  // 3) descendants, in generation order then as listed, take the next free 1st…7th slot
-  const desc = rows.filter((r) => !r.scanDup && !r.role && ["child", "grandchild", "great_grandchild"].includes(r.relationship)).sort((a, b) => a.generation - b.generation || a.i - b.i);
-  let k = 1;
-  desc.forEach((r) => {
-    while (k <= 7 && usedSuffix.has("D" + k)) k++;
-    if (k <= 7) { r.role = `${ORD[k]} Descendant`; r.suffix = "D" + k; usedSuffix.add("D" + k); k++; }
+  // 3) descendants: the family position is the generation (children 1st, grandchildren 2nd…), however many share it
+  rows.forEach((r) => {
+    if (r.scanDup || r.role || !GEN_OF_REL[r.relationship]) return;
+    const g = Math.min(7, Math.max(GEN_OF_REL[r.relationship], +r.generation || 0));
+    r.role = `${ORD[g]} Descendant`; r.suffix = "D" + g;
   });
   // 4) everyone else
   let f = 1;
@@ -153,27 +173,17 @@ export function analyse(people, { register, household, hhRef }) {
     r.role = r.relationship === "spouse" ? "Spouse" : "Other family member";
     r.suffix = r.relationship === "spouse" ? "SP" + (++f) : "F" + (f++);
   });
-  // register refs, unique
+  // duplicates against the register (matched on name, ID ending and birth date — never on the member no.)
+  rows.forEach((r) => { const m = findRegisterMatch(r.p2, register, hhRef); if (m) r.dup = m; });
+  // member nos.: someone already on the register keeps theirs; a new person gets the next free one in the household
   rows.forEach((r) => {
     if (r.scanDup) return;
-    let ref = `${hhRef}-${r.suffix}`, n = 2;
-    r.refTaken = takenRefs.has(ref);
-    while (takenRefs.has(ref) && !r.slotName) ref = `${hhRef}-${r.suffix}-${n++}`;
-    r.ref = r.slotName ? `${hhRef}-${r.suffix}` : ref;
-    if (!r.slotName) takenRefs.add(ref);
+    if (r.dup && r.dup.level === "exact" && r.dup.row[0]) { r.ref = r.dup.row[0]; return; }
+    r.ref = memberRef(hhRef, r.role, takenRefs);
+    takenRefs.add(r.ref);
   });
   // a repeated person shows the same position/ref as the first time they appear
   rows.forEach((r) => { if (r.scanDup) { const o = rows[r.scanDup.with]; r.role = o.role; r.suffix = o.suffix; r.ref = o.ref; } });
-  // duplicates against the register
-  rows.forEach((r) => {
-    const sameRef = register.find((x) => x[0] === r.ref && r.slotName);
-    let m = findRegisterMatch(r.p2, register, hhRef);
-    if (sameRef && (!m || m.row !== sameRef)) {
-      const c = compareToRow(r.p2, sameRef, hhRef);
-      m = { level: "exact", score: c ? c.score : 1, reason: "Already extracted from this household record", sameHh: true, row: sameRef };
-    }
-    if (m) r.dup = m;
-  });
   // default actions: never silently add something that may already exist
   rows.forEach((r) => {
     const lv = Math.max(RANK[r.dup ? r.dup.level : "none"], RANK[r.scanDup ? r.scanDup.level : "none"]);

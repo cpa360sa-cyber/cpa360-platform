@@ -11,7 +11,7 @@
 import * as repo from "./repo.js";
 import { readPdf, itemsToTable } from "./pdf-table.js";
 import { matchColumns, detectHeaderRow, buildValues, analyseHouseholds, mergeHousehold } from "./household-import-logic.js";
-import { householdSlots, findRegisterMatch, last4 } from "./family-tree-logic.js";
+import { householdSlots, findRegisterMatch, last4, memberRef } from "./family-tree-logic.js";
 
 const LETTERS = (i) => { let s = ""; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
 const GROUPS = [
@@ -216,11 +216,14 @@ export function openHouseholdImport(ctx) {
         const hhRef = hh[0];
         householdSlots(hh).forEach((s) => {
           if (!s.name) return;
-          const ref = `${hhRef}-${s.suffix}`;
-          if (R.some((x) => x[0] === ref)) { skippedPeople++; return; }
+          // a household has one ODI and one family representative — never add a second
+          const mine = R.filter((x) => x[5] === hhRef);
+          if (s.role === "ODI" && mine.some((x) => x[11] === "ODI")) { skippedPeople++; return; }
+          if (s.role === "Family Representative" && mine.some((x) => /^Family Representative/.test(x[11] || ""))) { skippedPeople++; return; }
           const idMasked = [3, null, 5, 7, 9, 11, 25, 27, 29][s.idx] != null ? hh[[3, null, 5, 7, 9, 11, 25, 27, 29][s.idx]] : "";   // slot → its ID column
           const m = findRegisterMatch({ name: s.name, last4: last4(idMasked), dob: "" }, R, hhRef);
           if (m && m.level === "exact") { skippedPeople++; return; }
+          const ref = memberRef(hhRef, s.role, new Set(R.map((x) => String(x[0] || ""))));
           R.push([ref, s.name, "Unspecified", "", idMasked || "", hhRef, "", "", "Active", "Pending", `Added from ${S.name} on ${today}. Verify against the original.`, s.role, "", false]);
           people++;
           if (m && S.logConflicts && !(s.suffix === "ODI" && loggedHh.has(hhRef))) {   // the household-level entry already covers its ODI

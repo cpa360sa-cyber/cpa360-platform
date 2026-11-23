@@ -15,6 +15,7 @@ import { qrSvg } from "./qr.js";
 import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
+import { findRegisterMatch, last4, memberRef } from "./family-tree-logic.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
@@ -4012,10 +4013,13 @@ function renderBeneVerification(host) {
    Representative and up to 7 descendants — is a real beneficiary. Each
    becomes its own row in the Master Beneficiary Register, tagged with its
    Family position (see HOUSEHOLD_ROLES) so 1st…7th Descendant is a
-   proper field, not a number you have to infer. Keyed by <household
-   ref>-<slot>, so running it again after editing a household updates the
-   same beneficiary rather than duplicating; status/verification already set
-   on an existing extracted beneficiary is left alone. Mutates
+   proper field, not a number you have to infer. People are matched to the
+   register by name, ID ending and household (never by member no.), so running
+   it again adds only people who aren't there yet and never renames, re-roles
+   or re-numbers an existing member — it only fills a missing ID ending. A
+   household never gets a second ODI or family representative; anyone who only
+   possibly matches an existing member is skipped and counted for review. New
+   people get the next member no. (MCPA-004-D2-7). Mutates
    DATA.beneficiaryCentre.register directly — caller commits. */
 function extractOneHousehold(h, reg) {
   const hhRef = h[0];
@@ -4030,22 +4034,27 @@ function extractOneHousehold(h, reg) {
     { suffix: "D6", name: h[26], id: h[27], role: "6th Descendant" },
     { suffix: "D7", name: h[28], id: h[29], role: "7th Descendant" },
   ];
-  let created = 0, updated = 0;
+  let created = 0, updated = 0, present = 0, review = 0;
   slots.forEach((s) => {
-    const name = (s.name || "").trim();
-    if (!name) return;
-    const ref = `${hhRef}-${s.suffix}`;
-    const note = `Extracted as ${s.role} of household ${hhRef}.`;
-    const existing = reg.find((r) => r[0] === ref);
-    if (existing) {
-      existing[1] = name; existing[4] = maskId(s.id); existing[5] = hhRef; existing[10] = note; existing[11] = s.role;
-      updated++;
-    } else {
-      reg.push([ref, name, "Unspecified", "", maskId(s.id), hhRef, "", "", "Active", "Pending", note, s.role]);
-      created++;
+    // the representative field often carries notes ("Sabelo Nkosi, ID 8011…, Tel 082…") — keep only the name
+    let name = String(s.name || "").trim();
+    if (s.role === "Family Representative") name = (name.split(/,|;|\s-\s|\bID\b|\bTel\b|\(/i)[0] || "").replace(/^Family rep:\s*/i, "").trim();
+    if (!name || /\d/.test(name)) return;
+    const idm = maskId(s.id);
+    const mine = reg.filter((r) => r[5] === hhRef);
+    if (s.role === "ODI" && mine.some((r) => r[11] === "ODI")) { present++; return; }
+    if (s.role === "Family Representative" && mine.some((r) => /^Family Representative/.test(r[11] || ""))) { present++; return; }
+    const m = findRegisterMatch({ name, last4: last4(idm), dob: "" }, reg, hhRef);
+    if (m && m.level === "exact") {
+      if (idm && !m.row[4]) { m.row[4] = idm; updated++; } else present++;
+      return;
     }
+    if (m) { review++; return; }
+    const ref = memberRef(hhRef, s.role, new Set(reg.map((r) => String(r[0] || ""))));
+    reg.push([ref, name, "Unspecified", "", idm, hhRef, "", "", "Active", "Pending", `Extracted as ${s.role} of household ${hhRef}.`, s.role, "", false, ""]);
+    created++;
   });
-  return { created, updated };
+  return { created, updated, present, review };
 }
 function extractHouseholdsAsBeneficiaries() {
   const bulk = bulkState("bene-households");
@@ -4054,11 +4063,12 @@ function extractHouseholdsAsBeneficiaries() {
   if (!chosen.length) { toast("Select one or more households first (the checkbox on the left of each row).", true); return; }
 
   const reg = DATA.beneficiaryCentre.register;
-  let created = 0, updated = 0;
-  chosen.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; });
-  if (!created && !updated) { toast("Nothing to extract — the selected household(s) have no names filled in yet.", true); return; }
+  let created = 0, updated = 0, present = 0, review = 0;
+  chosen.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; present += r.present; review += r.review; });
+  const more = `${present ? ` ${present} already on the register.` : ""}${review ? ` ${review} skipped because they may already be on the register under a slightly different name — check and add them by hand if they're new.` : ""}`;
+  if (!created && !updated) { toast((present || review ? "Nobody new to add." : "Nothing to extract — the selected household(s) have no names filled in yet.") + more, !present && !review); return; }
   commit("beneficiaries");
-  toast(`Extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""}.`);
+  toast(`Added ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, filled in the ID ending for ${updated}` : ""}.${more}`);
 }
 const TREE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M12 7v5M6 17v-3a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/></svg>';
 /* Family tree upload / scan / review → family-tree.js (needs a saved household so files have somewhere to live). */
@@ -6642,10 +6652,11 @@ const IMPORT = {
     afterImport: (builtRows) => {
       const reg = DATA.beneficiaryCentre.register;
       let created = 0, updated = 0;
-      builtRows.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; });
-      if (!created && !updated) return "";
+      let review = 0;
+      builtRows.forEach((h) => { const r = extractOneHousehold(h, reg); created += r.created; updated += r.updated; review += r.review; });
+      if (!created && !updated) return review ? ` ${review} people may already be on the register — check them by hand.` : "";
       commit("beneficiaries");
-      return ` Also extracted ${created} new beneficiar${created === 1 ? "y" : "ies"}${updated ? `, updated ${updated} existing` : ""} into the Master Register.`;
+      return ` Also added ${created} new beneficiar${created === 1 ? "y" : "ies"} to the Master Register${updated ? ` and filled in ${updated} ID ending${updated === 1 ? "" : "s"}` : ""}.${review ? ` ${review} may already be on the register — check them by hand.` : ""}`;
     },
   },
   succession_cases: {
