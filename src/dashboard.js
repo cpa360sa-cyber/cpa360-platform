@@ -16,6 +16,7 @@ import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
 import { findRegisterMatch, last4, memberRef, levelOfRole, refForPosition } from "./family-tree-logic.js";
+import { verificationStats, verificationReportHtml, verificationCsv } from "./verification-report.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
@@ -3883,6 +3884,32 @@ function brmExport(o) {
   w.opener = null;
   w.addEventListener("load", () => { setTimeout(() => { try { w.print(); } catch (e) {} }, 700); setTimeout(() => URL.revokeObjectURL(url), 120000); });
 }
+/* Verification report → verification-report.js (dashboard, progress over time / by generation / by household,
+   data quality, who was verified in the period, optional outstanding list, sign-off). */
+function verifReportDialog() {
+  const today = isoDay(new Date()), monthAgo = isoDay(new Date(Date.now() - 30 * 86400000));
+  openModal("Verification report", [
+    { key: "i", label: "Verification report", type: "info", value: "A dated progress report on verifying the Master Beneficiary Register: a dashboard, progress over time, by generation and by household, data-quality gaps, everyone verified in the period, and a sign-off block." },
+    { key: "asAt", label: "Report as at", type: "date", value: today },
+    { key: "from", label: "Reporting period starts (for “verified in the period”)", type: "date", value: monthAgo },
+    { key: "out", label: "List of members still to verify", type: "select", options: ["Leave out (shorter report)", "Include — grouped by household"], value: "Leave out (shorter report)" },
+    { key: "format", label: "Format", type: "select", options: ["PDF (print view)", "Word (.doc)", "CSV (Excel) — progress per household"], value: "PDF (print view)" },
+  ], (out) => {
+    const reg = DATA.beneficiaryCentre.register || [];
+    if (!reg.length) { toast("The register is empty — nothing to report on.", true); return; }
+    const s = verificationStats(reg, { asAt: out.asAt || today, from: out.from || monthAgo, households: DATA.beneficiaryCentre.households || [] });
+    const docNo = `VER-${s.asAt.replace(/-/g, "")}-${fnv1a(`${s.active}|${s.verified}|${s.disputed}|${DATA.cpa.reg || ""}|${s.asAt}`).toString(36).toUpperCase().padStart(6, "0").slice(0, 6)}`;
+    const base = `Verification-Report-${govSafe(DATA.cpa.name)}-${s.asAt}`;
+    if (/^CSV/.test(out.format)) { downloadFile(base + ".csv", verificationCsv(s), "text/csv"); toast(`CSV exported — ${s.byHousehold.length} households.`); return; }
+    const html = (mode) => verificationReportHtml(s, { cpa: DATA.cpa, mode, docNo, outstanding: /^Include/.test(out.out), signers: { chair: chairName(), secretary: secName() } });
+    if (/^Word/.test(out.format)) { downloadFile(base + ".doc", html("word"), "application/msword"); toast("Word report exported."); return; }
+    const url = URL.createObjectURL(new Blob([html("print")], { type: "text/html" }));
+    const w = window.open(url, "_blank");
+    if (!w) { toast("Please allow pop-ups to open the report.", true); URL.revokeObjectURL(url); return; }
+    w.opener = null;
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  }, "Create report");
+}
 function brmDialog(selected) {
   const hasSig = !!(DATA.cpa.chairSig || DATA.cpa.secretarySig);
   const scopes = [["active", "Active members (recommended)"], ["all", "All members (incl. deceased, removed, transferred)"]];
@@ -3942,6 +3969,7 @@ function renderBeneRegister(host) {
     extraTools: [
       ...(CAN_EDIT ? [`<button class="btn primary" data-bene-idscan type="button" title="Upload an ID copy — the details are read for you and the rest is completed by hand">Add from ID copy</button>`] : []),
       `<button class="btn" data-bene-export type="button" title="Official Beneficiary Master Register — PDF, Word or CSV">Export register</button>`,
+      `<button class="btn" data-bene-verif-report type="button" title="Verification progress report — dashboard, progress over time and by household (PDF, Word or CSV)">Verification report</button>`,
       `<button class="btn" data-bene-print-sel type="button"${selRows.length ? "" : " disabled"}>Print cards${selRows.length ? ` (${selRows.length})` : ""}</button>`,
       `<button class="btn" data-bene-print-all type="button">Print all active</button>`,
     ],
@@ -3961,6 +3989,8 @@ function renderBeneRegister(host) {
       });
       const ex = h.querySelector("[data-bene-export]");
       if (ex) ex.onclick = () => brmDialog(new Set(selRows.map((r) => String(r._id))));
+      const vr = h.querySelector("[data-bene-verif-report]");
+      if (vr) vr.onclick = verifReportDialog;
       const ps = h.querySelector("[data-bene-print-sel]");
       if (ps) ps.onclick = () => printCardsDialog(selRows, "Print membership cards");
       const pa = h.querySelector("[data-bene-print-all]");
