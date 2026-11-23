@@ -123,6 +123,23 @@ export function memberRef(hhRef, role, taken) {
   taken.forEach((r) => { if (r.startsWith(stem)) { const n = +r.slice(stem.length); if (n > max) max = n; } });
   return stem + (max + 1);
 }
+/** The series a member no. belongs to: MCPA-004-D2-8 → MCPA-004-D2, MCPA-004-REP-2 → MCPA-004-REP, TBC-3 → TBC. */
+const refSeries = (ref) => String(ref || "").trim().replace(/^(.*-(?:D\d+|REP|TBC)|TBC)-\d+$/, "$1");
+/** Is this a number the platform hands out (as opposed to one a CPA typed in its own style, e.g. KV-0007)? */
+export const isSchemeRef = (ref) => /^TBC-\d+$|-(ODI|REP(-\d+)?|TBC-\d+|D\d+-\d+)$/.test(String(ref || "").trim());
+/** Once a member is linked to a household (ODI) and a family position, their member no. must sit in that household's
+    series for that position. Returns the new number when the current one is blank or in the wrong series, else null.
+    A number the CPA typed in its own style is never replaced; a family representative or someone whose position
+    isn't known keeps a generation number they already have in the same household. `taken` must not contain `ref`. */
+export function refForPosition(ref, hhRef, role, taken) {
+  ref = String(ref || "").trim(); hhRef = String(hhRef || "").trim();
+  if (!hhRef) return ref ? null : "";
+  if (ref && !isSchemeRef(ref)) return null;
+  const lvl = levelOfRole(role);
+  if (ref && lvl == null && new RegExp(`^${hhRef.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-(D\\d+-\\d+|REP(-\\d+)?|TBC-\\d+)$`).test(ref)) return null;
+  const want = memberRef(hhRef, role, taken);
+  return ref && refSeries(ref) === refSeries(want) ? null : want;
+}
 const GEN_OF_REL = { child: 1, grandchild: 2, great_grandchild: 3 };
 
 /** Turns raw scan output into review rows: role, register ref, duplicate flags and a default action. */

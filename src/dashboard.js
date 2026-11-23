@@ -15,7 +15,7 @@ import { qrSvg } from "./qr.js";
 import { renderCommunication, openDeathNotice } from "./communication.js";
 import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
-import { findRegisterMatch, last4, memberRef, levelOfRole } from "./family-tree-logic.js";
+import { findRegisterMatch, last4, memberRef, levelOfRole, refForPosition } from "./family-tree-logic.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
@@ -7010,7 +7010,7 @@ const BENE_EDITORS = {
     rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[9]}`,
     blank: () => ["", "", "Female", "", "", "", "", new Date().toISOString().slice(0, 10), "Active", "Pending", "", ""],
     fields: (r) => [
-      { key: "ref", label: "Register / member no. — leave blank and it's allocated automatically when you save (e.g. MCPA-004-D2-8)", type: "text", value: r[0] },
+      { key: "ref", label: "Register / member no. — allocated automatically when you save, from the ODI / household and family position below (e.g. MCPA-004-D2-8); changing either gives a new number", type: "text", value: r[0] },
       { key: "name", label: "Full name", type: "text", value: r[1], required: true },
       { key: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other", "Unspecified"], value: r[2] || "Female" },
       { key: "dob", label: "Date of birth (drives birthday reminders)", type: "date", value: r[3] },
@@ -7688,33 +7688,48 @@ function syncHouseholdVerification() {
   });
   return changed;
 }
-/* Every member gets a member no. — a blank one (add form, ID-copy intake, spreadsheet import…) is allocated on save:
-   the next free number for their household and generation (MCPA-004-D2-8), MCPA-004-REP for a family representative,
-   MCPA-004-TBC-n when the generation isn't known (taken from the parent's generation when a parent is set), and
-   TBC-n for someone not linked to a household. Refs someone typed are never changed. */
-function allocateMissingRefs() {
+/* Member nos. follow the household (ODI) and family position, and are allocated on save:
+   · a blank one gets the next free number — MCPA-004-D2-8 for a 2nd descendant of household MCPA-004, MCPA-004-ODI,
+     MCPA-004-REP for a family representative, MCPA-004-TBC-n when the position isn't known (taken from the parent's
+     generation when a parent is set), TBC-n for someone not linked to a household yet;
+   · once someone added, changed or saved in this edit is linked to a household and position, a platform number in the
+     wrong series (TBC-5, or MCPA-004-D1-3 after becoming a 2nd descendant, or another household's number) is replaced
+     with the right one, and anyone recorded as their child is re-pointed to the new number.
+   Numbers a CPA typed in its own style (e.g. KV-0007) are never changed, and rows nobody touched are left alone. */
+function allocateRefs() {
   const reg = DATA.beneficiaryCentre.register || [];
   const taken = new Set(reg.map((r) => String(r[0] || "").trim()).filter(Boolean));
   const byRef = new Map(reg.filter((r) => r[0]).map((r) => [String(r[0]).trim(), r]));
   const ord = (n) => n + (n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th");
+  const touched = (r) => {
+    if (!r._orig) return true;
+    try { const o = JSON.parse(r._orig); return [0, 5, 11, 14].some((i) => String(o[i] ?? "") !== String(r[i] ?? "")); } catch (e) { return true; }
+  };
   let n = 0;
   reg.forEach((r) => {
-    if (String(r[0] || "").trim()) return;
+    const cur = String(r[0] || "").trim();
+    if (cur && !touched(r)) return;
     const hh = String(r[5] || "").trim();
     let role = r[11] || "";
     if (levelOfRole(role) == null && !/^Family Representative/.test(role)) {
       const p = byRef.get(String(r[14] || "").trim()), pl = p ? levelOfRole(p[11]) ?? (/-ODI$/.test(p[0]) ? 0 : null) : null;
       if (pl != null) role = `${ord(pl + 1)} Descendant`;
     }
-    if (hh) r[0] = memberRef(hh, role, taken);
-    else { let k = 1; while (taken.has(`TBC-${k}`)) k++; r[0] = `TBC-${k}`; }
-    taken.add(r[0]); byRef.set(r[0], r); n++;
+    if (cur) taken.delete(cur);
+    let next = refForPosition(cur, hh, role, taken);
+    if (next === "") { let k = 1; while (taken.has(`TBC-${k}`)) k++; next = `TBC-${k}`; }
+    if (next) {
+      r[0] = next; n++;
+      if (cur) { reg.forEach((c) => { if (String(c[14] || "").trim() === cur) c[14] = next; }); byRef.delete(cur); }
+      byRef.set(next, r);
+    }
+    taken.add(r[0]);
   });
   return n;
 }
 async function commit(section) {
   if (!CAN_EDIT || !orgId) return;
-  if (section === "beneficiaries") { allocateMissingRefs(); stampVerifiedDates(); }
+  if (section === "beneficiaries") { allocateRefs(); stampVerifiedDates(); }
   // members whose status is changing to Deceased in this save (compared with the row as loaded)
   const newlyDeceased = section !== "beneficiaries" ? [] : (DATA.beneficiaryCentre.register || []).filter((r) => {
     if (!r._id || !r._orig || r[8] !== "Deceased") return false;
