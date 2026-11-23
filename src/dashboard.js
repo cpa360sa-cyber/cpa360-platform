@@ -4120,7 +4120,11 @@ function renderBeneHouseholds(host) {
         `<span style="font-weight:600;">${esc(r[2])}</span>`,
         esc(r[1]), members ? `<button type="button" class="linkbtn mono" data-hh-members="${esc(r[0])}" title="Show these members in the Master Register">${members}</button>` : `<span class="mono">0</span>`,
         `<button type="button" class="doc-chip${docCount("household-tree", r._id) ? "" : " missing"}" data-hh-tree="${esc(r[0])}" title="Family tree — upload, scan &amp; add members (${docCount("household-tree", r._id)} on file)" aria-label="Family tree for household ${esc(r[0])}">${TREE_ICON}${docCount("household-tree", r._id) ? `<span>${docCount("household-tree", r._id)}</span>` : ""}</button>`,
-        statusPill(r[17] || "Pending"),
+        (() => {
+          const c = hhVerifCounts(r[0]);
+          if (!c.total || r[17] === "Disputed" || r[17] === "Rejected") return statusPill(r[17] || "Pending");
+          return pill(`${c.verified} of ${c.total} verified`, c.verified === c.total ? "good" : c.verified ? "warning" : "neutral");
+        })(),
         r[22] ? pill(r[23] ? `Disputed (${esc(r[23])})` : "Disputed", "critical") : pill("None", "neutral"),
         pill(r[13] ? "Resident" : "Not resident", r[13] ? "good" : "neutral"), statusPill(r[12])];
     },
@@ -7050,7 +7054,7 @@ const BENE_EDITORS = {
       { key: "d7id", label: "ID: 7th Descendant (auto-masked — only the last 4 digits are kept)", type: "text", value: r[29] },
       { key: "resident", label: "Dwells on the farm / in the community", type: "select", options: ["Yes", "No"], value: r[13] === false ? "No" : "Yes" },
       { key: "status", label: "Status", type: "select", options: ["Active", "Relocated", "Dissolved"], value: r[12] },
-      { key: "verification", label: "Verification Status", type: "select", options: VERIF_STATUSES, value: r[17] || "Pending" },
+      { key: "verification", label: "Verification Status — follows the members automatically (Verified once every active member is verified); set Disputed or Rejected here by hand", type: "select", options: VERIF_STATUSES, value: r[17] || "Pending" },
       { key: "dateRegistered", label: "Date Registered", type: "date", value: r[18] },
       { key: "lastReviewed", label: "Last Reviewed Date", type: "date", value: r[19] },
       { key: "landRef", label: "Land / Site Allocation Reference", type: "text", value: r[20] },
@@ -7656,6 +7660,23 @@ function stampVerifiedDates() {
     } else if (r[12]) r[12] = "";
   });
 }
+/* A household's Verification follows its members: Verified once every active member is verified, Pending
+   while any is not. Disputed / Rejected are set by hand and left alone. Returns true if any household changed. */
+function hhVerifCounts(ref) {
+  const act = (DATA.beneficiaryCentre.register || []).filter((r) => r[5] === ref && r[8] === "Active");
+  return { total: act.length, verified: act.filter((r) => r[9] === "Verified").length };
+}
+function syncHouseholdVerification() {
+  let changed = false;
+  (DATA.beneficiaryCentre.households || []).forEach((h) => {
+    if (h[17] === "Disputed" || h[17] === "Rejected") return;
+    const c = hhVerifCounts(h[0]);
+    if (!c.total) return;
+    const want = c.verified === c.total ? "Verified" : "Pending";
+    if ((h[17] || "Pending") !== want) { h[17] = want; changed = true; }
+  });
+  return changed;
+}
 async function commit(section) {
   if (!CAN_EDIT || !orgId) return;
   if (section === "beneficiaries") stampVerifiedDates();
@@ -7674,6 +7695,9 @@ async function commit(section) {
     try { DATA = await repo.loadOrg(orgId); } catch (_) {}
   }
   if (section === "beneficiaries" && saved) queueDeathNotices(newlyDeceased);
+  if (section === "beneficiaries" && saved && syncHouseholdVerification()) {
+    try { await repo.saveSection(orgId, "households", DATA); } catch (e) { toast("Couldn't update household verification: " + (e?.message || e), true); }
+  }
   // The Institutional Score is a live reflection of the other registers —
   // any commit here may have moved an auto-scored criterion, so re-scan and
   // persist the score alongside whatever the caller just saved.
