@@ -7757,8 +7757,31 @@ function allocateRefs() {
   });
   return n;
 }
+/* Re-read the org after someone else's change. A reload must never overwrite an edit of our own:
+   it waits while a save is running or an edit window is open, and a reload that overlapped a save
+   (its reads may predate our write — the "verified member flips back to Pending" bug) is thrown
+   away and done again once the save has finished. */
+let loadSeq = 0, committing = 0;
+async function refreshFromServer() {
+  if (!orgId) return;
+  if (committing || document.querySelector(".modal-scrim")) { pendingRemote = true; return; }
+  const oid = orgId, seq = ++loadSeq;
+  let fresh;
+  try { fresh = await repo.loadOrg(oid); } catch (e) { return; }
+  if (oid !== orgId) return;
+  if (seq !== loadSeq || committing || document.querySelector(".modal-scrim")) { pendingRemote = true; return; }
+  DATA = fresh;
+  try { if (syncAutoScore() && BASE_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
+  if (BASE_EDIT) maybeFlagStageReadiness().catch(() => {});
+  renderCurrent();
+  if (onChange) onChange();
+}
 async function commit(section) {
   if (!CAN_EDIT || !orgId) return;
+  committing++; loadSeq++;   // any reload already in flight is now stale
+  try { await commitNow(section); } finally { committing--; }
+}
+async function commitNow(section) {
   if (section === "beneficiaries") { allocateRefs(); stampVerifiedDates(); }
   // members whose status is changing to Deceased in this save (compared with the row as loaded)
   const newlyDeceased = section !== "beneficiaries" ? [] : (DATA.beneficiaryCentre.register || []).filter((r) => {
@@ -7802,16 +7825,9 @@ export async function initDashboard({ orgId: oid, role, preload, noRealtime }) {
   if (BASE_EDIT) maybeFlagStageReadiness().catch(() => {});
   if (channel) repo.unsubscribe(channel);
   if (noRealtime) { channel = null; return; }
-  channel = repo.subscribe(orgId, async () => {
-    if (Date.now() < suppressRemoteUntil) return;               // our own write echoing back
-    if (document.querySelector(".modal-scrim")) { pendingRemote = true; return; }
-    try {
-      DATA = await repo.loadOrg(orgId);
-      try { if (syncAutoScore() && BASE_EDIT) await repo.saveSection(orgId, "score", DATA); } catch (e) {}
-      if (BASE_EDIT) maybeFlagStageReadiness().catch(() => {});
-      renderCurrent();
-      if (onChange) onChange();
-    } catch (e) {}
+  channel = repo.subscribe(orgId, () => {
+    if (!committing && Date.now() < suppressRemoteUntil) return;   // our own write echoing back
+    refreshFromServer();
   });
 }
 
@@ -7968,9 +7984,9 @@ export function printPack() {
 
 /* poll: apply a deferred remote refresh once modals are closed */
 setInterval(async () => {
-  if (pendingRemote && orgId && !document.querySelector(".modal-scrim")) {
+  if (pendingRemote && orgId && !committing && !document.querySelector(".modal-scrim")) {
     pendingRemote = false;
-    try { DATA = await repo.loadOrg(orgId); renderCurrent(); } catch (e) {}
+    refreshFromServer();
   }
 }, 1500);
 
