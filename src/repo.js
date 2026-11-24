@@ -10,16 +10,19 @@ import { orgLogoDataUrl } from "./orgs.js";
 const num = (v) => (v == null || v === "" ? 0 : Number(v));
 const nn = (v) => (v == null || v === "" ? null : v);
 
-/* Every row id this browser has loaded or inserted. reconcile() only deletes ids in here, so a
-   save can never remove a row it never saw (added by a colleague, another tab, or a save
-   still in flight) — it used to delete "anything in the database that isn't in my list". */
-const SEEN = new Set();
+/* The row ids a loaded DATA was built from (plus rows this browser inserted into it) travel WITH that
+   DATA, as D._seen. reconcile() only deletes ids in there, so a save can never remove a row its own
+   data never showed — added by a colleague, another tab, or a save still in flight. It used to be one
+   set for the whole browser: a background reload that was thrown away (it overlapped a save or an
+   open edit window) still marked colleagues' new members as seen, and the next save deleted them. */
+let LOADING = null;   // the _seen set of the loadOrg() building rows right now (that part is synchronous)
+let SAVE_SEEN = null; // the _seen set of the DATA handed to saveSection() — read synchronously by reconcile()
 
 /* Carry the DB row id on the array/object the dashboard hands back, so
    saveSection() can tell an edit from an insert. The dashboard ignores it. */
 function tagArr(arr, row) {
   arr._id = row.id;
-  SEEN.add(row.id);
+  if (LOADING) LOADING.add(row.id);
   // fingerprint of the row as loaded/saved — reconcile() skips rows that haven't changed
   Object.defineProperty(arr, "_orig", { value: JSON.stringify(arr), writable: true, configurable: true, enumerable: false });
   return arr;
@@ -39,7 +42,7 @@ async function pageAll(make) {
     if (!data || data.length < PAGE) return { data: out, error: null };
   }
 }
-function tagObj(obj, row) { SEEN.add(row.id); return Object.defineProperty(obj, "_id", { value: row.id, enumerable: false }); }
+function tagObj(obj, row) { if (LOADING) LOADING.add(row.id); return Object.defineProperty(obj, "_id", { value: row.id, enumerable: false }); }
 
 /* Maturity bands are methodology, not per-org data — kept with the dashboard. */
 export const BANDS = [
@@ -158,7 +161,11 @@ export async function loadOrg(orgId) {
   const i = impact || {};
   const logoDataUrl = org.logo_path ? await orgLogoDataUrl(org.logo_path).catch(() => null) : null;
 
-  return {
+  // From here to the return there is no await, so LOADING can't pick up another load's rows.
+  const seen = new Set();
+  LOADING = seen;
+  try {
+  const D = {
     cpa: {
       name: org.name, reg: org.registration || "", region: org.region || "",
       established: org.established || "", landExtent: num(org.land_extent_ha),
@@ -341,6 +348,9 @@ export async function loadOrg(orgId) {
     },
     _docCounts: docCounts,
   };
+  Object.defineProperty(D, "_seen", { value: seen, enumerable: false });
+  return D;
+  } finally { LOADING = null; }
 }
 
 /* ------------------------------------------------------------ documents ---- */
@@ -698,12 +708,13 @@ export async function deleteDoc(doc) {
    and the next save deleted the survivor — the member vanished on reload. */
 const SAVING = new Map();
 function reconcile(table, orgId, rows, toDb) {
-  const run = (SAVING.get(table) || Promise.resolve()).catch(() => {}).then(() => reconcileNow(table, orgId, rows, toDb));
+  const seen = SAVE_SEEN || new Set();   // data that wasn't loaded from the database: delete nothing
+  const run = (SAVING.get(table) || Promise.resolve()).catch(() => {}).then(() => reconcileNow(table, orgId, rows, toDb, seen));
   SAVING.set(table, run);
   return run;
 }
 
-async function reconcileNow(table, orgId, rows, toDb) {
+async function reconcileNow(table, orgId, rows, toDb, seen) {
   const { data: existing, error: exErr } = await pageAll((a, b) =>
     supabase.from(table).select("id").eq("org_id", orgId).order("id", { ascending: true }).range(a, b));
   if (exErr) throw exErr;
@@ -725,11 +736,11 @@ async function reconcileNow(table, orgId, rows, toDb) {
     const { data, error } = await supabase.from(table).insert({ ...toDb(row, i), org_id: orgId }).select("id").single();
     if (error) throw error;
     row._id = data.id;
-    SEEN.add(data.id);
+    seen.add(data.id);
     keep.add(data.id);
     stamp(row);
   }
-  const gone = (existing || []).map((r) => r.id).filter((id) => SEEN.has(id) && !keep.has(id));
+  const gone = (existing || []).map((r) => r.id).filter((id) => seen.has(id) && !keep.has(id));
   if (gone.length) {
     const { error } = await supabase.from(table).delete().in("id", gone);
     if (error) throw error;
@@ -742,6 +753,7 @@ async function updateSingleton(table, orgId, body) {
 }
 
 export async function saveSection(orgId, section, D) {
+  SAVE_SEEN = (D && D._seen) || null;   // every reconcile() below is called before the first await
   switch (section) {
     case "cpa": {
       const { error } = await supabase.from("orgs").update({
