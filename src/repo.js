@@ -131,6 +131,7 @@ export async function loadOrg(orgId) {
     pageAll((a, b) => supabase.from("bene_wishes").select("id, beneficiary_id, wish_year, created_at").eq("org_id", orgId)
       .eq("wish_year", new Date().getFullYear()).order("id", { ascending: true }).range(a, b)),
     supabase.from("death_notices").select("id, beneficiary_id, member_name, created_at").eq("org_id", orgId).eq("status", "pending").order("created_at", { ascending: true }),
+    sel("beneficiary_applications", "sort"),
   ]);
   const bad = results.find((r) => r.error);
   if (bad) throw bad.error;
@@ -141,7 +142,7 @@ export async function loadOrg(orgId) {
          allocations, movable, permits, infra, maint, prodEnt, prodWater, prodRec,
          fin, cats, finTxn, procSup, procReq, procPo,
          finPay, finBills, finQuotes, finContracts, finGrn, finAfs, finMemberPay, finBankRecon, finClose,
-         projects, markets, partnerships, revenue, impact, docs, wishes, deathNotices] =
+         projects, markets, partnerships, revenue, impact, docs, wishes, deathNotices, applications] =
     results.map((r) => r.data);
   const intakeNew = await countNewIntake(orgId);     // documents members sent through the submission link, waiting for review (never fatal)
 
@@ -248,6 +249,10 @@ export async function loadOrg(orgId) {
          r.lodged_on || "", r.status, r.notes || ""], r)),
       disputes: (beneDisputes || []).map((r) => tagArr(
         [r.ref || "", r.dtype, r.parties || "", r.description || "", r.raised_on || "", r.status, r.resolution || ""], r)),
+      applications: (applications || []).map((r) => tagArr(
+        [r.ref || "", r.family_name, r.applicant_name || "", r.applicant_id || "", r.contact || "", r.address || "",
+         r.claimed_odi || "", r.household_ref || "", r.relationship || "", r.members_count ?? "", r.lodged_on || "",
+         Array.isArray(r.evidence) ? r.evidence : [], r.status, r.decision_on || "", r.decision_ref || "", r.notes || ""], r)),
     },
     assets: {
       land: (land || []).map((r) => tagArr([r.portion, r.primary_use || "", num(r.extent_ha), r.lease || "", r.status], r)),
@@ -878,6 +883,14 @@ export async function saveSection(orgId, section, D) {
       return reconcile("succession_cases", orgId, D.beneficiaryCentre.succession, (r, i) => ({
         deceased_ref: nn(r[0]), deceased_name: r[1], date_of_death: nn(r[2]), successor_name: nn(r[3]),
         relationship: nn(r[4]), lodged_on: nn(r[5]), status: r[6], notes: nn(r[7]), sort: i,
+      }));
+    case "beneficiary_applications":
+      return reconcile("beneficiary_applications", orgId, D.beneficiaryCentre.applications, (r, i) => ({
+        ref: nn(r[0]), family_name: r[1], applicant_name: nn(r[2]), applicant_id: nn(r[3]), contact: nn(r[4]), address: nn(r[5]),
+        claimed_odi: nn(r[6]), household_ref: nn(r[7]), relationship: nn(r[8]),
+        members_count: r[9] === "" || r[9] == null ? null : Math.round(num(r[9])), lodged_on: nn(r[10]),
+        evidence: Array.isArray(r[11]) ? r[11] : [], status: r[12] || "Received",
+        decision_on: nn(r[13]), decision_ref: nn(r[14]), notes: nn(r[15]), sort: i,
       }));
     case "beneficiary_disputes":
       return reconcile("beneficiary_disputes", orgId, D.beneficiaryCentre.disputes, (r, i) => ({

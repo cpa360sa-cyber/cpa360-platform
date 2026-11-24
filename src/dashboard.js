@@ -48,6 +48,7 @@ const STATUS_TONE = {
   "In Progress": "warning", "Pending": "warning", "Pending Verification": "warning", "Expiring Soon": "warning", "At Risk": "warning", "Under Renewal": "warning",
   "Open": "warning", "Draft": "warning", "Forming": "warning", "Upcoming": "warning", "Declared": "warning", "Scheduled": "warning",
   "Under Review": "warning", "On leave": "warning", "Archived": "warning", "Frozen": "warning",
+  "Received": "warning", "Awaiting Documents": "warning", "Recommended": "warning", "Added to Register": "good", "Rejected": "critical",
   "Overdue": "critical", "Disputed": "critical", "Delayed": "critical", "Vacant": "critical", "Inquorate": "critical", "Outstanding": "critical", "Expired": "critical",
   "Not Started": "neutral", "Retired": "neutral", "Exited": "neutral", "Disposed": "neutral",
   "In use": "good", "In storage": "neutral", "Under repair": "warning", "Lost / stolen": "critical", "Disposed / written off": "neutral",
@@ -247,6 +248,12 @@ function fieldHtml(f) {
   if (f.type === "textarea")
     return `<div class="field"><label for="fld-${f.key}">${esc(f.label)}</label>
       <textarea id="fld-${f.key}" name="${f.key}" rows="3">${v}</textarea></div>`;
+  if (f.type === "checks") {   // tick-list: value is an array of the ticked options
+    const on = new Set(Array.isArray(f.value) ? f.value : []);
+    return `<fieldset class="field" style="border:0;padding:0;margin:0;min-width:0;"><legend style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:6px;">${esc(f.label)}</legend>
+      ${f.options.map((o) => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink);padding:3px 0;cursor:pointer;">
+        <input type="checkbox" name="${f.key}" value="${esc(o)}"${on.has(o) ? " checked" : ""} style="width:auto;margin-top:2px;"> <span>${esc(o)}</span></label>`).join("")}</fieldset>`;
+  }
   return `<div class="field"><label for="fld-${f.key}">${esc(f.label)}</label>
     <input id="fld-${f.key}" name="${f.key}" type="${f.type || "text"}" value="${v}"${f.type === "number" ? ' inputmode="numeric"' : ""}></div>`;
 }
@@ -271,6 +278,7 @@ function openModal(title, fields, onSave, saveLabel) {
     let bad = false;
     fields.forEach((f) => {
       if (f.type === "info") return;
+      if (f.type === "checks") { out[f.key] = [...scrim.querySelectorAll(`[name="${f.key}"]:checked`)].map((i) => i.value); return; }
       const inp = scrim.querySelector(`[name="${f.key}"]`);
       out[f.key] = inp.value.trim();
       if (f.required && !out[f.key]) { inp.style.borderColor = "var(--status-critical)"; bad = true; }
@@ -2545,6 +2553,7 @@ function openLightbox(list, index) {
 const BENE_TABS = [
   { id: "register", label: "Master Register" },
   { id: "intake", label: "Intake" },
+  { id: "applications", label: "New Applications" },
   { id: "verification", label: "Verification" },
   { id: "households", label: "Households" },
   { id: "trees", label: "Family Trees" },
@@ -2555,7 +2564,7 @@ const BENE_TABS = [
   { id: "evidence", label: "Verification Evidence" },
 ];
 const BENE_PANELS = {
-  register: renderBeneRegister, intake: renderBeneIntake, verification: renderBeneVerification, households: renderBeneHouseholds, trees: renderBeneFamilyTrees,
+  register: renderBeneRegister, intake: renderBeneIntake, applications: renderBeneApplications, verification: renderBeneVerification, households: renderBeneHouseholds, trees: renderBeneFamilyTrees,
   succession: renderBeneSuccession, deceased: renderBeneDeceased, birthdays: renderBeneBirthdays, disputes: renderBeneDisputes, evidence: renderBeneEvidence,
 };
 /* rollups: use the live register when it has rows, else the figures singleton */
@@ -2581,7 +2590,9 @@ function paintBeneStrip() {
   const strip = $("beneficiary-subtabs");
   const cur = SUBTAB.beneficiary || "register";
   const due = birthdayDue(0), inNew = DATA.intakeNew || 0;
-  const tabs = BENE_TABS.map((t) => (t.id === "birthdays" && due.length ? { ...t, label: `Birthdays (${due.length})` } : t.id === "intake" && inNew ? { ...t, label: `Intake (${inNew} new)` } : t));
+  const appsOpen = appOpenCount();
+  const tabs = BENE_TABS.map((t) => (t.id === "birthdays" && due.length ? { ...t, label: `Birthdays (${due.length})` } : t.id === "intake" && inNew ? { ...t, label: `Intake (${inNew} new)` }
+    : t.id === "applications" && appsOpen ? { ...t, label: `New Applications (${appsOpen})` } : t));
   const names = due.slice(0, 3).map((x) => `${(String(x.r[1]).trim().split(/\s+/)[0] || "")} (${x.info.turns})`).join(", ") + (due.length > 3 ? ` and ${due.length - 3} more` : "");
   const posterN = CAN_EDIT && cur !== "birthdays" && !posterDoneToday(orgId, isoDay(new Date())) ? posterPeople(0).people.length : 0;
   const posterBtn = posterN ? `<button type="button" class="btn small primary" data-bposter-go title="One poster listing everyone whose birthday it is, ready for WhatsApp Status">Create the poster</button>` : "";
@@ -4256,6 +4267,72 @@ function renderBeneDeceased(host) {
     }, 150);
   };
   si.onkeydown = (e) => { if (e.key === "Escape" && si.value) { si.value = ""; si.oninput(); } };
+}
+/* New applications — a family asking to be added to the register as descendants of an ODI. The checklist
+   records which supporting documents the CPA has received; the documents themselves attach to the
+   application (section "bene-application"). The police affidavit is the one the committee can't decide without. */
+const APP_STATUSES = ["Received", "Under Review", "Awaiting Documents", "Recommended", "Approved", "Rejected", "Added to Register"];
+const APP_CLOSED = ["Approved", "Rejected", "Added to Register"];
+const APP_AFFIDAVIT = "Police affidavit — sworn statement commissioned at SAPS";
+const APP_EVIDENCE = [
+  "Completed application form",
+  APP_AFFIDAVIT,
+  "Certified ID copy of the applicant",
+  "Certified ID copies of the family members applying",
+  "Family tree showing descent from the ODI",
+  "Birth certificates linking each generation to the ODI",
+  "Death certificate of the ODI",
+  "Death certificates of deceased parents / grandparents",
+  "Marriage certificate(s)",
+  "Letter from the Traditional Council / Induna",
+  "Confirmation letter from the ODI's family or household representative",
+  "Proof of the family's historical link to the land (removal records, old permits, photos)",
+  "Proof of current address",
+];
+const appOpenCount = () => (DATA.beneficiaryCentre.applications || []).filter((r) => !APP_CLOSED.includes(r[12])).length;
+function nextAppRef() {
+  const y = new Date().getFullYear(), pre = `APP-${y}-`;
+  const max = (DATA.beneficiaryCentre.applications || []).reduce((m, r) => String(r[0]).startsWith(pre) ? Math.max(m, parseInt(String(r[0]).slice(pre.length), 10) || 0) : m, 0);
+  return pre + String(max + 1).padStart(3, "0");
+}
+function editApplication(r) {
+  const cfg = BENE_EDITORS.applications();
+  openModal("Application — " + (r[1] || "(no family)"), cfg.fields(r), (o) => { cfg.write(r, o); renderCurrent(); commit(cfg.section); });
+}
+function renderBeneApplications(host) {
+  const a = (DATA.beneficiaryCentre.applications ||= []);
+  const open = a.filter((r) => !APP_CLOSED.includes(r[12]));
+  const noAffidavit = open.filter((r) => !(r[11] || []).includes(APP_AFFIDAVIT)).length;
+  mountRegister(host, {
+    title: "New Applications", hint: "Families applying to be added to the register as descendants of an ODI — who is applying, the evidence received and the committee's decision. Attach the documents with the paperclip.",
+    stats: () => [
+      statTile("Applications", a.length, "On record", ""),
+      statTile("Open", open.length, "Awaiting a decision", open.length ? "warning" : "good"),
+      statTile("No police affidavit", noAffidavit, "Open applications missing it", noAffidavit ? "critical" : "good"),
+      statTile("Approved", a.filter((r) => r[12] === "Approved" || r[12] === "Added to Register").length, "Incl. added to the register", "good"),
+    ],
+    columns: [{ label: "Ref." }, { label: "Family" }, { label: "Applicant" }, { label: "Claimed ODI" }, { label: "People" }, { label: "Lodged" },
+      { label: "Evidence" }, { label: "Docs" }, { label: "Status" }, { label: "" }],
+    rows: () => a,
+    empty: "No applications yet — use “Add application” when a family applies.",
+    cell: (r) => {
+      const ev = r[11] || [], aff = ev.includes(APP_AFFIDAVIT);
+      return [`<span class="mono" style="color:var(--ink-muted);">${esc(r[0])}</span>`, `<span style="font-weight:600;">${esc(r[1])}</span>`,
+        esc(r[2]) + (r[4] ? `<div class="hint">${esc(r[4])}</div>` : ""),
+        esc(r[6]) + (r[7] ? `<div class="hint mono">${esc(r[7])}</div>` : ""),
+        `<span class="mono">${esc(r[9])}</span>`, `<span class="mono">${esc(r[10])}</span>`,
+        `<span class="mono">${ev.length}/${APP_EVIDENCE.length}</span> ${aff ? pill("Affidavit", "good") : pill("No affidavit", "critical")}`,
+        docChip("bene-application", r._id, "Application documents"), statusPill(r[12]),
+        CAN_EDIT ? `<button type="button" class="btn small" data-app-i="${a.indexOf(r)}">Open</button>` : ""];
+    },
+    manage: () => listEditor(BENE_EDITORS.applications()),
+    addNew: { label: "Add application", editor: () => BENE_EDITORS.applications() },
+    bulkKey: "bene-applications", filterCol: 12, filterLabel: "Status", section: "beneficiary_applications",
+    search: "Search family, applicant, ODI, ref…",
+    rerender: () => renderBeneApplications(host),
+  });
+  wireDocChips(host, a, (r) => `Application documents — ${r[1] || r[0]}`);
+  host.querySelectorAll("[data-app-i]").forEach((b) => (b.onclick = () => { const r = a[+b.dataset.appI]; if (r) editApplication(r); }));
 }
 const DISPUTE_TYPES = ["Duplicate", "Identity", "Membership", "Boundary", "Other"];
 function renderBeneDisputes(host) {
@@ -7144,6 +7221,34 @@ const BENE_EDITORS = {
       { key: "res", label: "Resolution", type: "textarea", value: r[6] },
     ],
     write: (r, o) => { r[0] = o.ref; r[1] = o.dtype; r[2] = o.parties; r[3] = o.desc; r[4] = o.raised; r[5] = o.status; r[6] = o.res; },
+  }),
+  applications: () => ({
+    title: "New applications", arr: (DATA.beneficiaryCentre.applications ||= []), section: "beneficiary_applications",
+    rowLabel: (r) => `${r[0] || "(no ref)"} — ${r[1]} · ${r[12]}`,
+    blank: () => [nextAppRef(), "", "", "", "", "", "", "", "", "", new Date().toISOString().slice(0, 10), [], "Received", "", "", ""],
+    fields: (r) => [
+      { key: "ref", label: "Application no.", type: "text", value: r[0] },
+      { key: "family", label: "Family making the application (e.g. the Mabuza family)", type: "text", value: r[1], required: true },
+      { key: "applicant", label: "Applicant — the person lodging it for the family", type: "text", value: r[2] },
+      { key: "idm", label: "Applicant's ID (auto-masked — only the last 4 digits are kept)", type: "text", value: r[3] },
+      { key: "contact", label: "Contact number", type: "text", value: r[4] },
+      { key: "address", label: "Address", type: "text", value: r[5] },
+      { key: "odi", label: "ODI they say they descend from", type: "text", value: r[6] },
+      { key: "hh", label: "Existing ODI household they claim under (if any)", type: "select", ...(() => { const c = hhChoices(r[7]); return { options: c.options, value: c.current }; })() },
+      { key: "rel", label: "Applicant's relationship to the ODI (e.g. grandson)", type: "text", value: r[8] },
+      { key: "count", label: "Number of people the application covers", type: "number", value: r[9] },
+      { key: "lodged", label: "Lodged on", type: "date", value: r[10] },
+      { key: "evidence", label: "Evidence received (attach the documents with the paperclip in the list)", type: "checks", options: APP_EVIDENCE, value: r[11] },
+      { key: "status", label: "Status", type: "select", options: APP_STATUSES, value: r[12] || "Received" },
+      { key: "decided", label: "Decision date", type: "date", value: r[13] },
+      { key: "dref", label: "Decided at (meeting / resolution no.)", type: "text", value: r[14] },
+      { key: "notes", label: "Notes — findings, follow-ups, reasons for the decision", type: "textarea", value: r[15] },
+    ],
+    write: (r, o) => {
+      r[0] = o.ref || nextAppRef(); r[1] = o.family; r[2] = o.applicant; r[3] = maskId(o.idm); r[4] = o.contact; r[5] = o.address;
+      r[6] = o.odi; r[7] = refFromHhLabel(o.hh); r[8] = o.rel; r[9] = o.count; r[10] = o.lodged; r[11] = o.evidence || [];
+      r[12] = o.status; r[13] = o.decided || (APP_CLOSED.includes(o.status) ? new Date().toISOString().slice(0, 10) : ""); r[14] = o.dref; r[15] = o.notes;
+    },
   }),
 };
 
