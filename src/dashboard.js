@@ -17,6 +17,7 @@ import { processSignatureImage } from "./orgs.js";
 import { openFamilyTree } from "./family-tree.js";
 import { findRegisterMatch, last4, memberRef, levelOfRole, refForPosition } from "./family-tree-logic.js";
 import { verificationStats, verificationReportHtml, verificationCsv } from "./verification-report.js";
+import { makeApplicationFormPdf } from "./application-form-pdf.js";
 import { openHouseholdImport } from "./household-import.js";
 import { openIdIntake } from "./id-intake.js";
 import { renderFamilyTrees } from "./family-trees.js";
@@ -4329,8 +4330,15 @@ function renderBeneApplications(host) {
     addNew: { label: "Add application", editor: () => BENE_EDITORS.applications() },
     bulkKey: "bene-applications", filterCol: 12, filterLabel: "Status", section: "beneficiary_applications",
     search: "Search family, applicant, ODI, ref…",
+    extraTools: [`<button class="btn" data-app-form type="button" title="A fillable PDF the family can type into or print and complete by hand">Download application form (PDF)</button>`],
     rerender: () => renderBeneApplications(host),
   });
+  const af = host.querySelector("[data-app-form]");
+  if (af) af.onclick = () => {
+    const name = (DATA.cpa.name || "CPA").replace(/[\\/:*?"<>|]+/g, " ").trim();
+    saveBlobAs(new Blob([makeApplicationFormPdf({ cpaName: DATA.cpa.name, cpaReg: DATA.cpa.reg })], { type: "application/pdf" }), `Application for membership - ${name}.pdf`);
+    toast("Application form downloaded — a fillable PDF to type into or print.");
+  };
   wireDocChips(host, a, (r) => `Application documents — ${r[1] || r[0]}`);
   host.querySelectorAll("[data-app-i]").forEach((b) => (b.onclick = () => { const r = a[+b.dataset.appI]; if (r) editApplication(r); }));
 }
